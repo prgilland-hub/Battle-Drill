@@ -132,7 +132,8 @@ const BDModels = (function () {
   /* pose the stored mesh for the board: optional left-right mirror and a turn so every model faces +z */
   function prep(rec) {
     const mir = get('mirror', '1') === '1', turn = (+get('yaw', '0')) * Math.PI / 180, c = Math.cos(turn), s = Math.sin(turn);
-    return { name: rec.name, big: rec.big, tris: rec.tris, parts: rec.parts.map(p => {
+    let hy = 0; for (const p of rec.parts) for (let i = 1; i < p.V.length; i += 3) if (p.V[i] > hy) hy = p.V[i];
+    return { name: rec.name, big: rec.big, tris: rec.tris, h: hy, parts: rec.parts.map(p => {
       const V = new Float32Array(p.V), N = new Float32Array(p.N), T = new Uint32Array(p.T);
       for (let i = 0; i < V.length; i += 3) {
         let x = V[i], z = V[i + 2], nx = N[i], nz = N[i + 2]; if (mir) { x = -x; nx = -nx; }
@@ -161,7 +162,7 @@ const BDModels = (function () {
   const poolCache = new Map(); const hash = s => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
   function pool(ds, faction) {
     const k = ds + '|' + faction; if (poolCache.has(k)) return poolCache.get(k); const n = String(ds || '').toLowerCase().trim(); let out = null;
-    for (const [re, fOk, pr] of RULES) { if (re.test(n) && fOk(faction)) { const l = figs.filter(f => pr.test(f.name.toLowerCase())); if (l.length) { out = l; break; } } }
+    for (const [re, fOk, pr] of RULES) { if (re.test(n) && fOk(faction)) { const l = figs.filter(f => f.h > .45 && pr.test(f.name.toLowerCase())); /* entries that are only a bare base are skipped */ if (l.length) { out = l; break; } } }
     poolCache.set(k, out); return out;
   }
   function pick(ds, faction, key) { if (!figs.length || get('on', '1') !== '1') return null; const p = pool(ds, faction); return p ? p[hash(String(key)) % p.length] : null; }
