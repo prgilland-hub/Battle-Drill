@@ -234,6 +234,77 @@ const BDModels = (function () {
   }
   async function clearAll() { const d = await idbOpen(); const t = tx(d, ['figs', 'index'], 'readwrite'); t.objectStore('figs').clear(); t.objectStore('index').clear(); await done(t); d.close(); index = []; cache.clear(); poolCache.clear(); ping(); }
   const factions = () => { const c = {}; for (const m of index) c[m.faction] = (c[m.faction] || 0) + 1; return c; };
-  return { why: (ds, fac) => { const p = pool(ds, fac); return p ? p.map(f => f.faction + ': ' + f.name) : 'no match among ' + index.length + ' models'; }, load, pick, add, scan, importFactions, clearAll, factions, on: () => index.length > 0 && get('on', '1') === '1', count: () => index.length, get, set, reprep: async () => { cache.clear(); poolCache.clear(); ping(); } };
+  return { variants: (ds, fac) => pool(ds, fac) || [], fig: m => fetchFig(m) || cache.get(m.key) || null, why: (ds, fac) => { const p = pool(ds, fac); return p ? p.map(f => f.faction + ': ' + f.name) : 'no match among ' + index.length + ' models'; }, load, pick, add, scan, importFactions, clearAll, factions, on: () => index.length > 0 && get('on', '1') === '1', count: () => index.length, get, set, reprep: async () => { cache.clear(); poolCache.clear(); ping(); } };
 })();
 window.BDModels = BDModels; window.MODELIMP = MODELIMP;
+
+/* ===== BDPreview: a floating 3D look at the unit under the mouse in the army builder ===== */
+(function () {
+  'use strict';
+  const LSK = 'battleDrill.models.prev';
+  let box, cv, cap, nameEl, R = null, cam = null, cur = null, vars = [], vi = 0, shown = null, raf = 0, last = 0, hoverT = 0, idleUntil = 0, ext = new WeakMap(), pend = false;
+  const ENV = { sun: [-.45, .62, .5], sunC: [1.5, 1.42, 1.3], ambT: [.34, .36, .42], ambB: [.2, .2, .22], fog: [.075, .08, .09], fogD: .0004, dust: 0 };
+  const on = () => { try { return localStorage.getItem(LSK) !== '0'; } catch (e) { return true; } };
+  const builderOpen = () => { const b = document.getElementById('builder'); return !!b && !b.hidden; };
+  function build() {
+    if (box) return; box = document.createElement('div'); box.id = 'bd-prev';
+    box.style.cssText = 'position:fixed;right:14px;bottom:14px;width:300px;z-index:9000;background:#16181c;border:1px solid #5a4a2a;border-radius:8px;box-shadow:0 6px 24px #000a;display:none;color:#ddd;font:13px system-ui,sans-serif;overflow:hidden';
+    box.innerHTML = '<div style="display:flex;align-items:center;gap:6px;padding:5px 8px;background:#1f2228"><b id="bdp-n" style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">3D preview</b><button id="bdp-p" title="Previous model" style="background:none;border:0;color:#ccc;cursor:pointer;font-size:16px">‹</button><button id="bdp-x" title="Next model" style="background:none;border:0;color:#ccc;cursor:pointer;font-size:16px">›</button><button id="bdp-c" title="Hide (turn back on in the gear menu)" style="background:none;border:0;color:#ccc;cursor:pointer;font-size:16px">×</button></div><canvas id="bdp-cv" style="width:300px;height:260px;display:block;touch-action:none;cursor:grab"></canvas><div id="bdp-cap" style="padding:5px 8px;color:#999;font-size:12px;min-height:16px"></div>';
+    document.body.appendChild(box); cv = box.querySelector('#bdp-cv'); cap = box.querySelector('#bdp-cap'); nameEl = box.querySelector('#bdp-n');
+    box.querySelector('#bdp-c').onclick = () => { try { localStorage.setItem(LSK, '0'); } catch (e) { } hide(); };
+    box.querySelector('#bdp-p').onclick = () => step(-1); box.querySelector('#bdp-x').onclick = () => step(1);
+    let drag = null;
+    cv.addEventListener('pointerdown', e => { drag = [e.clientX, e.clientY]; cv.setPointerCapture(e.pointerId); cv.style.cursor = 'grabbing'; });
+    cv.addEventListener('pointermove', e => { if (!drag || !cam) return; cam.yaw -= (e.clientX - drag[0]) * .01; cam.pitch = Math.max(.05, Math.min(1.4, cam.pitch + (e.clientY - drag[1]) * .006)); drag = [e.clientX, e.clientY]; idleUntil = performance.now() + 3000; });
+    cv.addEventListener('pointerup', () => { drag = null; cv.style.cursor = 'grab'; });
+    cv.addEventListener('wheel', e => { if (!cam) return; e.preventDefault(); cam.dist = Math.max(1.2, Math.min(80, cam.dist * (e.deltaY > 0 ? 1.1 : .9))); idleUntil = performance.now() + 3000; }, { passive: false });
+  }
+  function ensureGL() {
+    if (R) return true;
+    try { if (typeof BF === 'undefined') return false; R = new BF.Renderer(cv); R.q.shadow = 1024; R.q.dpr = Math.min(window.devicePixelRatio || 1, 1.5); R.makeShadow(); cam = new BF.Cam(); cam.pitch = .38; return true; } catch (e) { console.warn('preview unavailable', e); R = null; return false; }
+  }
+  function extent(fig) {
+    let e = ext.get(fig); if (e) return e; let h = 0, r = 0;
+    for (const p of fig.parts) for (let i = 0; i < p.V.length; i += 3) { if (p.V[i + 1] > h) h = p.V[i + 1]; const d = Math.hypot(p.V[i], p.V[i + 2]); if (d > r) r = d; }
+    e = { h: h || 1, r: r || 1 }; ext.set(fig, e); return e;
+  }
+  function upload(fig) {
+    R.clear(); const mb = new BF.MB(), e = extent(fig), cx = 30, cz = 22;
+    const rd = Math.max(e.r * 1.25, .8); for (let k = 0; k < 28; k++) { const a = k / 28 * 6.2832, b = (k + 1) / 28 * 6.2832, base = mb.n; mb.vtx([cx, .004, cz], [0, 1, 0], [.17, .17, .19], [0, 0]); mb.vtx([cx + Math.cos(a) * rd, .004, cz + Math.sin(a) * rd], [0, 1, 0], [.13, .13, .15], [0, 0]); mb.vtx([cx + Math.cos(b) * rd, .004, cz + Math.sin(b) * rd], [0, 1, 0], [.13, .13, .15], [0, 0]); mb.I.push(base, base + 2, base + 1); }
+    BDModels.add(mb, fig, cx, 0, cz, 0); R.upload(mb, 'solid');
+    cam.target = [cx, e.h * .45, cz]; cam.dist = Math.max(2.2, Math.max(e.h, e.r * 1.5) * 2.7); cam.fov = .6;
+  }
+  function render(now) {
+    raf = 0; if (!shown || !box || box.style.display === 'none') return;
+    const dt = Math.min(.1, (now - (last || now)) / 1000); last = now;
+    if (now > idleUntil) cam.yaw += dt * .7;
+    try { R.draw(cam, ENV); } catch (e) { console.warn(e); return; }
+    raf = requestAnimationFrame(render);
+  }
+  function hide() { if (box) box.style.display = 'none'; if (raf) cancelAnimationFrame(raf), raf = 0; shown = null; }
+  function show(fig, title, note) {
+    build(); box.style.display = 'block'; nameEl.textContent = title; cap.textContent = note || '';
+    if (!fig) { shown = null; if (R) R.clear(); if (R) { try { R.draw(cam, ENV); } catch (e) { } } return; }
+    if (!ensureGL()) { cap.textContent = '3D preview needs WebGL 2.'; return; }
+    if (shown !== fig) { upload(fig); shown = fig; cam.yaw = 0; } if (!raf) { last = 0; raf = requestAnimationFrame(render); }
+  }
+  function refresh() {
+    if (!cur || !on() || !window.BDModels || !BDModels.on()) { hide(); return; }
+    vars = BDModels.variants(cur.ds, cur.faction); if (!vars.length) { show(null, cur.name, 'No 3D model for this unit yet.'); return; }
+    vi = ((vi % vars.length) + vars.length) % vars.length; const m = vars[vi], fig = BDModels.fig(m);
+    show(fig, cur.name, fig ? (m.name + (vars.length > 1 ? '  ·  ' + (vi + 1) + ' of ' + vars.length : '')) : 'Loading model…');
+  }
+  function step(d) { vi += d; shown = null; refresh(); }
+  function look(el) {
+    const id = el.dataset.libid; let u = null; try { u = typeof findLib === 'function' ? findLib(id) : null; } catch (e) { }
+    if (!u || (cur && cur.id === id)) return; cur = { id, name: u.name, ds: u.ds || u.name, faction: u.faction || (typeof B !== 'undefined' ? B.faction : '') }; vi = 0; shown = null; refresh();
+  }
+  document.addEventListener('mouseover', e => {
+    if (!window.BDModels || !BDModels.on() || !on() || !builderOpen()) return;
+    const el = e.target.closest && e.target.closest('#builder [data-libid]'); if (!el) return;
+    clearTimeout(hoverT); hoverT = setTimeout(() => look(el), 140);
+  });
+  window.addEventListener('bd-models-changed', () => { if (cur) { shown = null; refresh(); } });
+  setInterval(() => { if (box && box.style.display !== 'none' && !builderOpen()) hide(); }, 800);
+  window.BDPreview = { refresh, enabled: on, set: v => { try { localStorage.setItem(LSK, v ? '1' : '0'); } catch (e) { } if (!v) hide(); } };
+})();
