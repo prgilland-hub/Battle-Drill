@@ -238,30 +238,24 @@ const BDModels = (function () {
 })();
 window.BDModels = BDModels; window.MODELIMP = MODELIMP;
 
-/* ===== BDPreview: a floating 3D look at the unit under the mouse in the army builder ===== */
+/* ===== BDPreview: click a unit name in the army builder to open its datasheet with a rotatable 3D model ===== */
 (function () {
   'use strict';
-  const LSK = 'battleDrill.models.prev';
-  let box, cv, cap, nameEl, R = null, cam = null, cur = null, vars = [], vi = 0, shown = null, raf = 0, last = 0, hoverT = 0, idleUntil = 0, ext = new WeakMap(), pend = false;
+  let cv = null, R = null, cam = null, raf = 0, last = 0, idle = 0, ext = new WeakMap(), cur = null;
   const ENV = { sun: [-.45, .62, .5], sunC: [1.5, 1.42, 1.3], ambT: [.34, .36, .42], ambB: [.2, .2, .22], fog: [.075, .08, .09], fogD: .0004, dust: 0 };
-  const on = () => { try { return localStorage.getItem(LSK) !== '0'; } catch (e) { return true; } };
-  const builderOpen = () => { const b = document.getElementById('builder'); return !!b && !b.hidden; };
-  function build() {
-    if (box) return; box = document.createElement('div'); box.id = 'bd-prev';
-    box.style.cssText = 'position:fixed;right:14px;bottom:14px;width:300px;z-index:9000;background:#16181c;border:1px solid #5a4a2a;border-radius:8px;box-shadow:0 6px 24px #000a;display:none;color:#ddd;font:13px system-ui,sans-serif;overflow:hidden';
-    box.innerHTML = '<div style="display:flex;align-items:center;gap:6px;padding:5px 8px;background:#1f2228"><b id="bdp-n" style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">3D preview</b><button id="bdp-p" title="Previous model" style="background:none;border:0;color:#ccc;cursor:pointer;font-size:16px">‹</button><button id="bdp-x" title="Next model" style="background:none;border:0;color:#ccc;cursor:pointer;font-size:16px">›</button><button id="bdp-c" title="Hide (turn back on in the gear menu)" style="background:none;border:0;color:#ccc;cursor:pointer;font-size:16px">×</button></div><canvas id="bdp-cv" style="width:300px;height:260px;display:block;touch-action:none;cursor:grab"></canvas><div id="bdp-cap" style="padding:5px 8px;color:#999;font-size:12px;min-height:16px"></div>';
-    document.body.appendChild(box); cv = box.querySelector('#bdp-cv'); cap = box.querySelector('#bdp-cap'); nameEl = box.querySelector('#bdp-n');
-    box.querySelector('#bdp-c').onclick = () => { try { localStorage.setItem(LSK, '0'); } catch (e) { } hide(); };
-    box.querySelector('#bdp-p').onclick = () => step(-1); box.querySelector('#bdp-x').onclick = () => step(1);
-    let drag = null;
-    cv.addEventListener('pointerdown', e => { drag = [e.clientX, e.clientY]; cv.setPointerCapture(e.pointerId); cv.style.cursor = 'grabbing'; });
-    cv.addEventListener('pointermove', e => { if (!drag || !cam) return; cam.yaw -= (e.clientX - drag[0]) * .01; cam.pitch = Math.max(.05, Math.min(1.4, cam.pitch + (e.clientY - drag[1]) * .006)); drag = [e.clientX, e.clientY]; idleUntil = performance.now() + 3000; });
-    cv.addEventListener('pointerup', () => { drag = null; cv.style.cursor = 'grab'; });
-    cv.addEventListener('wheel', e => { if (!cam) return; e.preventDefault(); cam.dist = Math.max(1.2, Math.min(80, cam.dist * (e.deltaY > 0 ? 1.1 : .9))); idleUntil = performance.now() + 3000; }, { passive: false });
-  }
   function ensureGL() {
     if (R) return true;
-    try { if (typeof BF === 'undefined') return false; R = new BF.Renderer(cv); R.q.shadow = 1024; R.q.dpr = Math.min(window.devicePixelRatio || 1, 1.5); R.makeShadow(); cam = new BF.Cam(); cam.pitch = .38; return true; } catch (e) { console.warn('preview unavailable', e); R = null; return false; }
+    try {
+      if (typeof BF === 'undefined') return false;
+      cv = document.createElement('canvas'); cv.style.cssText = 'display:block;width:100%;height:100%;border-radius:inherit;touch-action:none;cursor:grab';
+      R = new BF.Renderer(cv); R.q.shadow = 1024; R.q.dpr = Math.min(window.devicePixelRatio || 1, 1.5); R.makeShadow(); cam = new BF.Cam(); cam.pitch = .38;
+      let d = null;
+      cv.addEventListener('pointerdown', e => { d = [e.clientX, e.clientY]; cv.setPointerCapture(e.pointerId); cv.style.cursor = 'grabbing'; });
+      cv.addEventListener('pointermove', e => { if (!d) return; cam.yaw -= (e.clientX - d[0]) * .01; cam.pitch = Math.max(.05, Math.min(1.4, cam.pitch + (e.clientY - d[1]) * .006)); d = [e.clientX, e.clientY]; idle = performance.now() + 4000; });
+      cv.addEventListener('pointerup', () => { d = null; cv.style.cursor = 'grab'; });
+      cv.addEventListener('wheel', e => { e.preventDefault(); cam.dist = Math.max(1.2, Math.min(80, cam.dist * (e.deltaY > 0 ? 1.1 : .9))); idle = performance.now() + 4000; }, { passive: false });
+      return true;
+    } catch (e) { console.warn('3D preview unavailable', e); R = null; cv = null; return false; }
   }
   function extent(fig) {
     let e = ext.get(fig); if (e) return e; let h = 0, r = 0;
@@ -269,42 +263,44 @@ window.BDModels = BDModels; window.MODELIMP = MODELIMP;
     e = { h: h || 1, r: r || 1 }; ext.set(fig, e); return e;
   }
   function upload(fig) {
-    R.clear(); const mb = new BF.MB(), e = extent(fig), cx = 30, cz = 22;
-    const rd = Math.max(e.r * 1.25, .8); for (let k = 0; k < 28; k++) { const a = k / 28 * 6.2832, b = (k + 1) / 28 * 6.2832, base = mb.n; mb.vtx([cx, .004, cz], [0, 1, 0], [.17, .17, .19], [0, 0]); mb.vtx([cx + Math.cos(a) * rd, .004, cz + Math.sin(a) * rd], [0, 1, 0], [.13, .13, .15], [0, 0]); mb.vtx([cx + Math.cos(b) * rd, .004, cz + Math.sin(b) * rd], [0, 1, 0], [.13, .13, .15], [0, 0]); mb.I.push(base, base + 2, base + 1); }
+    R.clear(); const mb = new BF.MB(), e = extent(fig), cx = 30, cz = 22, rd = Math.max(e.r * 1.25, .8);
+    for (let k = 0; k < 28; k++) { const a = k / 28 * 6.2832, b = (k + 1) / 28 * 6.2832, base = mb.n; mb.vtx([cx, .004, cz], [0, 1, 0], [.17, .17, .19], [0, 0]); mb.vtx([cx + Math.cos(a) * rd, .004, cz + Math.sin(a) * rd], [0, 1, 0], [.13, .13, .15], [0, 0]); mb.vtx([cx + Math.cos(b) * rd, .004, cz + Math.sin(b) * rd], [0, 1, 0], [.13, .13, .15], [0, 0]); mb.I.push(base, base + 2, base + 1); }
     BDModels.add(mb, fig, cx, 0, cz, 0); R.upload(mb, 'solid');
-    cam.target = [cx, e.h * .45, cz]; cam.dist = Math.max(2.2, Math.max(e.h, e.r * 1.5) * 2.7); cam.fov = .6;
+    cam.target = [cx, e.h * .45, cz]; cam.dist = Math.max(2.2, Math.max(e.h, e.r * 1.5) * 2.7); cam.fov = .6; cam.yaw = 0; cam.pitch = .38;
   }
-  function render(now) {
-    raf = 0; if (!shown || !box || box.style.display === 'none') return;
-    const dt = Math.min(.1, (now - (last || now)) / 1000); last = now;
-    if (now > idleUntil) cam.yaw += dt * .7;
+  function frame(now) {
+    raf = 0; const m = document.getElementById('modal'); if (!cv || !cv.isConnected || !m || m.hidden) return;
+    const dt = Math.min(.1, (now - (last || now)) / 1000); last = now; if (now > idle) cam.yaw += dt * .7;
     try { R.draw(cam, ENV); } catch (e) { console.warn(e); return; }
-    raf = requestAnimationFrame(render);
+    raf = requestAnimationFrame(frame);
   }
-  function hide() { if (box) box.style.display = 'none'; if (raf) cancelAnimationFrame(raf), raf = 0; shown = null; }
-  function show(fig, title, note) {
-    build(); box.style.display = 'block'; nameEl.textContent = title; cap.textContent = note || '';
-    if (!fig) { shown = null; if (R) R.clear(); if (R) { try { R.draw(cam, ENV); } catch (e) { } } return; }
-    if (!ensureGL()) { cap.textContent = '3D preview needs WebGL 2.'; return; }
-    if (shown !== fig) { upload(fig); shown = fig; cam.yaw = 0; } if (!raf) { last = 0; raf = requestAnimationFrame(render); }
+  /* put the current model into the datasheet's picture slot */
+  function mount() {
+    const slot = document.querySelector('#modal-box .ds-img'); if (!slot || !cur) return;
+    const vars = BDModels.variants(cur.ds, cur.faction); if (!vars.length || !BDModels.on()) return;
+    cur.vi = ((cur.vi % vars.length) + vars.length) % vars.length; const m = vars[cur.vi], fig = BDModels.fig(m); if (!fig || !ensureGL()) return;
+    slot.classList.add('mini'); slot.style.cssText = 'position:static;display:block;width:min(100%,340px);height:auto;aspect-ratio:1;margin:2px auto 4px;background:#16181c;border-radius:10px;overflow:hidden';
+    if (cur.fig !== fig) { upload(fig); cur.fig = fig; }
+    if (cv.parentNode !== slot) slot.appendChild(cv);
+    let bar = document.getElementById('bdp-bar');
+    if (!bar) { bar = document.createElement('div'); bar.id = 'bdp-bar'; bar.style.cssText = 'display:flex;justify-content:center;align-items:center;gap:10px;font-size:12px;opacity:.85;margin-bottom:8px'; slot.after(bar); }
+    bar.innerHTML = (vars.length > 1 ? '<button class="btn" id="bdp-p" type="button">‹</button>' : '') + '<span>' + m.name.replace(/</g, '&lt;') + (vars.length > 1 ? ' · ' + (cur.vi + 1) + ' of ' + vars.length : '') + ' · drag to turn, scroll to zoom</span>' + (vars.length > 1 ? '<button class="btn" id="bdp-n" type="button">›</button>' : '');
+    const go = d => () => { cur.vi += d; cur.fig = null; mount(); }; const p = bar.querySelector('#bdp-p'), n = bar.querySelector('#bdp-n'); if (p) p.onclick = go(-1); if (n) n.onclick = go(1);
+    R.resize(); try { R.draw(cam, ENV); } catch (e) { } if (!raf) { last = 0; raf = requestAnimationFrame(frame); }
   }
-  function refresh() {
-    if (!cur || !on() || !window.BDModels || !BDModels.on()) { hide(); return; }
-    vars = BDModels.variants(cur.ds, cur.faction); if (!vars.length) { show(null, cur.name, 'No 3D model for this unit yet.'); return; }
-    vi = ((vi % vars.length) + vars.length) % vars.length; const m = vars[vi], fig = BDModels.fig(m);
-    show(fig, cur.name, fig ? (m.name + (vars.length > 1 ? '  ·  ' + (vi + 1) + ' of ' + vars.length : '')) : 'Loading model…');
+  function open(el) {
+    let u = null; try { u = findLib(el.dataset.libid); } catch (e) { } if (!u || typeof openModal !== 'function' || typeof datasheetCard !== 'function') return;
+    const nm = +el.dataset.nm; if (nm > 0) u = Object.assign({}, u, { models: nm });
+    openModal('<div class="row"><h2 style="margin:0">' + String(u.name).replace(/</g, '&lt;') + '</h2><button class="btn" id="m-close" type="button">Close</button></div>' + datasheetCard(u, u.faction, {}));
+    const c = document.getElementById('m-close'); if (c) c.addEventListener('click', closeModal);
+    cur = { ds: u.ds || u.name, faction: u.faction, key: u.id, vi: 0, fig: null };
+    const p = BDModels.pick(cur.ds, cur.faction, u.id), vars = BDModels.variants(cur.ds, cur.faction); if (p) cur.vi = Math.max(0, vars.findIndex(m => BDModels.fig(m) === p));
+    mount();
   }
-  function step(d) { vi += d; shown = null; refresh(); }
-  function look(el) {
-    const id = el.dataset.libid; let u = null; try { u = typeof findLib === 'function' ? findLib(id) : null; } catch (e) { }
-    if (!u || (cur && cur.id === id)) return; cur = { id, name: u.name, ds: u.ds || u.name, faction: u.faction || (typeof B !== 'undefined' ? B.faction : '') }; vi = 0; shown = null; refresh();
-  }
-  document.addEventListener('mouseover', e => {
-    if (!window.BDModels || !BDModels.on() || !on() || !builderOpen()) return;
-    const el = e.target.closest && e.target.closest('#builder [data-libid]'); if (!el) return;
-    clearTimeout(hoverT); hoverT = setTimeout(() => look(el), 140);
+  document.addEventListener('click', e => {
+    const el = e.target.closest && e.target.closest('#builder [data-libid]'); if (!el || (e.target.closest && e.target.closest('button,select,input,a'))) return;
+    open(el);
   });
-  window.addEventListener('bd-models-changed', () => { if (cur) { shown = null; refresh(); } });
-  setInterval(() => { if (box && box.style.display !== 'none' && !builderOpen()) hide(); }, 800);
-  window.BDPreview = { refresh, enabled: on, set: v => { try { localStorage.setItem(LSK, v ? '1' : '0'); } catch (e) { } if (!v) hide(); } };
+  window.addEventListener('bd-models-changed', () => { if (cur && document.querySelector('#modal-box .ds-img')) mount(); });
+  window.BDPreview = { enabled: () => true, set: () => { } };
 })();
