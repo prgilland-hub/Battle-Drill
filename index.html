@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.14-2356';
+  const VERSION = '2026.11.14-2357';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -480,10 +480,12 @@ window.BDModels = BDModels; window.MODELIMP = MODELIMP;
   /* put the current model into the datasheet's picture slot */
   function mount() {
     const slot = document.querySelector('#modal-box .ds-img'); if (!slot || !cur) return;
-    const vars = BDModels.variants(cur.ds, cur.faction); if (!vars.length || !BDModels.on()) return;
-    cur.vi = ((cur.vi % vars.length) + vars.length) % vars.length; const m = vars[cur.vi], fig = BDModels.fig(m); if (!fig || !ensureGL()) return;
+    const note = t => { let b = document.getElementById('bdp-bar'); if (!b) { b = document.createElement('div'); b.id = 'bdp-bar'; b.style.cssText = 'text-align:center;font-size:12px;opacity:.85;margin-bottom:8px'; slot.after(b); } b.textContent = t; };
+    if (!BDModels.on()) return note('3D models are switched off or none are imported.');
+    const vars = BDModels.variants(cur.ds, cur.faction); if (!vars.length) return note('No 3D model matched "' + cur.ds + '" (' + cur.faction + '). ' + BDModels.count() + ' models loaded.');
+    cur.vi = ((cur.vi % vars.length) + vars.length) % vars.length; const m = vars[cur.vi], fig = BDModels.fig(m); if (!fig) return note('Loading 3D model: ' + m.name + '…'); if (!ensureGL()) return note('3D view needs WebGL 2.');
     slot.classList.add('mini'); slot.style.cssText = 'position:static;display:block;width:min(100%,340px);height:auto;aspect-ratio:1;margin:2px auto 4px;background:#16181c;border-radius:10px;overflow:hidden';
-    if (cur.fig !== fig) { upload(fig); cur.fig = fig; }
+    try { if (cur.fig !== fig) { upload(fig); cur.fig = fig; } } catch (e) { console.warn(e); return note('Could not draw ' + m.name + ': ' + (e && e.message || e)); }
     if (cv.parentNode !== slot) slot.appendChild(cv);
     let bar = document.getElementById('bdp-bar');
     if (!bar) { bar = document.createElement('div'); bar.id = 'bdp-bar'; bar.style.cssText = 'display:flex;justify-content:center;align-items:center;gap:10px;font-size:12px;opacity:.85;margin-bottom:8px'; slot.after(bar); }
