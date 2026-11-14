@@ -297,10 +297,34 @@ window.BDModels = BDModels; window.MODELIMP = MODELIMP;
     const p = BDModels.pick(cur.ds, cur.faction, u.id), vars = BDModels.variants(cur.ds, cur.faction); if (p) cur.vi = Math.max(0, vars.findIndex(m => BDModels.fig(m) === p));
     mount();
   }
+  /* hover pop-ups: swap the token picture for a slowly turning model (click the name for the one you can rotate) */
+  let hov = null, tip = null, tshown = null;
+  function unitOf(el) {
+    try {
+      let n = el.closest && el.closest('[data-libid]'); if (n) { const u = findLib(n.dataset.libid); if (u) return { key: u.id, ds: u.ds || u.name, faction: u.faction }; }
+      n = el.closest && el.closest('[data-bu]'); if (n) { const [bid, bi] = n.dataset.bu.split('|'), bb = findBuild(bid), u = bb && bb.units[+bi]; if (u) return { key: bid + ':' + bi, ds: u.ds || u.name, faction: bb.faction || u.faction }; }
+      n = el.closest && el.closest('[data-uid]'); if (n && typeof G !== 'undefined') { const u = (G.units || []).find(x => String(x.id) === n.dataset.uid); if (u) return { key: u.id, ds: u.ds || u.name, faction: typeof miniFactionOf === 'function' ? miniFactionOf(u) : u.faction }; }
+    } catch (e) { }
+    return null;
+  }
+  function tipAttach() {
+    const m = document.getElementById('modal'); if (!tip || tip.style.display !== 'block' || !hov || !BDModels.on() || (m && !m.hidden)) return;
+    const slot = tip.querySelector('.ds-img.mini'); if (!slot) return; const fig = BDModels.pick(hov.ds, hov.faction, hov.key); if (!fig || !ensureGL()) return;
+    if (tshown !== fig || cur) { upload(fig); tshown = fig; cur = null; }
+    slot.style.backgroundImage = 'none'; if (cv.parentNode !== slot) slot.appendChild(cv); R.resize(); try { R.draw(cam, ENV); } catch (e) { }
+    if (!raf) { last = 0; raf = requestAnimationFrame(tframe); }
+  }
+  function tframe(now) {
+    raf = 0; if (!cv || !cv.isConnected || !tip || tip.style.display !== 'block') return;
+    const dt = Math.min(.1, (now - (last || now)) / 1000); last = now; cam.yaw += dt * .7; try { R.draw(cam, ENV); } catch (e) { return; } raf = requestAnimationFrame(tframe);
+  }
+  function watch() { tip = document.querySelector('.tip-pop'); if (!tip) return setTimeout(watch, 500); new MutationObserver(() => { if (tip.style.display === 'block') tipAttach(); }).observe(tip, { childList: true, attributes: true, attributeFilter: ['style'] }); }
+  document.addEventListener('mouseover', e => { const u = unitOf(e.target); if (u) hov = u; }, true);
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', watch); else watch();
   document.addEventListener('click', e => {
     const el = e.target.closest && e.target.closest('#builder [data-libid]'); if (!el || (e.target.closest && e.target.closest('button,select,input,a'))) return;
     open(el);
   });
-  window.addEventListener('bd-models-changed', () => { if (cur && document.querySelector('#modal-box .ds-img')) mount(); });
+  window.addEventListener('bd-models-changed', () => { tshown = null; tipAttach(); if (cur && document.querySelector('#modal-box .ds-img')) mount(); });
   window.BDPreview = { enabled: () => true, set: () => { } };
 })();
