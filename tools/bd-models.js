@@ -126,14 +126,16 @@ const MODELIMP = (function () {
 /* ===== BDModels: local model library (IndexedDB), folder import, and lookup for the 3D board ===== */
 const BDModels = (function () {
   const LS = k => 'battleDrill.models.' + k, get = (k, d) => { try { const v = localStorage.getItem(LS(k)); return v === null ? d : v; } catch (e) { return d; } }, set = (k, v) => { try { localStorage.setItem(LS(k), v); } catch (e) { } };
-  let figs = [], loaded = false;
-  const idbOpen = () => new Promise((res, rej) => { const r = indexedDB.open('battleDrillModels', 1); r.onupgradeneeded = () => r.result.createObjectStore('figs', { keyPath: 'key' }); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+  let index = [], cache = new Map(), loading = new Set(), poolCache = new Map(), pingT = 0;
+  const idbOpen = () => new Promise((res, rej) => { const r = indexedDB.open('battleDrillModels2', 1); r.onupgradeneeded = () => { r.result.createObjectStore('figs', { keyPath: 'key' }); r.result.createObjectStore('index', { keyPath: 'key' }); }; r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
   const rq = r => new Promise((res, rej) => { r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+  const tx = (d, st, mode) => d.transaction(st, mode || 'readonly');
+  const done = t => new Promise((res, rej) => { t.oncomplete = res; t.onerror = () => rej(t.error); t.onabort = () => rej(t.error); });
+  const ping = () => { clearTimeout(pingT); pingT = setTimeout(() => { try { window.dispatchEvent(new Event('bd-models-changed')); } catch (e) { } }, 120); };
   /* pose the stored mesh for the board: optional left-right mirror and a turn so every model faces +z */
   function prep(rec) {
     const mir = get('mirror', '1') === '1', turn = (+get('yaw', '0')) * Math.PI / 180, c = Math.cos(turn), s = Math.sin(turn);
-    let hy = 0; for (const p of rec.parts) for (let i = 1; i < p.V.length; i += 3) if (p.V[i] > hy) hy = p.V[i];
-    return { name: rec.name, big: rec.big, tris: rec.tris, h: hy, parts: rec.parts.map(p => {
+    return { name: rec.name, parts: rec.parts.map(p => {
       const V = new Float32Array(p.V), N = new Float32Array(p.N), T = new Uint32Array(p.T);
       for (let i = 0; i < V.length; i += 3) {
         let x = V[i], z = V[i + 2], nx = N[i], nz = N[i + 2]; if (mir) { x = -x; nx = -nx; }
@@ -144,7 +146,12 @@ const BDModels = (function () {
       return { V, N, C, T };
     }) };
   }
-  async function load() { try { const d = await idbOpen(), rows = await rq(d.transaction('figs').objectStore('figs').getAll()); figs = rows.map(r => prep(r)); d.close(); } catch (e) { figs = []; } loaded = true; return figs.length; }
+  async function load() { try { const d = await idbOpen(); index = await rq(tx(d, 'index').objectStore('index').getAll()); d.close(); } catch (e) { index = []; } cache.clear(); loading.clear(); poolCache.clear(); return index.length; }
+  function fetchFig(m) {
+    if (cache.has(m.key)) return cache.get(m.key); if (loading.has(m.key)) return null; loading.add(m.key);
+    idbOpen().then(async d => { const rec = await rq(tx(d, 'figs').objectStore('figs').get(m.key)); d.close(); if (rec) { if (cache.size > 350) cache.delete(cache.keys().next().value); cache.set(m.key, prep(rec)); } loading.delete(m.key); ping(); }).catch(() => { loading.delete(m.key); });
+    return null;
+  }
   /* datasheet name (+faction) -> which stored models may stand in for it */
   const DG = f => /death guard/i.test(f || ''), ANY = () => true;
   const RULES = [
@@ -159,13 +166,25 @@ const BDModels = (function () {
     [/^plaguebearers?/, ANY, /^plaguebearer( w\/ icon)?$|^plaguebearer - plagueridden/], [/great unclean one/, ANY, /^great unclean one/], [/rotigus/, ANY, /^rotigus/], [/beasts? of nurgle/, ANY, /^beasts? of nurgle/], [/^nurglings?/, ANY, /^nurglings/],
     [/poxbringer/, ANY, /^poxbringer/], [/sloppity|bilepiper/, ANY, /piper/], [/spoilpox/, ANY, /spoilpox/], [/slimux/, ANY, /slimux/], [/gnarlmaw/, ANY, /gnarlmaw/],
   ];
-  const poolCache = new Map(); const hash = s => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
+  /* every other faction: match the datasheet's words against the model names */
+  const STOP = new Set(['squad', 'unit', 'the', 'of', 'with', 'w', 'and', 'model', 'models', 'a', 'in', 'on']);
+  const toks = s => String(s || '').toLowerCase().replace(/\[[^\]]*\]/g, ' ').replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(w => w && !STOP.has(w)).map(w => w.length > 3 && w.endsWith('s') && !w.endsWith('ss') ? w.slice(0, -1) : w);
+  const FAM = [['space marines', 'ultramarines', 'imperial fists', 'iron hands', 'raven guard', 'salamanders', 'white scars', 'blood angels', 'dark angels', 'deathwatch', 'raptors'], ['chaos space marines', 'world eaters', 'thousand sons', 'night lords', 'word bearers', 'alpha legion', 'red corsairs', "emperor's children", 'death guard', 'chaos daemons'], ['imperial knights', 'chaos knights'], ['adepta sororitas', 'sisters and agents'], ['aeldari', 'drukhari']];
+  const related = (a, b) => { a = String(a || '').toLowerCase(); b = String(b || '').toLowerCase(); if (!a || !b) return false; if (a.includes(b) || b.includes(a)) return true; return FAM.some(g => g.some(x => a.includes(x)) && g.some(x => b.includes(x))); };
+  const hash = s => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
   function pool(ds, faction) {
     const k = ds + '|' + faction; if (poolCache.has(k)) return poolCache.get(k); const n = String(ds || '').toLowerCase().trim(); let out = null;
-    for (const [re, fOk, pr] of RULES) { if (re.test(n) && fOk(faction)) { const l = figs.filter(f => f.h > .45 && pr.test(f.name.toLowerCase())); /* entries that are only a bare base are skipped */ if (l.length) { out = l; break; } } }
-    poolCache.set(k, out); return out;
+    for (const [re, fOk, pr] of RULES) { if (re.test(n) && fOk(faction)) { const l = index.filter(f => f.h > .45 && pr.test(f.name.toLowerCase())); if (l.length) { out = l; break; } } }
+    if (!out) {
+      const t = toks(ds); if (t.length) {
+        const m = index.filter(f => { if (f.h <= .45) return false; const ft = new Set(toks(f.name)); return t.every(w => ft.has(w)); });
+        const same = m.filter(f => related(faction, f.faction)); out = same.length ? same : (m.length && !FAM.some(g => g.some(x => String(faction || '').toLowerCase().includes(x))) ? m : null);
+      }
+    }
+    if (out && !out.length) out = null; poolCache.set(k, out); return out;
   }
-  function pick(ds, faction, key) { if (!figs.length || get('on', '1') !== '1') return null; const p = pool(ds, faction); return p ? p[hash(String(key)) % p.length] : null; }
+  /* returns the model if it is ready; otherwise starts loading it and returns null (the board redraws when it arrives) */
+  function pick(ds, faction, key) { if (!index.length || get('on', '1') !== '1') return null; const p = pool(ds, faction); if (!p) return null; const m = p[hash(String(key)) % p.length]; return fetchFig(m) || cache.get(m.key) || null; }
   function add(mb, fig, x, y, z, yaw) {
     const cy = Math.cos(yaw), sy = Math.sin(yaw);
     for (const g of fig.parts) {
@@ -177,28 +196,42 @@ const BDModels = (function () {
       for (let j = 0; j < g.T.length; j++) mb.I.push(g.T[j] + base);
     }
   }
-  /* import: files = FileList from a folder picker (units.json, files.json, parts/*) */
-  async function importFolder(files, opt, say) {
-    const byPath = new Map(); for (const f of files) { const rp = f.webkitRelativePath || f.name, parts = rp.split('/'); byPath.set(parts.slice(1).join('/'), f); byPath.set(parts[parts.length - 1], f); }
-    const uf = byPath.get('units.json'), ff = byPath.get('files.json'); if (!uf || !ff) throw new Error('that folder has no units.json and files.json. Pick the DeathGuard folder the downloader made');
-    const units = JSON.parse(await uf.text()), map = JSON.parse(await ff.text()), faction = units.faction || 'Death Guard';
-    const getMesh = async id => { const f = byPath.get('parts/' + map[id]) || byPath.get(map[id]); if (!f) throw new Error('missing ' + id); return await f.text(); };
-    const getTex = async id => { const f = byPath.get('parts/' + map[id]) || byPath.get(map[id]); if (!f) throw new Error('missing ' + id); return f; };
-    const d = await idbOpen(); let ok = 0, bad = 0, i = 0;
-    await new Promise((res, rej) => { const t = d.transaction('figs', 'readwrite'); t.objectStore('figs').clear(); t.oncomplete = res; t.onerror = () => rej(t.error); });
-    for (const u of units.units) {
-      i++; say('Converting ' + i + ' of ' + units.units.length + ': ' + u.name);
-      try {
-        const r = await MODELIMP.build(u, getMesh, getTex, opt);
-        if (!r.parts.length) { bad++; continue; }
-        const rec = { key: faction + '|' + i, faction, name: u.name, big: r.big, tris: r.tris, parts: r.parts.map(p => ({ V: p.V, N: p.N, C: p.C, T: p.T })) };
-        await new Promise((res, rej) => { const t = d.transaction('figs', 'readwrite'); t.objectStore('figs').put(rec); t.oncomplete = res; t.onerror = () => rej(t.error); }); ok++;
-      } catch (e) { bad++; console.warn('model skipped', u.name, e); }
-      if (i % 4 === 0) await new Promise(r => setTimeout(r, 0));
+  /* look inside a picked folder: which factions does it hold? */
+  async function scan(files) {
+    const byName = new Map(), dirs = new Map(); let rootFiles = null;
+    for (const f of files) {
+      const rp = f.webkitRelativePath || f.name, a = rp.split('/'), nm = a[a.length - 1], dir = a.slice(0, -1).join('/');
+      byName.set(nm, f);
+      if (nm === 'units.json') dirs.set(dir, { units: f }); else if (nm === 'files.json') { if (!dirs.has(dir)) dirs.set(dir, {}); dirs.get(dir).files = f; if (!rootFiles || dir.length < rootFiles.dir.length) rootFiles = { dir, f }; }
     }
-    d.close(); poolCache.clear(); await load(); return { ok, bad };
+    const out = [];
+    for (const [dir, o] of dirs) { if (!o.units) continue; let name = dir.split('/').pop(), n = 0; try { const j = JSON.parse(await o.units.text()); name = j.faction || name; n = j.units.length; } catch (e) { continue; } out.push({ name, count: n, units: o.units, files: o.files || (rootFiles && rootFiles.f) }); }
+    if (!out.length) throw new Error('no faction folders found. Pick the BattleDrillModels folder the downloader made');
+    out.sort((a, b) => a.name.localeCompare(b.name)); return { byName, factions: out };
   }
-  async function clearAll() { const d = await idbOpen(); await new Promise((res, rej) => { const t = d.transaction('figs', 'readwrite'); t.objectStore('figs').clear(); t.oncomplete = res; t.onerror = () => rej(t.error); }); d.close(); figs = []; poolCache.clear(); }
-  return { load, pick, add, importFolder, clearAll, on: () => figs.length > 0 && get('on', '1') === '1', count: () => figs.length, get, set, reprep: async () => { poolCache.clear(); await load(); } };
+  async function importFactions(sc, names, opt, say) {
+    const d = await idbOpen(); let ok = 0, bad = 0;
+    for (const fac of sc.factions.filter(f => names.includes(f.name))) {
+      const units = JSON.parse(await fac.units.text()), map = fac.files ? JSON.parse(await fac.files.text()) : {};
+      const file = id => sc.byName.get(map[id] || '');
+      const getMesh = async id => { const f = file(id); if (!f) throw new Error('missing ' + id); return await f.text(); }, getTex = async id => { const f = file(id); if (!f) throw new Error('missing ' + id); return f; };
+      { const t = tx(d, ['figs', 'index'], 'readwrite'), rngk = IDBKeyRange.bound(fac.name + '|', fac.name + '|￿'); t.objectStore('figs').delete(rngk); t.objectStore('index').delete(rngk); await done(t); }
+      let i = 0;
+      for (const u of units.units) {
+        i++; say(fac.name + ': converting ' + i + ' of ' + units.units.length + ' (' + u.name + ')');
+        try {
+          const r = await MODELIMP.build(u, getMesh, getTex, opt); if (!r.parts.length) { bad++; continue; }
+          let hy = 0; for (const p of r.parts) for (let k = 1; k < p.V.length; k += 3) if (p.V[k] > hy) hy = p.V[k];
+          const key = fac.name + '|' + i, rec = { key, faction: fac.name, name: u.name, big: r.big, tris: r.tris, parts: r.parts.map(p => ({ V: p.V, N: p.N, C: p.C, T: p.T })) };
+          const t = tx(d, ['figs', 'index'], 'readwrite'); t.objectStore('figs').put(rec); t.objectStore('index').put({ key, faction: fac.name, name: u.name, h: hy, tris: r.tris }); await done(t); ok++;
+        } catch (e) { bad++; console.warn('model skipped', u.name, e); }
+        if (i % 4 === 0) await new Promise(r => setTimeout(r, 0));
+      }
+    }
+    d.close(); await load(); ping(); return { ok, bad };
+  }
+  async function clearAll() { const d = await idbOpen(); const t = tx(d, ['figs', 'index'], 'readwrite'); t.objectStore('figs').clear(); t.objectStore('index').clear(); await done(t); d.close(); index = []; cache.clear(); poolCache.clear(); ping(); }
+  const factions = () => { const c = {}; for (const m of index) c[m.faction] = (c[m.faction] || 0) + 1; return c; };
+  return { load, pick, add, scan, importFactions, clearAll, factions, on: () => index.length > 0 && get('on', '1') === '1', count: () => index.length, get, set, reprep: async () => { cache.clear(); poolCache.clear(); ping(); } };
 })();
 window.BDModels = BDModels; window.MODELIMP = MODELIMP;
