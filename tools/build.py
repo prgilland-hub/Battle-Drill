@@ -6,8 +6,9 @@ root = pathlib.Path(__file__).resolve().parent.parent
 src = pathlib.Path(sys.argv[1]).read_text(encoding='utf-8')
 shim = (root / 'tools' / 'bd-local.js').read_text(encoding='utf-8')
 version = (sys.argv[2] if len(sys.argv) > 2 else datetime.datetime.utcnow().strftime('%Y.%m.%d-%H%M'))
+models = (root / 'tools' / 'bd-models.js').read_text(encoding='utf-8')
 shim = shim.replace('__BD_VERSION__', version)
-head = '<link rel="manifest" href="manifest.webmanifest"><meta name="theme-color" content="#141414"><script>' + shim + '</script>'
+head = '<link rel="manifest" href="manifest.webmanifest"><meta name="theme-color" content="#141414"><script>' + shim + '</script><script>' + models + '</script>'
 assert src.count('<head>') == 1, 'expected one <head>'
 out = src.replace('<head>', '<head>' + head, 1)
 (root / 'index.html').write_text(out, encoding='utf-8')
