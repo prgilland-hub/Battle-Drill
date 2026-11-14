@@ -177,7 +177,9 @@ const BDModels = (function () {
     for (const [re, fOk, pr] of RULES) { if (re.test(n) && fOk(faction)) { const l = index.filter(f => f.h > .45 && pr.test(f.name.toLowerCase())); if (l.length) { out = l; break; } } }
     if (!out) {
       const t = toks(ds); if (t.length) {
-        const m = index.filter(f => { if (f.h <= .45) return false; const ft = new Set(toks(f.name)); return t.every(w => ft.has(w)); });
+        const FW = new Set(['chaos', 'heretic', 'astartes', 'traitor', 'imperial', 'adeptus', 'astra', 'dg', 'death', 'guard']), t2 = t.filter(w => !FW.has(w));
+        const find = tt => index.filter(f => { if (f.h <= .45) return false; const ft = new Set(toks(f.name)); return tt.every(w => ft.has(w)); });
+        let m = find(t); if (!m.length && t2.length && t2.length < t.length) m = find(t2);
         const same = m.filter(f => related(faction, f.faction)); out = same.length ? same : (m.length && !FAM.some(g => g.some(x => String(faction || '').toLowerCase().includes(x))) ? m : null);
       }
     }
@@ -232,6 +234,6 @@ const BDModels = (function () {
   }
   async function clearAll() { const d = await idbOpen(); const t = tx(d, ['figs', 'index'], 'readwrite'); t.objectStore('figs').clear(); t.objectStore('index').clear(); await done(t); d.close(); index = []; cache.clear(); poolCache.clear(); ping(); }
   const factions = () => { const c = {}; for (const m of index) c[m.faction] = (c[m.faction] || 0) + 1; return c; };
-  return { load, pick, add, scan, importFactions, clearAll, factions, on: () => index.length > 0 && get('on', '1') === '1', count: () => index.length, get, set, reprep: async () => { cache.clear(); poolCache.clear(); ping(); } };
+  return { why: (ds, fac) => { const p = pool(ds, fac); return p ? p.map(f => f.faction + ': ' + f.name) : 'no match among ' + index.length + ' models'; }, load, pick, add, scan, importFactions, clearAll, factions, on: () => index.length > 0 && get('on', '1') === '1', count: () => index.length, get, set, reprep: async () => { cache.clear(); poolCache.clear(); ping(); } };
 })();
 window.BDModels = BDModels; window.MODELIMP = MODELIMP;
