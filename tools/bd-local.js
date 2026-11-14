@@ -164,4 +164,38 @@
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', menu); else menu();
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => { });
+
+  /* ---------- local helper (Battle Drill.cmd): one-click Wahapedia update ---------- */
+  (function () {
+    const H = 'http://127.0.0.1:47811';
+    const j = async (p, o) => { const r = await fetch(H + p, Object.assign({ cache: 'no-store' }, o)); if (!r.ok) throw new Error('helper ' + r.status); return r; };
+    let up = false;
+    const say = t => { const e = document.getElementById('bdl-whs'); if (e) e.textContent = t; };
+    async function ping() { try { await j('/ping'); up = true; } catch (e) { up = false; } return up; }
+    async function run(btn) {
+      btn.disabled = true;
+      try {
+        if (!(await ping())) { say('The helper is not running. Open Battle Drill with the "Battle Drill" shortcut in your Battle Drill folder.'); return; }
+        say('Downloading from Wahapedia…');
+        const u = await (await j('/datasheets/update', { method: 'POST' })).json();
+        if (!u.ok) { say('Wahapedia gave nothing back. Try again later.'); return; }
+        const list = (await (await j('/datasheets')).json()).files, dt = new DataTransfer();
+        for (const f of list) { const b = await (await j('/datasheets/file/' + encodeURIComponent(f.name))).blob(); dt.items.add(new File([b], f.name, { type: 'text/csv' })); }
+        const inp = document.getElementById('wh-files'); if (!inp) { say('Open the datasheet import screen first.'); return; }
+        inp.files = dt.files; inp.dispatchEvent(new Event('change', { bubbles: true }));
+        say((u.changed ? 'New data found: ' : 'No changes since last time: ') + u.got.length + ' tables' + (u.skipped.length ? ' (' + u.skipped.length + ' not published)' : '') + '. Importing…');
+      } catch (e) { say('Update failed: ' + ((e && e.message) || e)); }
+      finally { btn.disabled = false; }
+    }
+    function mount() {
+      const inp = document.getElementById('wh-files'); if (!inp || document.getElementById('bdl-wh')) return;
+      const row = inp.closest('.row') || inp.parentElement.parentElement; if (!row) return;
+      const b = document.createElement('button'); b.type = 'button'; b.id = 'bdl-wh'; b.className = 'btn primary'; b.textContent = 'Update from Wahapedia';
+      const sp = document.createElement('span'); sp.id = 'bdl-whs'; sp.style.cssText = 'font-size:12px;opacity:.8';
+      b.onclick = () => run(b); row.insertBefore(b, row.firstChild); row.appendChild(sp);
+      ping().then(ok => say(ok ? 'Helper connected.' : ''));
+    }
+    setInterval(mount, 2000);
+    ping().then(() => setInterval(() => ping(), 60000));
+  })();
 })();
