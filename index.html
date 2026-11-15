@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.15-1229';
+  const VERSION = '2026.11.15-1232';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -15291,7 +15291,7 @@ void main(){ vW=aP; vN=aN; vC=aC; vM=aM; vL=uLVP*vec4(aP,1.); gl_Position=uVP*ve
 const FS = `#version 300 es
 precision highp float; precision highp sampler2DShadow;
 in vec3 vW, vN, vC; in vec2 vM; in vec4 vL; out vec4 o;
-uniform sampler2DShadow uSh; uniform vec3 uSun, uSunC, uAmbT, uAmbB, uFog, uCam, uSky; uniform float uFogD, uShadow, uTexel, uDust;
+uniform sampler2DShadow uSh; uniform vec3 uSun, uSunC, uAmbT, uAmbB, uFog, uCam, uSky; uniform float uFogD, uShadow, uTexel, uDust; uniform int uLN; uniform vec4 uLP[8]; uniform vec3 uLC[8];
 float h31(vec3 p){ p=fract(p*.3183099+.1); p*=17.; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }
 float vn(vec3 x){ vec3 i=floor(x), f=fract(x); f=f*f*(3.-2.*f); return mix(mix(mix(h31(i),h31(i+vec3(1,0,0)),f.x),mix(h31(i+vec3(0,1,0)),h31(i+vec3(1,1,0)),f.x),f.y),mix(mix(h31(i+vec3(0,0,1)),h31(i+vec3(1,0,1)),f.x),mix(h31(i+vec3(0,1,1)),h31(i+vec3(1,1,1)),f.x),f.y),f.z); }
 void main(){
@@ -15309,6 +15309,7 @@ void main(){
   float ao=mix(.62,1.,smoothstep(0.,1.4,vW.y)); ao=mix(1.,ao,1.-abs(n.y)*.6);
   vec3 col=c*(amb*ao+uSunC*ndl*sh);
   col+=c*vM.y*2.2;
+  for(int i=0;i<8;i++){ if(i>=uLN) break; vec3 d=uLP[i].xyz-vW; float L=length(d); float a=clamp(1.-L/uLP[i].w,0.,1.); a*=a; col+=c*uLC[i]*a*(max(dot(n,d/max(L,.001)),0.)*.9+.22); }
   float d=length(vW-uCam); float f=1.-exp(-d*uFogD); f=max(f,.0); f*=mix(1.,.55,smoothstep(0.,3.,vW.y)*0.); 
   col=mix(col,uFog,clamp(f,0.,1.));
   col=col/(1.+col*.55); col=pow(col,vec3(1./2.2));
@@ -15360,6 +15361,7 @@ class Renderer {
     gl.uniformMatrix4fv(U.uVP, false, VP); gl.uniformMatrix4fv(U.uLVP, false, LVP);
     gl.uniform3fv(U.uSun, sd); gl.uniform3fv(U.uSunC, env.sunC); gl.uniform3fv(U.uAmbT, env.ambT); gl.uniform3fv(U.uAmbB, env.ambB); gl.uniform3fv(U.uFog, env.fog); gl.uniform3fv(U.uCam, eye); gl.uniform3fv(U.uSky, env.fog);
     gl.uniform1f(U.uFogD, env.fogD); gl.uniform1f(U.uShadow, this.q.shadowOn ? 1 : 0); gl.uniform1f(U.uTexel, 1 / this.q.shadow); gl.uniform1f(U.uDust, env.dust || 0);
+    { const Ls = (env.lights || []).slice(0, 8), lp = new Float32Array(32), lc = new Float32Array(24); Ls.forEach((l, i) => { lp.set([l.x, l.y, l.z, l.r], i * 4); lc.set(l.c, i * 3); }); gl.uniform1i(U.uLN, Ls.length); if (Ls.length) { gl.uniform4fv(U['uLP[0]'], lp); gl.uniform3fv(U['uLC[0]'], lc); } }
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.shTex); gl.uniform1i(U.uSh, 0);
     for (const m of this.meshes) if (m.kind === 'solid' && !m.hidden) { gl.bindVertexArray(m.vao); gl.drawElements(gl.TRIANGLES, m.count, gl.UNSIGNED_INT, 0); }
     const fp = this.flat; gl.useProgram(fp.p); gl.uniformMatrix4fv(fp.U.uVP, false, VP); gl.uniformMatrix4fv(fp.U.uLVP, false, LVP);
@@ -15526,6 +15528,26 @@ function craterAt(solid, decal, rng, H, x, z, r, tint) {
 function rubbleAt(solid, rng, H, x, z, tint, spread) {
   const n = 7 + Math.floor(rng() * 7); for (let k = 0; k < n; k++) { const a = rng() * 6.283, d = Math.sqrt(rng()) * spread, s = .06 + rng() * .1, px = x + Math.cos(a) * d, pz = z + Math.sin(a) * d; if (rng() < .35) box(solid, px, H(px, pz), pz, s * 2.4, s * 1.1, s * 1.7, rng() * 3, vary(tint, rng, .2), [1, 0], .02, rng); else blob(solid, px, H(px, pz) + s * .1, pz, s * 1.6, s * .8, s * 1.2, vary(tint, rng, .2), [1, 0], rng, .8); }
 }
+/* ---------- Chaos dressing: ground sigils, standards, braziers and spikes, with a few real point lights ---------- */
+function chaosStar(add, R, rot) {
+  const P = (r, a, o) => [Math.cos(a) * r - Math.sin(a) * o, Math.sin(a) * r + Math.cos(a) * o];
+  for (let k = 0; k < 8; k++) { const a = rot + k * .7854, w = .045 * R; add([P(.24 * R, a, -w), P(.24 * R, a, w), P(.8 * R, a, w), P(.8 * R, a, -w)]); add([P(.8 * R, a, -.13 * R), P(.8 * R, a, .13 * R), P(R, a, 0), P(R, a, 0)]); }
+  for (let q = 0; q < 20; q++) { const a0 = q / 20 * 6.2832, a1 = (q + 1) / 20 * 6.2832; add([P(.15 * R, a0, 0), P(.23 * R, a0, 0), P(.23 * R, a1, 0), P(.15 * R, a1, 0)]); }
+}
+function chaosDetail(solid, decal, rng, ok, H, key) {
+  const lights = [], IRON = [.09, .085, .08], BONE = [.62, .58, .48], place = (m, tries) => { for (let t = 0; t < (tries || 60); t++) { const x = 5 + rng() * (BW - 10), z = 5 + rng() * (BH - 10); if (ok(x, z, m)) return [x, z]; } return null; };
+  const sigils = [];
+  for (let i = 0; i < 2; i++) { let R = 2.4 + rng() * .6, p = null; for (let t = 0; t < 12 && !p; t++) { const q = place(R + 3.2); if (q && sigils.every(o => Math.hypot(o[0] - q[0], o[1] - q[1]) > 16)) p = q; } if (!p) continue; sigils.push(p); const [x, z] = p, rot = rng() * 6.28, pt = q => [x + q[0], H(x + q[0], z + q[1]) + .076, z + q[1]];
+    ground(decal, x, z, R * 1.05, R * 1.05, 28, [.03, .01, .01], [.34, 0], .072, H, rng, .15);
+    chaosStar(q => decal.quad(pt(q[0]), pt(q[1]), pt(q[2]), pt(q[3]), [.62, .06, .05], [.78, 0]), R, rot);
+    lights.push({ x, y: 1.3, z, r: 13, c: [.95, .12, .35] });
+    for (let k = 0; k < 3; k++) { const a = rot + k * 2.0944 + .5, bx = x + Math.cos(a) * (R + 1.1), bz = z + Math.sin(a) * (R + 1.1), by = H(bx, bz); tube(solid, [bx, by, bz], [bx, by + .95, bz], .13, .09, 6, IRON, [.7, 0]); blob(solid, bx, by + 1.05, bz, .4, .2, .4, IRON, [.7, 0], rng, .15); blob(solid, bx, by + 1.3, bz, .24, .38, .24, [1, .52, .1], [.3, 1], rng, .4); ground(decal, bx, bz, 1.7, 1.7, 18, [1, .5, .12], [.13, 0], .074, H, rng, .2); if (lights.length < 8) lights.push({ x: bx, y: by + 1.8, z: bz, r: 8, c: [1.1, .5, .16] }); } }
+  for (let i = 0; i < 6; i++) { const p = place(1.6); if (!p) continue; const [x, z] = p, y = H(x, z), h = 3 + rng() * .8, cw = 1.05, ch = 1.7, cy = y + h - ch / 2 - .15;
+    tube(solid, [x, y, z], [x, y + h, z], .06, .045, 6, IRON, [.7, 0]); box(solid, x, y + h - .05, z, cw + .3, .07, .07, 0, IRON, [.7, 0], 0, rng); box(solid, x, cy, z, cw, ch, .05, 0, [.34, .04, .04], [.9, 0], 0, rng);
+    for (const f of [-1, 1]) { const o = f * .04; chaosStar(q => solid.quad([x + q[0][0] * .3, cy + .1 + q[0][1] * .3, z + o], [x + q[1][0] * .3, cy + .1 + q[1][1] * .3, z + o], [x + q[2][0] * .3, cy + .1 + q[2][1] * .3, z + o], [x + q[3][0] * .3, cy + .1 + q[3][1] * .3, z + o], [.95, .72, .2], [.3, .75], [x, cy, z]), 1.35, .39); } }
+  for (let i = 0; i < 9; i++) { const p = place(1.2); if (!p) continue; const [x, z] = p, y = H(x, z), lean = (rng() - .5) * .6, h = 2 + rng() * 1.3; tube(solid, [x, y, z], [x + lean, y + h, z], .07, .015, 5, [.16, .1, .07], [.8, .3]); blob(solid, x + lean * .6, y + h * .62, z, .17, .15, .15, BONE, [.8, 0], rng, .15); }
+  void key; return lights;
+}
 function dressing(solid, decal, rng, ok, H, th, key) {
   /* even spread: no two features closer than the spacing, and none on a ruin or an objective */
   const pts = [], gap = 7.6; for (let tries = 0; tries < 900 && pts.length < 34; tries++) { const x = 2.5 + rng() * (BW - 5), z = 2.5 + rng() * (BH - 5); if (!ok(x, z, 1.6)) continue; if (pts.some(q => Math.hypot(q[0] - x, q[1] - z) < gap)) continue; pts.push([x, z]); }
@@ -15669,8 +15691,11 @@ function buildMap(spec) {
   rects.forEach((r, i) => { const rr = mulberry(seed * 101 + i * 17 + th.seed); if (r.poly) propsPoly(solid, r, rr, i, th.poly); else th.props(solid, r, rr, i); });
   th.scatter(solid, mulberry(seed * 13 + th.seed), ok, H);
   dressing(solid, decal, mulberry(seed * 29 + th.seed), ok, H, th, spec.theme);
+  const chaosOn = spec.chaos !== false && localStorage.getItem('bd.chaos') !== '0', lights = chaosOn ? chaosDetail(solid, decal, mulberry(seed * 37 + th.seed), ok, H, spec.theme) : [];
+  /* what kind of cover each footprint is: heavy ruins read cold and pale, light cover reads warm and dark */
+  rects.forEach(r => { const heavy = (r.walls || []).length >= 2, c = heavy ? [.56, .53, .47] : [.2, .16, .1]; decal.quad([r.x, .068, r.y], [r.x, .068, r.y + r.h], [r.x + r.w, .068, r.y + r.h], [r.x + r.w, .068, r.y], c, [heavy ? .22 : .3, 0]); });
   /* zones, as flat tint over the ground */
-  const zoneTint = (z, col) => { if (!z) return; const s = 1, b = z.pts ? z.pts.reduce((m, p) => [Math.min(m[0], p[0]), Math.min(m[1], p[1]), Math.max(m[2], p[0]), Math.max(m[3], p[1])], [1e9, 1e9, -1e9, -1e9]) : [z.x, z.y, z.x + z.w, z.y + z.h]; for (let x = Math.floor(b[0]); x < b[2]; x += s) for (let y = Math.floor(b[1]); y < b[3]; y += s) { if (!zoneHas(z, x + .5, y + .5)) continue; const p = (X, Z) => [X, H(X, Z) + .07, Z]; zdec.quad(p(x, y), p(x, y + s), p(x + s, y + s), p(x + s, y), col, [.07, 0]); } const E = z.pts || (z.kind === 'quarter' ? null : [[z.x, z.y], [z.x + z.w, z.y], [z.x + z.w, z.y + z.h], [z.x, z.y + z.h]]); if (E) for (let k = 0; k < E.length; k++) { const a = E[k], c = E[(k + 1) % E.length], L = Math.hypot(c[0] - a[0], c[1] - a[1]), n = Math.max(1, Math.ceil(L / 1.5)), nn = [-(c[1] - a[1]) / L * .09, (c[0] - a[0]) / L * .09]; for (let q = 0; q < n; q++) { const t0 = q / n, t1 = (q + 1) / n, f = (t, s) => { const X = a[0] + (c[0] - a[0]) * t + nn[0] * s, Z = a[1] + (c[1] - a[1]) * t + nn[1] * s; return [X, H(X, Z) + .08, Z]; }; zdec.quad(f(t0, -1), f(t1, -1), f(t1, 1), f(t0, 1), col, [.5, 0]); } } };
+  const zoneTint = (z, col) => { if (!z) return; const s = 1, b = z.pts ? z.pts.reduce((m, p) => [Math.min(m[0], p[0]), Math.min(m[1], p[1]), Math.max(m[2], p[0]), Math.max(m[3], p[1])], [1e9, 1e9, -1e9, -1e9]) : [z.x, z.y, z.x + z.w, z.y + z.h]; for (let x = Math.floor(b[0]); x < b[2]; x += s) for (let y = Math.floor(b[1]); y < b[3]; y += s) { if (!zoneHas(z, x + .5, y + .5)) continue; const p = (X, Z) => [X, H(X, Z) + .07, Z]; zdec.quad(p(x, y), p(x, y + s), p(x + s, y + s), p(x + s, y), col, [.045, 0]); } const E = z.pts || (z.kind === 'quarter' ? null : [[z.x, z.y], [z.x + z.w, z.y], [z.x + z.w, z.y + z.h], [z.x, z.y + z.h]]); if (E) for (let k = 0; k < E.length; k++) { const a = E[k], c = E[(k + 1) % E.length], L = Math.hypot(c[0] - a[0], c[1] - a[1]), n = Math.max(1, Math.ceil(L / 1.5)), nn = [-(c[1] - a[1]) / L * .09, (c[0] - a[0]) / L * .09]; for (let q = 0; q < n; q++) { const t0 = q / n, t1 = (q + 1) / n, f = (t, s) => { const X = a[0] + (c[0] - a[0]) * t + nn[0] * s, Z = a[1] + (c[1] - a[1]) * t + nn[1] * s; return [X, H(X, Z) + .08, Z]; }; zdec.quad(f(t0, -1), f(t1, -1), f(t1, 1), f(t0, 1), col, [.5, 0]); } } };
   if (spec.zones) { zoneTint(spec.zones.ai, [.95, .25, .2]); zoneTint(spec.zones.player, [.3, .55, 1]); }
   /* objectives: the ring (or the terrain-area outline), a faint fill and a flat marker */
   for (const o of OB) {
@@ -15679,7 +15704,7 @@ function buildMap(spec) {
     ground(odec, o.x, o.y, .5, .5, 20, GOLD, [.55, 0], .11, H, rng, 0);
   }
   for (const d of (spec.decor || [])) ground(decal, d.x, d.y, d.r, d.kind === 'crater' ? d.r : d.r * 1.3, 18, [.02, .02, .02], [d.kind === 'crater' ? .45 : .32, 0], .065, H, rng, .35);
-  return { solid, decal, zdec, odec, th, H, ok, rects };
+  return { solid, decal, zdec, odec, th: Object.assign({}, th, { env: Object.assign({}, th.env, { lights }) }), H, ok, rects };
 }
 
 return { ENV_KEYS, Renderer, Cam, MB, buildMap, THEMES, layoutTerrain, OBJS, CLEAR, mulberry, box, tube, blob, ground, profileRun, shade, vary, v3, m4, lerp, clamp, BW, BH, inPoly, crate, container, deadTree, rubble, pillar, JB, CRATE, STONE, MOSSY };
