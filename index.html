@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.15-1417';
+  const VERSION = '2026.11.15-1618';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -20470,6 +20470,7 @@ function whBuild(T, hooks) {
     for (const key of ['ranged', 'melee']) { const bases = {}; u[key].forEach(w => { if (w.name.includes(' - ')) { const b = w.name.split(' - ')[0]; bases[b] = (bases[b] || 0) + 1; } }); u[key].forEach(w => { const b = w.name.split(' - ')[0]; if (bases[b] > 1) w.alt = b; }); }
     { const orows = (optg.get(d.id) || []).slice().sort((a, b) => +a.line - +b.line), r = whOptRules(orows, u); if (r.rules.length) u.wgOpts = r.rules; if (r.skipped.length) u.wgNote = `${r.skipped.length} option rule${r.skipped.length > 1 ? 's' : ''} on this datasheet can't be picked here; they are listed under Wargear options on the datasheet.`; }
     const single = u.models === 1; u.size = single && u.W >= 12 ? 'large' : single && u.W >= 6 ? 'medium' : '';
+    { const tiers = (cost.get(d.id) || []).map(c => { const m = String(c.description).match(/(\d+)\s*models?/i); return m && /\d/.test(c.cost || '') ? +m[1] : 0; }), cmax = cl.reduce((a, c) => a + c.max, 0); u.maxModels = Math.max(cmax, ...tiers, u.models); }
     u.baseModels = u.models; u.faction = faction; u.legends = legSrc.has(d.source_id); u._src = d.id; u._virtual = /^true$/i.test(d.virtual || '');
     u.id = (faction + '--' + name).toLowerCase().replace(/'/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
     out.push(u);
@@ -20983,6 +20984,7 @@ const libOf = e => findLib(e.id);
 const isChar = u => CHAR_ROLES.includes(u.role);
 function enhPts() { const d = curDet(); if (!d) return 0; return Object.keys(B.enh).reduce((a, n) => { const x = d.enh.find(z => z.name === n); return a + (x && B.enh[n] ? (+x.pts || 0) : 0); }, 0); }
 const rosterPts = () => B.roster.reduce((a, e) => a + (+e.pts || 0), 0) + enhPts();
+const maxModelsOf = u => u.maxModels || (u.models > 1 ? u.models * 2 : u.models || 1);
 function estPts(u, models) { return Math.round(u.pts * models / (u.baseModels || 1) / 5) * 5; }
 function capMessage(u, have, cap, size) {
   if (cap === 1) return `${u.name} is an Epic Hero, so your army can only include one.`;
@@ -21291,7 +21293,7 @@ function rosterRows(filterFn, opts) {
   return list.map(e => {
     const u = libOf(e), est = e.models !== u.models;
     return `<div class="bld-row"><span class="nm" data-libid="${u.id}" data-nm="${e.models}">${escH(u.name)} <small class="muted">#${e.key}</small></span>
-      <input type="number" min="1" max="30" value="${e.models}" data-models="${e.key}" aria-label="Models" title="Models"${u.models === 1 && !u.leader ? ' disabled' : ''}>
+      <input type="number" min="1" max="${maxModelsOf(u)}" value="${e.models}" data-models="${e.key}" aria-label="Models" title="Models"${u.models === 1 && !u.leader ? ' disabled' : ''}>
       <input type="number" min="0" step="5" value="${e.pts}" data-pts="${e.key}" aria-label="Points" title="Points">
       <button class="btn" data-rm="${e.key}" aria-label="Remove ${escH(u.name)}">✕</button>
       ${pmUnitOk(u) ? `<div class="sub"><button class="btn primary pme-btn" data-bpme="${e.key}" data-tip="Choose the look of every model in this unit.">Edit models${e.looks ? ' ✓' : ''}</button> <span class="muted" style="font-size:.82rem">${e.looks ? 'Custom models chosen' : 'Default models'}</span></div>` : ''}
@@ -21419,7 +21421,7 @@ function renderBuilder() {
   const lg = $('#bl-leg'); if (lg) lg.addEventListener('change', e => { B.legends = e.target.checked; renderBuilder(); });
   on('[data-add]', 'click', e => addToRoster(e.currentTarget.dataset.add));
   on('[data-rm]', 'click', e => removeFromRoster(+e.currentTarget.dataset.rm));
-  on('[data-models]', 'change', ev => { const el = ev.currentTarget, e = B.roster.find(x => x.key === +el.dataset.models), u = libOf(e); e.models = clamp(+el.value || 1, 1, 30); e.pts = e.models === u.models ? u.pts : estPts(u, e.models); renderBuilder(); });
+  on('[data-models]', 'change', ev => { const el = ev.currentTarget, e = B.roster.find(x => x.key === +el.dataset.models), u = libOf(e); e.models = clamp(+el.value || 1, 1, maxModelsOf(u)); e.pts = e.models === u.models ? u.pts : estPts(u, e.models); renderBuilder(); });
   on('[data-pts]', 'change', ev => { const el = ev.currentTarget, e = B.roster.find(x => x.key === +el.dataset.pts); e.pts = Math.max(0, +el.value || 0); renderBuilder(); });
   on('[data-warlord]', 'change', ev => { B.warlord = +ev.currentTarget.dataset.warlord; renderBuilder(); });
   on('[data-lead]', 'change', ev => { const el = ev.currentTarget, e = B.roster.find(x => x.key === +el.dataset.lead); e.leadTo = el.value ? +el.value : null; renderBuilder(); });
