@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.15-1232';
+  const VERSION = '2026.11.15-1236';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -15548,6 +15548,21 @@ function chaosDetail(solid, decal, rng, ok, H, key) {
   for (let i = 0; i < 9; i++) { const p = place(1.2); if (!p) continue; const [x, z] = p, y = H(x, z), lean = (rng() - .5) * .6, h = 2 + rng() * 1.3; tube(solid, [x, y, z], [x + lean, y + h, z], .07, .015, 5, [.16, .1, .07], [.8, .3]); blob(solid, x + lean * .6, y + h * .62, z, .17, .15, .15, BONE, [.8, 0], rng, .15); }
   void key; return lights;
 }
+/* the world beyond the table edge: the table surface is marked by a dark skirt, and the far ground is dressed so the board does not float in empty space (looks only; the 60" x 44" board and every rule are unchanged) */
+function surround(solid, decal, rng, H, key, th) {
+  const rock = (th.poly && th.poly.wall && th.poly.wall.col) || [.3, .3, .3], out = (x, z) => Math.hypot(Math.max(-x, 0, x - BW), Math.max(-z, 0, z - BH));
+  const skirt = [.035, .03, .028];
+  for (const [x, z, w, d] of [[BW / 2, -.6, BW + 2.4, 1.2], [BW / 2, BH + .6, BW + 2.4, 1.2], [-.6, BH / 2, 1.2, BH], [BW + .6, BH / 2, 1.2, BH]]) box(solid, x, .15, z, w, .5, d, 0, skirt, [.9, 0], 0, rng);
+  for (let i = 0; i < 70; i++) {
+    const x = -30 + rng() * (BW + 60), z = -24 + rng() * (BH + 48), o = out(x, z); if (o < 3.5 || o > 30) continue;
+    const k = rng();
+    if (key === 'jungle') { if (k < .55) jungleTree(solid, x, z, 5 + rng() * 3.5, rng); else fern(solid, x, H(x, z), z, rng); }
+    else if (key === 'marsh') { if (k < .4) deadTree(solid, x, z, 3.8 + rng() * 2.4, rng); else rubbleAt(solid, rng, H, x, z, rock, 1.4 + rng()); }
+    else if (key === 'base' || key === 'hive') { if (k < .45) pillar(solid, x, z, 5 + rng() * 4, .8, rock, rng); else rubbleAt(solid, rng, H, x, z, rock, 1.6 + rng()); }
+    else if (k < .35) pillar(solid, x, z, 3 + rng() * 3.5, .6, rock, rng); else rubbleAt(solid, rng, H, x, z, rock, 1.8 + rng() * 1.2);
+  }
+  void decal;
+}
 function dressing(solid, decal, rng, ok, H, th, key) {
   /* even spread: no two features closer than the spacing, and none on a ruin or an objective */
   const pts = [], gap = 7.6; for (let tries = 0; tries < 900 && pts.length < 34; tries++) { const x = 2.5 + rng() * (BW - 5), z = 2.5 + rng() * (BH - 5); if (!ok(x, z, 1.6)) continue; if (pts.some(q => Math.hypot(q[0] - x, q[1] - z) < gap)) continue; pts.push([x, z]); }
@@ -15691,6 +15706,7 @@ function buildMap(spec) {
   rects.forEach((r, i) => { const rr = mulberry(seed * 101 + i * 17 + th.seed); if (r.poly) propsPoly(solid, r, rr, i, th.poly); else th.props(solid, r, rr, i); });
   th.scatter(solid, mulberry(seed * 13 + th.seed), ok, H);
   dressing(solid, decal, mulberry(seed * 29 + th.seed), ok, H, th, spec.theme);
+  surround(solid, decal, mulberry(seed * 53 + th.seed), H, spec.theme, th);
   const chaosOn = spec.chaos !== false && localStorage.getItem('bd.chaos') !== '0', lights = chaosOn ? chaosDetail(solid, decal, mulberry(seed * 37 + th.seed), ok, H, spec.theme) : [];
   /* what kind of cover each footprint is: heavy ruins read cold and pale, light cover reads warm and dark */
   rects.forEach(r => { const heavy = (r.walls || []).length >= 2, c = heavy ? [.56, .53, .47] : [.2, .16, .1]; decal.quad([r.x, .068, r.y], [r.x, .068, r.y + r.h], [r.x + r.w, .068, r.y + r.h], [r.x + r.w, .068, r.y], c, [heavy ? .22 : .3, 0]); });
@@ -15735,7 +15751,8 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
     const cv = document.createElement('canvas'); cv.id = 'b-3d'; cv.setAttribute('aria-label', '3D battlefield, drag to look around'); cv.hidden = true;
     holder.appendChild(cv);
     try { BF3D.R = new BFX.Renderer(cv); } catch (e) { BF3D.fail = String(e.message || e); cv.remove(); return false; }
-    const R = BF3D.R, cam = BF3D.cam = new BFX.Cam(); cam.dist = 76; cam.pitch = .95; cam.target = [30, 0, 26];
+    BF3D.fit = top => { const cv = BF3D.R && BF3D.R.cv, asp = cv && cv.clientHeight > 50 ? cv.clientWidth / cv.clientHeight : 1.6; return Math.max(66 / (.753 * asp), top ? 60 : 51); };
+    const R = BF3D.R, cam = BF3D.cam = new BFX.Cam(); cam.dist = BF3D.fit(); cam.pitch = .95; cam.target = [30, 0, 24];
     if (/Mobi|Android|iPad|iPhone/.test(navigator.userAgent) || (navigator.hardwareConcurrency || 8) <= 4) { R.q.shadow = 1024; R.q.dpr = 1; R.makeShadow(); }
     const ptr = new Map(); let gesture = null;
     /* screen point -> board point (the ray meets the table at height 0) */
@@ -15820,7 +15837,7 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
       o.x = e.clientX; o.y = e.clientY; BF3D.dirty = true; kick();
     });
     cv.addEventListener('wheel', e => { e.preventDefault(); cam.zoom(Math.exp(e.deltaY * .0012)); BF3D.dirty = true; kick(); }, { passive: false });
-    cv.addEventListener('dblclick', () => { cam.yaw = 0; cam.pitch = .95; cam.dist = 76; cam.target = [30, 0, 26]; BF3D.dirty = true; kick(); });
+    cv.addEventListener('dblclick', () => { cam.yaw = 0; cam.pitch = .95; cam.dist = BF3D.fit(); cam.target = [30, 0, 24]; BF3D.dirty = true; kick(); });
 
     /* keyboard: WASD slides the view, Q and E turn it, R and F tilt, Z and X zoom, Shift is faster */
     const keys = new Set(); let kt = 0;
@@ -15852,8 +15869,8 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
     bar.querySelectorAll('[data-o]').forEach(b => b.addEventListener('click', () => { BF3D.opt[b.dataset.o] = !BF3D.opt[b.dataset.o]; try { localStorage.setItem(OPT_KEY, JSON.stringify(BF3D.opt)); } catch (e) { } applyOpts(); if (b.dataset.o === 'guides') buildGhost(); }));
     bar.querySelector('#b-3dsight').addEventListener('click', () => { const cb = document.getElementById('b-sight'); if (cb) { cb.checked = !cb.checked; cb.dispatchEvent(new Event('change')); } });
     bar.querySelector('#b-3dtheme').addEventListener('change', e => { BF3D.theme = e.target.value; BF3D.tsig = ''; sync(true); });
-    bar.querySelector('#b-3dtop').addEventListener('click', () => { cam.yaw = 0; cam.pitch = 1.5; cam.dist = 84; cam.target = [30, 0, 22]; BF3D.dirty = true; kick(); });
-    bar.querySelector('#b-3dtab').addEventListener('click', () => { cam.yaw = 0; cam.pitch = .95; cam.dist = 76; cam.target = [30, 0, 26]; BF3D.dirty = true; kick(); });
+    bar.querySelector('#b-3dtop').addEventListener('click', () => { cam.yaw = 0; cam.pitch = 1.5; cam.dist = BF3D.fit(true); cam.target = [30, 0, 22]; BF3D.dirty = true; kick(); });
+    bar.querySelector('#b-3dtab').addEventListener('click', () => { cam.yaw = 0; cam.pitch = .95; cam.dist = BF3D.fit(); cam.target = [30, 0, 24]; BF3D.dirty = true; kick(); });
     new ResizeObserver(() => { place(); BF3D.dirty = true; kick(); }).observe($b());
     return true;
   }
