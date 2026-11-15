@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.15-1315';
+  const VERSION = '2026.11.15-1316';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -13388,7 +13388,7 @@ const SM_SCHEMES = {
 Object.assign(MINI_PAL, {
   'Space Marines': SM_SCHEMES['Ultramarines'],
   'Salamanders': smScheme('Salamanders', { padL: [26, 26, 28], plate: [44, 130, 70], plate2: [26, 88, 48], trim: [26, 26, 28], bronze: [206, 164, 64], cloth: [172, 74, 28], lens: [255, 122, 40], face: [60, 48, 44], accent: [214, 92, 30], wear: { plate: [92, 164, 104], plate2: [58, 124, 74] } }),
-  'Black Templars': smScheme('Black Templars', { plate: [34, 34, 38], plate2: [20, 20, 24], trim: [228, 224, 212], bronze: [192, 152, 62], cloth: [230, 226, 214], lens: [216, 52, 42], face: [214, 170, 140], accent: [164, 30, 30], wear: { plate: [80, 82, 90], plate2: [56, 58, 66] } })
+  'Black Templars': smScheme('Black Templars', { plate: [66, 68, 80], plate2: [44, 46, 58], trim: [228, 224, 212], bronze: [192, 152, 62], cloth: [230, 226, 214], lens: [216, 52, 42], face: [214, 170, 140], accent: [164, 30, 30], wear: { plate: [104, 106, 118], plate2: [76, 78, 90] } })
 });
 Object.assign(MINI_KW, { 'salamanders': 'Salamanders', 'black templars': 'Black Templars', 'adeptus astartes': 'Space Marines' });
 
