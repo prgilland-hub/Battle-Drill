@@ -313,7 +313,9 @@ window.BDModels = BDModels; window.MODELIMP = MODELIMP;
   }
   function tipAttach() {
     const m = document.getElementById('modal'); if (!tip || tip.style.display !== 'block' || !hov || !BDModels.on() || (m && !m.hidden)) return;
-    const slot = tip.querySelector('.ds-img.mini'); if (!slot) return; const fig = BDModels.pick(hov.ds, hov.faction, hov.key); if (!fig || !ensureGL()) return;
+    const fig = BDModels.pick(hov.ds, hov.faction, hov.key); if (!fig || !ensureGL()) return;
+    let slot = tip.querySelector('.ds-img'); if (!slot) { const head = tip.querySelector('.ds-head'); if (!head) return; slot = document.createElement('div'); slot.className = 'ds-img mini'; head.insertBefore(slot, head.firstChild); }
+    else if (!slot.classList.contains('mini')) return;
     if (tshown !== fig || cur) { upload(fig); tshown = fig; cur = null; }
     slot.style.backgroundImage = 'none'; if (cv.parentNode !== slot) slot.appendChild(cv); R.resize(); try { R.draw(cam, ENV); } catch (e) { }
     if (!raf) { last = 0; raf = requestAnimationFrame(tframe); }
