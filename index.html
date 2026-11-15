@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.15-1300';
+  const VERSION = '2026.11.15-1308';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -15316,6 +15316,8 @@ void main(){
   if(abs(wx-.8125)<.004 && abs(n.y)<.6){ vec3 t=normalize(cross(n,vec3(0.,1.,0.))); float ph=dot(vW,t)*24.; n=normalize(n+t*cos(ph)*.55); c*=.84+.16*sin(ph);
     float st=vn(vec3(dot(vW,t)*5.,vW.y*.35,3.)); c=mix(c,c*vec3(.7,.46,.34),smoothstep(.58,.82,st)*clamp(1.-vW.y*.25,0.,1.));
     float ed=vn(vW*14.); c=mix(c,c*1.35+.03,smoothstep(.72,.9,ed)*.5); }
+  if(abs(wx-.8438)<.004){ float b=vn(vec3(vW.x*16.,vW.y*1.6,vW.z*16.)); n=normalize(n+vec3(b-.5,0.,vn(vW*16.+3.)-.5)*.9); c*=.68+.64*b; }
+  float leaf=0.; if(abs(wx-.8594)<.004){ float b=vn(vW*7.), b2=vn(vW*15.+5.); n=normalize(n+(vec3(b,b2,vn(vW*11.+9.))-.5)*.85); c*=.7+.55*b2; leaf=1.; }
   float g=vn(vW*2.3)*.6+vn(vW*7.1)*.3+vn(vW*19.)*.25;
   c*=1.-wx*(g*.55-.12);
   float low=1.-smoothstep(0.,1.6,vW.y);
@@ -15330,10 +15332,11 @@ void main(){
   float ao=mix(.62,1.,smoothstep(0.,1.4,vW.y)); ao=mix(1.,ao,1.-abs(n.y)*.6);
   vec3 col=c*(amb*ao+uSunC*ndl*sh);
   col+=c*vM.y*2.2;
+  if(leaf>.5) col+=c*uSunC*max(dot(-n,uSun),0.)*.35*sh;
   if(gls>.5){ vec3 hh=normalize(uSun+vd0); float sp=pow(max(dot(n,hh),0.),6.+gls*34.)*ndl*sh*gls*(.22+.18*gls); col+=uSunC*sp; if(gls>1.5) col=mix(col,uFog*1.6+.05,pow(1.-max(dot(n,vd0),0.),4.)*.38); }
   for(int i=0;i<12;i++){ if(i>=uLN) break; vec3 d=uLP[i].xyz-vW; float L=length(d); float a=clamp(1.-L/uLP[i].w,0.,1.); a*=a; col+=c*uLC[i]*a*(max(dot(n,d/max(L,.001)),0.)*.9+.22); if(gls>.5) col+=uLC[i]*pow(max(dot(n,normalize(d/max(L,.001)+vd0)),0.),22.)*a*gls*.45; }
   float d=length(vW-uCam); float f=1.-exp(-d*uFogD); f=max(f,.0); f*=mix(1.,.55,smoothstep(0.,3.,vW.y)*0.); 
-  float hz=exp(-max(vW.y,0.)*.6)*clamp((d-16.)*.011,0.,.4); col=mix(col,uFog*1.7+.03,hz);
+  float hz=exp(-max(vW.y,0.)*.6)*clamp((d-16.)*.011,0.,.4); col=mix(col,uFog*1.2+.01,hz);
   col=mix(col,uFog,clamp(f,0.,1.));
   float ed=max(abs(vW.x-30.)/88.,abs(vW.z-22.)/80.); col=mix(col,uFog,smoothstep(.5,.98,ed));
   vec3 vd=normalize(uCam-vW); float rim=pow(1.-max(dot(n,vd),0.),3.)*(1.-abs(n.y))*smoothstep(.0,.7,vW.y+.3); col+=vec3(.05,.12,.26)*rim*(.35+.65*(1.-ndl));
@@ -15348,7 +15351,7 @@ const VS_Q = `#version 300 es
 void main(){ vec2 p=vec2(float((gl_VertexID<<1)&2),float(gl_VertexID&2)); gl_Position=vec4(p*2.-1.,0.,1.); }`;
 const FS_BRIGHT = `#version 300 es
 precision highp float; uniform sampler2D uT; uniform vec2 uRes; out vec4 o;
-void main(){ vec3 c=texture(uT,gl_FragCoord.xy/uRes).rgb; float l=max(c.r,max(c.g,c.b)); o=vec4(c*smoothstep(.7,.98,l),1.); }`;
+void main(){ vec3 c=texture(uT,gl_FragCoord.xy/uRes).rgb; float l=dot(c,vec3(.3,.59,.11)); o=vec4(c*smoothstep(.93,1.,l),1.); }`;
 const FS_BLUR = `#version 300 es
 precision highp float; uniform sampler2D uT; uniform vec2 uRes, uDir; out vec4 o;
 void main(){ vec2 uv=gl_FragCoord.xy/uRes, st=uDir/uRes; vec3 s=texture(uT,uv).rgb*.227; s+=(texture(uT,uv+st*1.38).rgb+texture(uT,uv-st*1.38).rgb)*.316; s+=(texture(uT,uv+st*3.23).rgb+texture(uT,uv-st*3.23).rgb)*.0703; o=vec4(s,1.); }`;
@@ -15426,8 +15429,8 @@ class Renderer {
       pass(this.blur, pt.fA, pt.hw, pt.hh, U => { bind(pt.tB[1], U.uT); gl.uniform2f(U.uDir, 0, 1.5); });
     }
     pass(this.bright, pt.fB[0], pt.hw, pt.hh, U => bind(pt.tRes, U.uT));
-    for (let k = 0; k < 2; k++) { pass(this.blur, pt.fB[1], pt.hw, pt.hh, U => { bind(pt.tB[0], U.uT); gl.uniform2f(U.uDir, 1.6, 0); }); pass(this.blur, pt.fB[0], pt.hw, pt.hh, U => { bind(pt.tB[1], U.uT); gl.uniform2f(U.uDir, 0, 1.6); }); }
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, W, H); gl.useProgram(this.comp.p); gl.uniform2f(this.comp.U.uRes, W, H); gl.uniform1f(this.comp.U.uK, .85); gl.uniform1f(this.comp.U.uAk, this.q.ao ? .9 : 0);
+    for (let k = 0; k < 1; k++) { pass(this.blur, pt.fB[1], pt.hw, pt.hh, U => { bind(pt.tB[0], U.uT); gl.uniform2f(U.uDir, 1.6, 0); }); pass(this.blur, pt.fB[0], pt.hw, pt.hh, U => { bind(pt.tB[1], U.uT); gl.uniform2f(U.uDir, 0, 1.6); }); }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, W, H); gl.useProgram(this.comp.p); gl.uniform2f(this.comp.U.uRes, W, H); gl.uniform1f(this.comp.U.uK, .6); gl.uniform1f(this.comp.U.uAk, this.q.ao ? .9 : 0);
     gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, pt.tRes); gl.uniform1i(this.comp.U.uS, 1); gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, pt.tB[0]); gl.uniform1i(this.comp.U.uB, 2); gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, pt.tA); gl.uniform1i(this.comp.U.uA, 3);
     gl.drawArrays(gl.TRIANGLES, 0, 3); gl.bindVertexArray(null); gl.enable(gl.DEPTH_TEST); gl.activeTexture(gl.TEXTURE0);
   }
@@ -15668,7 +15671,7 @@ function dressing(solid, decal, rng, ok, H, th, key) {
     if (k < .26) craterAt(solid, decal, rng, H, x, z, .8 + rng() * 1.1, T.rock);
     else if (k < .52) { rubbleAt(solid, rng, H, x, z, T.rock, 1.2 + rng() * .8); ground(decal, x, z, 1.9 + rng(), 1.5 + rng() * .8, 16, T.stain, [.12, 0], .064, H, rng, .4); for (let q = 0; q < 5; q++) { const a = rng() * 6.283, d = .8 + rng() * 1.3; rubbleAt(solid, rng, H, x + Math.cos(a) * d, z + Math.sin(a) * d, T.rock, .35 + rng() * .3); } }
     else if (k < .7) ground(decal, x, z, 2.4 + rng() * 1.6, 1.8 + rng() * 1.2, 20, T.drift, [.14, 0], .062, H, rng, .45);
-    else if (k < .84) { ground(decal, x, z, 1.6 + rng() * 1.2, 1 + rng() * .9, 16, [.012, .012, .012], [.3, 0], .066, H, rng, .35); for (let q = 0; q < 4; q++) { const a = rng() * 6.283, d = .6 + rng() * 1.2, s = .05 + rng() * .06, px = x + Math.cos(a) * d, pz = z + Math.sin(a) * d; blob(solid, px, H(px, pz) + s * .1, pz, s * 1.5, s * .7, s, vary(T.rock, rng, .2), [1, 0], rng, .8); } }
+    else if (k < .84) { ground(decal, x, z, 1.6 + rng() * 1.2, 1 + rng() * .9, 24, [.012, .012, .012], [.38, 0], .066, H, rng, .12); for (let q = 0; q < 9; q++) { const a = rng() * 6.283, d = .6 + rng() * 1.2, s = .05 + rng() * .06, px = x + Math.cos(a) * d, pz = z + Math.sin(a) * d; blob(solid, px, H(px, pz) + s * .1, pz, s * 1.5, s * .7, s, vary(T.rock, rng, .2), [1, 0], rng, .8); } }
     else if (key === 'marsh') { for (let q = 0; q < 6; q++) { const a = rng() * 6.283, d = rng() * 1.1, px = x + Math.cos(a) * d, pz = z + Math.sin(a) * d, s = .08 + rng() * .1; blob(solid, px, H(px, pz) + s * .2, pz, s * 1.4, s * .9, s * 1.4, [.5 + rng() * .15, .55, .3], [.2, .3], rng, .5); } }
     else rubbleAt(solid, rng, H, x, z, T.rock, 1.6);
   }
@@ -15749,8 +15752,8 @@ THEMES.forge.poly = { wall: { h: [3, 4.6], th: .5, col: FORGEC, floor: [.09, .08
 /* Death World jungle */
 const LEAFC = [.07, .19, .06], VINEC = [.08, .2, .06];
 function jungleTree(mb, x, z, h, rng) {
-  const bark = [.2, .14, .09]; let p = [x, 0, z], th = .34; for (let k = 0; k < 3; k++) { const q = [p[0] + (rng() - .5) * .5, p[1] + h / 3, p[2] + (rng() - .5) * .5]; tube(mb, p, q, th, th * .78, 7, bark, [.9, 0], k === 2); p = q; th *= .78; }
-  for (let k = 0; k < 5; k++) { const a = rng() * 6.283, d = .5 + rng() * 1.1; blob(mb, p[0] + Math.cos(a) * d, p[1] - .2 + rng() * .8, p[2] + Math.sin(a) * d, 1 + rng() * .6, .5 + rng() * .35, 1 + rng() * .6, vary(LEAFC, rng, .25), [.8, 0], rng, .6); }
+  const bark = [.2, .14, .09]; let p = [x, 0, z], th = .34; for (let k = 0; k < 3; k++) { const q = [p[0] + (rng() - .5) * .5, p[1] + h / 3, p[2] + (rng() - .5) * .5]; tube(mb, p, q, th, th * .78, 9, bark, [.8438, 0], k === 2); p = q; th *= .78; }
+  for (let k = 0; k < 5; k++) { const a = rng() * 6.283, d = .5 + rng() * 1.1; blob(mb, p[0] + Math.cos(a) * d, p[1] - .2 + rng() * .8, p[2] + Math.sin(a) * d, 1 + rng() * .6, .5 + rng() * .35, 1 + rng() * .6, vary(LEAFC, rng, .3), [.8594, 0], rng, .35); }
 }
 function fern(mb, x, y, z, rng) { for (let k = 0; k < 6; k++) { const a = k / 6 * 6.283 + rng(), l = .35 + rng() * .35; tube(mb, [x, y, z], [x + Math.cos(a) * l, y + .22 + rng() * .15, z + Math.sin(a) * l], .04, .008, 3, vary([.12, .32, .1], rng, .2), [.4, 0], false); } }
 function propsJungle(mb, r, rng, i) {
