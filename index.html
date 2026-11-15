@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.15-1633';
+  const VERSION = '2026.11.15-1639';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -1439,7 +1439,7 @@ html[data-grim="on"] .b-bg{fill:var(--field)}
 #b-misbtn[hidden]{display:none}
 #b-mispop{position:absolute;right:16px;bottom:58px;z-index:8;width:min(440px,calc(100% - 32px));max-height:70%;overflow:auto;background:var(--raised,#f3efe2);color:var(--ink,#1c1a17);border:1px solid var(--line);border-radius:10px;padding:10px 12px;box-shadow:0 8px 24px rgba(0,0,0,.5);font-size:.9rem}
 #b-mispop[hidden]{display:none}
-#sch-root{display:grid;gap:14px;max-width:980px}
+#sch-root{display:grid;gap:14px;max-width:none}
 .sch-row{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:flex-end}
 .sch-row label{display:flex;flex-direction:column;font-size:.82rem;color:var(--muted);gap:3px}
 .sch-row select,.sch-row input{font:inherit;padding:6px 8px;border:1px solid var(--line);border-radius:5px;background:var(--raised);color:var(--ink);min-width:9em}
@@ -1837,6 +1837,28 @@ html[data-look="cog"] .muted{color:var(--muted)}
 #kt-board .bn{fill:var(--brass);stroke:var(--field);stroke-width:.08}
 #kt-board .mk-s{fill:var(--ink);font:700 .38px "Barlow Condensed",system-ui,sans-serif;text-anchor:middle;pointer-events:none;opacity:.85}
 #kt-root .kt-obj .tacbox{border-left:3px solid var(--brass);padding-left:8px;margin:6px 0}
+
+/* ---- denser desktop layouts: use the width, cut the scrolling ---- */
+@media (min-width:1100px){
+  .wrap{max-width:1680px}
+  .army-grid{grid-template-columns:260px minmax(0,1fr);gap:12px}
+  .army-item{padding:5px 8px;margin-bottom:3px}.army-list h3{margin:8px 0 3px}
+  #a-editor .roster{grid-template-columns:repeat(auto-fill,minmax(430px,1fr));gap:5px}
+  #a-editor .rrow{padding:4px 8px}
+  #a-editor h3{margin:8px 0 4px}
+  .sch-pick{padding:10px 14px}.sch-pick h2{margin:0 0 2px;font-size:1.25rem}.sch-pick>p.muted{margin:2px 0 6px;font-size:.84rem}
+  .sch-card{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,6fr);gap:0 22px;padding:12px 16px}
+  .sch-card>h3,.sch-card>p,.sch-card>.sch-note{grid-column:1/-1;margin-top:2px;margin-bottom:6px}
+  .sch-card h4{margin:8px 0 4px}
+  .sch-card .sch-w{margin:4px 0}
+  .sch-card .sch-r{max-height:calc(100vh - 230px);overflow:auto;padding-right:6px}
+  .sch-uses{padding:12px 16px}
+}
+.sch-ab{gap:2px}.sch-ab>li{padding:3px 0;border-bottom:1px solid var(--line)}
+.sch-ab details>summary{cursor:pointer;list-style:none}.sch-ab details>summary::-webkit-details-marker{display:none}
+.sch-ab details>summary::before{content:"\25B8 ";color:var(--muted)}.sch-ab details[open]>summary::before{content:"\25BE "}
+.sch-ab details>div{margin:2px 0 4px 14px;font-size:.86rem;color:var(--muted)}
+.sch-sw{gap:4px 14px}.sch-sw li{margin:1px 0;font-size:.9rem}
 </style>
 </head>
 <body>
@@ -17353,10 +17375,10 @@ function schCard(lib) {
   const wrow = (w, k) => `<tr><td>${escH(w.name)}${w.count ? ` <small>x${w.count}</small>` : ''}${schWk(w)}</td><td>${k === 'r' ? (w.range || '') + '"' : 'Melee'}</td><td>${escH(String(w.A))}</td><td>${w.skill ? w.skill + '+' : '–'}</td><td>${w.S}</td><td>${w.AP ? -Math.abs(w.AP) : 0}</td><td>${escH(String(w.D))}</td></tr>`;
   return `<div class="panel sch-card"><h3>${escH(lib.name)} <small class="muted">${lib.models} model${lib.models > 1 ? 's' : ''} · ${lib.pts} pts</small></h3>
     ${T ? `<p>${schTx(T.blurb)}</p>` : ''}${schIsChar(lib) ? `<p class="sch-note">Character: attaches to ${escH(leadsOf(lib).join(', '))}. Pick the bodyguard above; lessons choose their own.</p>` : ''}${mix}
-    <div class="sch-stats">${[['M', lib.M + '"'], ['T', lib.T], ['Sv', lib.Sv + '+'], ['Inv', lib.inv ? lib.inv + '+' : '–'], ['W', lib.W], ['Ld', lib.Ld + '+'], ['OC', lib.OC]].map(([k, v]) => `<div><span>${k}</span><b>${v}</b></div>`).join('')}</div>
-    <table class="sch-w"><tr><th>Weapon</th><th>Range</th><th>A</th><th>Skill</th><th>S</th><th>AP</th><th>D</th></tr>${(lib.ranged || []).map(w => wrow(w, 'r')).join('')}${(lib.melee || []).map(w => wrow(w, 'm')).join('')}</table>
-    <h4>Abilities</h4><ul class="sch-ab">${abl.map(a => `<li><b>${escH(a.name)}</b> ${isSimAbility(a) ? '<small class="ok">simulated</small>' : '<small class="no">description only</small>'}<br><span>${schTx((a.text || '').replace(/\*+/g, ''))}</span></li>`).join('')}</ul>
-    ${T ? `<div class="sch-sw"><div><h4>Strengths</h4><ul>${T.strengths.map(s => `<li>${schTx(s)}</li>`).join('')}</ul></div><div><h4>Weaknesses</h4><ul>${T.weaknesses.map(s => `<li>${schTx(s)}</li>`).join('')}</ul></div></div>` : ''}</div>${schUsesPanel(lib)}`;
+    <div class="sch-l"><div class="sch-stats">${[['M', lib.M + '"'], ['T', lib.T], ['Sv', lib.Sv + '+'], ['Inv', lib.inv ? lib.inv + '+' : '–'], ['W', lib.W], ['Ld', lib.Ld + '+'], ['OC', lib.OC]].map(([k, v]) => `<div><span>${k}</span><b>${v}</b></div>`).join('')}</div>
+    <table class="sch-w"><tr><th>Weapon</th><th>Range</th><th>A</th><th>Skill</th><th>S</th><th>AP</th><th>D</th></tr>${(lib.ranged || []).map(w => wrow(w, 'r')).join('')}${(lib.melee || []).map(w => wrow(w, 'm')).join('')}</table></div>
+    <div class="sch-r"><h4 style="margin-top:0">Abilities</h4><ul class="sch-ab">${abl.map(a => { const tx = (a.text || '').replace(/\*+/g, ''); return `<li><details${tx.length < 150 ? ' open' : ''}><summary><b>${escH(a.name)}</b> ${isSimAbility(a) ? '<small class="ok">simulated</small>' : '<small class="no">description only</small>'}</summary><div>${schTx(tx)}</div></details></li>`; }).join('')}</ul>
+    ${T ? `<div class="sch-sw"><div><h4>Strengths</h4><ul>${T.strengths.map(s => `<li>${schTx(s)}</li>`).join('')}</ul></div><div><h4>Weaknesses</h4><ul>${T.weaknesses.map(s => `<li>${schTx(s)}</li>`).join('')}</ul></div></div>` : ''}</div></div>${schUsesPanel(lib)}`;
 }
 function schHeroSpec(lib) {
   const sel = SCH.sel; return { faction: lib.faction, unit: schUnitFor(lib.faction, lib.name, sel.models || undefined, sel.leader || '') };
