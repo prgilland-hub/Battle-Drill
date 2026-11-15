@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.15-1316';
+  const VERSION = '2026.11.15-1320';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -15339,7 +15339,7 @@ void main(){
   float d=length(vW-uCam); float f=1.-exp(-d*uFogD); f=max(f,.0); f*=mix(1.,.55,smoothstep(0.,3.,vW.y)*0.); 
   float hz=exp(-max(vW.y,0.)*.6)*clamp((d-16.)*.011,0.,.4); col=mix(col,uFog,hz);
   col=mix(col,uFog,clamp(f,0.,1.));
-  float ed=max(abs(vW.x-30.)/88.,abs(vW.z-22.)/80.); col=mix(col,uFog,smoothstep(.5,.98,ed));
+  float ed=max(abs(vW.x-30.)/88.,abs(vW.z-22.)/80.); col=mix(col,uFog,smoothstep(.78,1.15,ed));
   vec3 vd=normalize(uCam-vW); float rim=pow(1.-max(dot(n,vd),0.),3.)*(1.-abs(n.y))*smoothstep(.0,.7,vW.y+.3); col+=vec3(.05,.12,.26)*rim*(.35+.65*(1.-ndl));
   col=max(col-.018,0.)*1.05;
   col=col/(1.+col*.55); col=pow(col,vec3(1./2.2));
@@ -15351,7 +15351,7 @@ const VS_Q = `#version 300 es
 void main(){ vec2 p=vec2(float((gl_VertexID<<1)&2),float(gl_VertexID&2)); gl_Position=vec4(p*2.-1.,0.,1.); }`;
 const FS_BRIGHT = `#version 300 es
 precision highp float; uniform sampler2D uT; uniform vec2 uRes; out vec4 o;
-void main(){ vec3 c=texture(uT,gl_FragCoord.xy/uRes).rgb; float l=dot(c,vec3(.3,.59,.11)); o=vec4(c*smoothstep(.93,1.,l),1.); }`;
+void main(){ vec3 c=texture(uT,gl_FragCoord.xy/uRes).rgb; float l=dot(c,vec3(.3,.59,.11)); o=vec4(c*smoothstep(.97,1.02,l),1.); }`;
 const FS_BLUR = `#version 300 es
 precision highp float; uniform sampler2D uT; uniform vec2 uRes, uDir; out vec4 o;
 void main(){ vec2 uv=gl_FragCoord.xy/uRes, st=uDir/uRes; vec3 s=texture(uT,uv).rgb*.227; s+=(texture(uT,uv+st*1.38).rgb+texture(uT,uv-st*1.38).rgb)*.316; s+=(texture(uT,uv+st*3.23).rgb+texture(uT,uv-st*3.23).rgb)*.0703; o=vec4(s,1.); }`;
@@ -15366,7 +15366,7 @@ void main(){ vec2 uv=gl_FragCoord.xy/uRes; float d0=texture(uD,uv).r; if(d0>=.99
   float ao=clamp(1.-occ/14.*2.2,0.,1.); o=vec4(vec3(ao),1.); }`;
 const FS_COMP = `#version 300 es
 precision highp float; uniform sampler2D uS, uB, uA; uniform vec2 uRes; uniform float uK, uAk; out vec4 o;
-void main(){ vec2 uv=gl_FragCoord.xy/uRes; vec3 sc=texture(uS,uv).rgb*mix(1.,texture(uA,uv).r,uAk); sc+=texture(uB,uv).rgb*uK; sc*=mix(.7,1.,smoothstep(1.05,.4,length(uv-.5)*1.3)); o=vec4(sc,1.); }`;
+void main(){ vec2 uv=gl_FragCoord.xy/uRes; vec3 sc=texture(uS,uv).rgb*mix(1.,texture(uA,uv).r,uAk); sc+=texture(uB,uv).rgb*uK; sc*=mix(.87,1.,smoothstep(1.25,.5,length(uv-.5)*1.3)); o=vec4(sc,1.); }`;
 const FS_FLAT = `#version 300 es
 precision highp float; in vec3 vW, vN, vC; in vec2 vM; in vec4 vL; out vec4 o; void main(){ o=vec4(vC,vM.x); }`;
 const VS_SH = `#version 300 es
@@ -15619,6 +15619,7 @@ function propsPoly(mb, r, rng, i, th) {
 
 /* ---------- open-ground dressing: visual only, nothing taller than an ankle, so models never stand inside it ---------- */
 function craterAt(solid, decal, rng, H, x, z, r, tint) {
+  ground(decal, x, z, r * 2.1, r * 2.1 * (.8 + rng() * .4), 22, [.03, .026, .022], [.15, 0], .064, H, rng, .45);
   ground(decal, x, z, r * 1.25, r * 1.25 * (.85 + rng() * .3), 20, [.015, .015, .015], [.28, 0], .066, H, rng, .35);
   ground(decal, x, z, r * .62, r * .62, 16, [.01, .01, .01], [.5, 0], .068, H, rng, .3);
   const n = 12 + Math.floor(r * 3); for (let k = 0; k < n; k++) { const a = k / n * 6.283 + rng() * .3, d = r * (.95 + rng() * .25), s = .1 + rng() * .1; blob(solid, x + Math.cos(a) * d, H(x, z) + s * .15, z + Math.sin(a) * d, s * 1.8, s * .7, s * 1.3, vary(tint, rng, .18), [1, 0], rng, .7); }
