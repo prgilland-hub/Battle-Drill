@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.15-1210';
+  const VERSION = '2026.11.15-1223';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -4023,6 +4023,7 @@ function tsAfterAttack(u, w, t, shooting, st, killed, before) {
   }
   if (shooting && st.hits > 0 && hasFx(u, 'flush-out') && t.alive) { t.scatterTurn = G.turnNo || 0; log(`Flush Them Out: ${t.name} is scattered and cannot have the Benefit of Cover until your next Shooting phase.`, u.side); }
   if (shooting && st.hits > 0 && hasFx(u, 'earthshaker') && /earthshaker/i.test(w.name || '') && has(t, 'infantry') && t.alive) { t.shakenTurn = G.turnNo || 0; log(`Earthshaker Rounds: ${t.name} is shaken (-2" Move, -2 to Advance and Charge rolls).`, u.side); }
+  if (st.hits > 0 && t.alive && hasFx(u, 'shock-hit') && u.shkPh !== ph + (shooting ? 's' : 'f')) { const f = fxGet(u, 'shock-hit')[0], md = f.t[2] || 'shoot'; if ((md === 'both' || (md === 'shoot') === !!shooting) && !(f.t[3] === 'nov' && has(t, 'vehicle')) && !(f.t[3] === 'inf' && !has(t, 'infantry'))) { u.shkPh = ph + (shooting ? 's' : 'f'); btShockTest(t, f.a.name.replace(/ \(.*$/, ''), -(+f.t[1] || 0)); } }
   if (shooting && st.hits > 0 && hasFx(u, 'nc-relay')) { t.ncRelay = { ph, side: u.side }; log(`Targeting Relay: ${t.name} cannot have the Benefit of Cover against your attacks this phase.`, u.side); }
   if (shooting && st.hits > 0 && hasFx(u, 'ts-symb')) { t.tsSymb = { ph, side: u.side }; log(`Symbiotic Targeting: ${t.name} is marked; friendly Tyranids re-roll Hit rolls of 1 against it this phase.`, u.side); }
   if (shooting && st.hits > 0 && t.alive && hasFx(u, 'cursed-flames') && has(t, 'infantry') && u.cfPh !== ph) { u.cfPh = ph; btShockTest(t, 'Cursed Flames'); }
@@ -4370,6 +4371,14 @@ function autoMods(name, text) {
   amRule(/^once per battle round, one unit from your army with this ability can use it when its unit is targeted with a stratagem\. if it does, reduce the cp cost of that use of that stratagem by 1cp\.?$/, ['strat-discount']);
   amRule(/^each time this model ends a normal move, you can select one enemy unit it moved (?:over|across) during that move and roll six d6: for each (\d)\+, that unit suffers 1 mortal wound\.?$/, m => ['bomb-run ' + m[1]]);
   amRule(/^each time this model ends a normal move, you can select one enemy unit \(excluding monster and vehicle units\) that it moved over during that move, then roll six d6: for each (\d)\+, that enemy unit suffers 1 mortal wound/, m => ['bomb-run ' + m[1] + ' nomv']);
+  /* batches 100-109: battle-shock and healing abilities */
+  amRule(/^at the start of your command phase, this model regains up to d3 lost wounds\.?$/, ['cmd-heal-self D3']);
+  amRule(/^in your shooting phase, after this (?:model|unit) has shot, select one enemy unit (?:that was )?hit by one or more of those attacks\. that enemy unit must take a battle-shock test\.?$/, ['shock-hit 0 shoot']);
+  amRule(/^in your shooting phase, after this (?:model|unit) has shot, select one enemy unit hit by one or more of those attacks\. that enemy unit must take a battle-shock test, subtracting 1 from the result(?: when doing so)?\.?$/, ['shock-hit 1 shoot']);
+  amRule(/^in your shooting phase and the fight phase, after this (?:model|unit) has shot or fought, select one enemy unit \(excluding vehicles\) hit by one or more of those attacks\. that unit must take a battle-shock test\.?$/, ['shock-hit 0 both nov']);
+  amRule(/^in your shooting phase, after this (?:model|unit) has shot, select one enemy unit hit by one or more of those attacks\. that enemy unit must take a battle-shock test\.?$/, ['shock-hit 0 shoot']);
+  amRule(/^at the start of the fight phase, each enemy unit within 6" of this model must take a battle-shock test\.?$/, ['fight-shock 6']);
+  amRule(/^at the start of the fight phase, every enemy unit \(excluding monsters and vehicles\) within 6" of this model must take a battle-shock test\.?$/, ['fight-shock 6 nomv']);
 })();
 /* ---- Wahapedia 11th edition wargear and ability phrasings ---- */
 amRule(/^add 1 to charge rolls made for the bearer's unit\.?$/, ['charge+1']);
@@ -9601,6 +9610,7 @@ function btButtons() {
 function btPhaseStart(ph) {
   orkPhaseStart(ph);
   asPhaseStart(ph);
+  if (ph === 'fight' && G && G.stage === 'battle') for (const s of ['player', 'ai']) for (const u of aliveSide(s)) if (u.placed && !u.reserve && hasFx(u, 'fight-shock')) { const f = fxGet(u, 'fight-shock')[0], r = +f.t[1] || 6; for (const e of aliveSide(other(s)).filter(x => x.placed && !x.reserve && !x.embarkedIn && edge(u, x) <= r && !(f.t[2] === 'nomv' && (has(x, 'monster') || has(x, 'vehicle'))))) btShockTest(e, f.a.name.replace(/ \(.*$/, '')); }
   if (!G || G.stage !== 'battle' || !G.active || !G.vow) return;
   if (ph === 'movement' && G.active === 'player' && ntDetIs('player', 'Invasion Fleet') && !G.hyper.player) { G.hyper.player = 'swarming'; log('You hadn\'t chosen a Hyper-adaptation, so Swarming Instincts is used.', 'sys'); }
   if (ph === 'movement' && G.active === 'player' && btSingUnits('player').length && !G.singular.player) { const foe = aliveSide('ai').slice().sort((a, b) => b.W * totalModels(b) - a.W * totalModels(a))[0]; if (foe) btSingSet('player', 'enemy', foe.id); }
