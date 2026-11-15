@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.15-1406';
+  const VERSION = '2026.11.15-1411';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -15985,7 +15985,7 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
     addEventListener('blur', () => keys.clear());
     /* controls */
     const bar = document.createElement('div'); bar.id = 'b-3dbar'; bar.hidden = true;
-    bar.innerHTML = '<button type="button" id="b-3dmore" aria-expanded="false" title="3D view options and controls">View options \u25BE</button><div id="b-3dpanel"><select id="b-3dtheme" aria-label="Terrain theme"><option value="auto">Theme: auto</option><option value="desert">Desert ruins</option><option value="base">Hive base</option><option value="marsh">Rot marsh</option><option value="ice">Frozen hive</option><option value="forge">Forge world</option><option value="jungle">Death world</option><option value="hive">Hive city</option></select><button type="button" data-o="zones" aria-pressed="true" title="Show or hide the deployment zones">Zones</button><button type="button" data-o="objs" aria-pressed="true" title="Show or hide the objective markers">Objectives</button><button type="button" data-o="dice" aria-pressed="true" title="Show or hide the dice trays">Dice trays</button><button type="button" data-o="guides" aria-pressed="true" title="Show or hide the placement guides: 8 inch rings and the 6 inch edge band">Guides</button><button type="button" id="b-3dsight" aria-pressed="true" title="Show or hide sight lines, with the distance to every enemy">Sight lines</button><select id="b-3dq" aria-label="Graphics quality" title="Graphics quality"><option value="low">Quality: low</option><option value="std">Quality: standard</option><option value="high">Quality: high</option></select><button type="button" id="b-3dtop" title="Top-down view">Top</button><button type="button" id="b-3dtab" title="Tabletop view">Table</button><span id="b-3dnote">Drag = select units · Alt-drag = turn models · right-drag = orbit · WASD move · Q/E turn view · Z/X zoom · right-click or 1 = datasheet</span></div>';
+    bar.innerHTML = '<button type="button" id="b-3dmore" aria-expanded="false" title="3D view options and controls">View options \u25BE</button><div id="b-3dpanel"><select id="b-3dtheme" aria-label="Terrain theme"><option value="auto">Theme: auto</option><option value="desert">Desert ruins</option><option value="base">Hive base</option><option value="marsh">Rot marsh</option><option value="ice">Frozen hive</option><option value="forge">Forge world</option><option value="jungle">Death world</option><option value="hive">Hive city</option></select><button type="button" data-o="zones" aria-pressed="true" title="Show or hide the deployment zones">Zones</button><button type="button" data-o="objs" aria-pressed="true" title="Show or hide the objective markers">Objectives</button><button type="button" data-o="dice" aria-pressed="true" title="Show or hide the dice trays">Dice trays</button><button type="button" data-o="guides" aria-pressed="true" title="Show or hide the placement guides: 8 inch rings and the 6 inch edge band">Guides</button><button type="button" id="b-3dsight" aria-pressed="true" title="Show or hide sight lines, with the distance to every enemy">Sight lines</button><select id="b-3dq" aria-label="Graphics quality" title="Graphics quality"><option value="low">Quality: low</option><option value="std">Quality: standard</option><option value="high">Quality: high</option></select><button type="button" id="b-3dchk" title="List which 3D model each unit on the board matched">Model check</button><button type="button" id="b-3dtop" title="Top-down view">Top</button><button type="button" id="b-3dtab" title="Tabletop view">Table</button><span id="b-3dnote">Drag = select units · Alt-drag = turn models · right-drag = orbit · WASD move · Q/E turn view · Z/X zoom · right-click or 1 = datasheet</span></div>';
     bar.querySelector('#b-3dmore').addEventListener('click', () => { const o = bar.classList.toggle('open'); bar.querySelector('#b-3dmore').setAttribute('aria-expanded', String(o)); });
     holder.appendChild(bar);
     bar.querySelectorAll('[data-o]').forEach(b => b.addEventListener('click', () => { BF3D.opt[b.dataset.o] = !BF3D.opt[b.dataset.o]; try { localStorage.setItem(OPT_KEY, JSON.stringify(BF3D.opt)); } catch (e) { } applyOpts(); if (b.dataset.o === 'guides') buildGhost(); }));
@@ -15993,6 +15993,24 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
     bar.querySelector('#b-3dtheme').addEventListener('change', e => { BF3D.theme = e.target.value; BF3D.tsig = ''; sync(true); });
     { const qs = bar.querySelector('#b-3dq'), Rn = BF3D.R, cur = () => !Rn.q.bloom && !Rn.q.ao ? 'low' : Rn.q.shadow >= 4096 ? 'high' : 'std'; qs.value = cur();
       qs.addEventListener('change', () => { const v = qs.value, set = (k, x) => { try { localStorage.setItem(k, x); } catch (e) { } }; Rn.q.bloom = v !== 'low' && !!Rn.comp; Rn.q.ao = v !== 'low'; const sh = v === 'low' ? 1024 : v === 'high' ? 4096 : 2048; set('bd.bloom', Rn.q.bloom ? '1' : '0'); set('bd.ao', Rn.q.ao ? '1' : '0'); set('bd.shadow', String(sh)); if (sh !== Rn.q.shadow) { Rn.q.shadow = sh; Rn.makeShadow(); } BF3D.dirty = true; kick(); }); }
+    bar.querySelector('#b-3dchk').addEventListener('click', () => {
+      const B = window.BDModels, L = [];
+      if (!B) L.push('Model library code is not loaded.'); else {
+        L.push('Models on: ' + B.on() + ' | library: ' + B.count() + ' models | ' + JSON.stringify(B.factions()));
+        for (const u of alive()) {
+          const fac = miniFactionOf(u), jobs = [[u.ds || u.name, 'squad']]; if (u.leader) jobs.push([u.leader.ds || u.leader.name, 'leader']);
+          for (const [ds, role] of jobs) {
+            let v = []; try { v = B.variants(ds, fac); } catch (e) { }
+            const ready = v.filter(m => { try { return !!B.fig(m); } catch (e) { return false; } }).length;
+            L.push((u.side === 'player' ? 'YOU ' : 'FOE ') + u.name + ' [' + role + ', looked up as "' + ds + '", faction "' + fac + '", ' + (u.mods ? u.mods.length : 1) + ' models]: ' + (v.length ? v.length + ' candidates (' + ready + ' loaded): ' + v.slice(0, 4).map(m => m.name).join('; ') : 'NO MATCH'));
+          }
+        }
+      }
+      const txt = L.join('\n'), ov = document.createElement('div'); ov.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center';
+      ov.innerHTML = '<div style="background:#1a1a1a;color:#ddd;border:2px solid #a8832e;border-radius:8px;max-width:min(900px,94vw);max-height:84vh;display:flex;flex-direction:column;padding:12px"><b style="margin-bottom:6px">Model check</b><pre style="margin:0;overflow:auto;white-space:pre-wrap;font:12px/1.4 monospace;flex:1"></pre><div style="margin-top:8px;display:flex;gap:8px"><button type="button" data-c>Copy</button><button type="button" data-x>Close</button></div></div>';
+      ov.querySelector('pre').textContent = txt; ov.querySelector('[data-x]').onclick = () => ov.remove(); ov.querySelector('[data-c]').onclick = () => { try { navigator.clipboard.writeText(txt); } catch (e) { } };
+      ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); }); document.body.appendChild(ov);
+    });
     bar.querySelector('#b-3dtop').addEventListener('click', () => { cam.yaw = 0; cam.pitch = 1.5; cam.dist = BF3D.fit(true); cam.target = [30, 0, 22]; BF3D.dirty = true; kick(); });
     bar.querySelector('#b-3dtab').addEventListener('click', () => { cam.yaw = 0; cam.pitch = .95; cam.dist = BF3D.fit(); cam.target = [30, 0, 24]; BF3D.dirty = true; kick(); });
     new ResizeObserver(() => { place(); BF3D.dirty = true; kick(); }).observe($b());
