@@ -187,7 +187,9 @@ const BDModels = (function () {
         const same = m.filter(f => related(faction, f.faction)); out = same.length ? same : (m.length && !FAM.some(g => g.some(x => String(faction || '').toLowerCase().includes(x))) ? m : null);
       }
     }
-    if (out && !out.length) out = null; if (!out && !pool.warned.has(k)) { pool.warned.add(k); try { console.info('[BDModels] no model for "' + ds + '" (' + faction + '). Library: ' + index.length + ' models in ' + JSON.stringify(factionsNow())); } catch (e) { } } poolCache.set(k, out); return out;
+    if (out && !out.length) out = null;
+    if (!out && /\swith\s/.test(n)) { const cut = n.replace(/\swith\s(?!.*\swith\s).*$/, ''); if (cut && cut !== n) out = pool(cut, faction); }
+    if (!out && !pool.warned.has(k)) { pool.warned.add(k); try { console.info('[BDModels] no model for "' + ds + '" (' + faction + '). Library: ' + index.length + ' models in ' + JSON.stringify(factionsNow())); } catch (e) { } } poolCache.set(k, out); return out;
   }
   /* returns the model if it is ready; otherwise starts loading it and returns null (the board redraws when it arrives) */
   /* squads of mixed models: the first model is the sergeant/champion if one exists, every fourth model after that carries a special or heavy weapon, the rest are the plain troopers */
