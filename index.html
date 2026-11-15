@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.15-1627';
+  const VERSION = '2026.11.15-1633';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -20362,9 +20362,9 @@ const whItems = s => String(s).split(/\s*(?:,|;|\band\b|\bor\b)\s*/i).map(x => x
 function whOptRules(rows, u) {
   const rules = [], skipped = [], pool = [...(u._pool ? u._pool.ranged.map(w => ({ w, melee: false })) : []), ...(u._pool ? u._pool.melee.map(w => ({ w, melee: true })) : [])];
   const defs = [...u.ranged, ...u.melee], single = u.models <= 1;
-  const resolve = txt => { const k = whBase(txt), hit = pool.filter(p => whBase(p.w.name) === k); if (!hit.length) return null; return hit.map(p => { const w = JSON.parse(JSON.stringify(p.w)); if (hit.length > 1) w.alt = p.w.name.split(/\s+[-–]\s+/)[0]; return { w, melee: p.melee }; }); };
-  const takeOf = txt => { const out = []; for (const it of whItems(txt)) { const k = whBase(it.t); for (const w of defs) if (whBase(w.name) === k) { const n = w.alt || w.name; if (!out.includes(n)) out.push(n); } } return out; };
-  const choiceOf = txt => { const items = whItems(txt); if (!items.length) return null; const add = []; for (const it of items) { const r = resolve(it.t); if (r) r.forEach(a => { if (it.q > 1) a.w.per = it.q; add.push(a); }); } return { name: whNm(txt).replace(/^./, c => c.toUpperCase()), add }; };
+  const resolve = txt => { const k = whBase(String(txt).replace(/\*+$/, '')), hit = pool.filter(p => whBase(p.w.name) === k); if (!hit.length) return null; return hit.map(p => { const w = JSON.parse(JSON.stringify(p.w)); if (hit.length > 1) w.alt = p.w.name.split(/\s+[-–]\s+/)[0]; return { w, melee: p.melee }; }); };
+  const takeOf = txt => { const out = []; { const wk = whBase(String(txt).replace(/^(?:its|their|his|her)\s+/i, '')); for (const w of defs) if (whBase(w.name) === wk) { const n = w.alt || w.name; if (!out.includes(n)) out.push(n); } if (out.length) return out; } for (const it of whItems(txt)) { const k = whBase(it.t); for (const w of defs) if (whBase(w.name) === k) { const n = w.alt || w.name; if (!out.includes(n)) out.push(n); } } return out; };
+  const choiceOf = txt => { const whole = resolve(String(txt).replace(/^\d+\s+/, '')); if (whole) { const add = whole.map(a => a); return { name: whNm(txt).replace(/^./, c => c.toUpperCase()), add }; } const items = whItems(txt); if (!items.length) return null; const add = []; for (const it of items) { const r = resolve(it.t); if (r) r.forEach(a => { if (it.q > 1) a.w.per = it.q; add.push(a); }); } return { name: whNm(txt).replace(/^./, c => c.toUpperCase()), add }; };
   let n = 0;
   for (const row of rows) {
     const raw = String(row.description || ''), lis = [...raw.matchAll(/<li[^>]*>([\s\S]*?)<\/li>/gi)].map(m => whNm(m[1]));
@@ -20386,9 +20386,11 @@ function whOptRules(rows, u) {
     else if (/^the\s/.test(s)) partial = !single;
     else { skipped.push(text); continue; }
     if (single) { perN = 0; cap = 0; partial = false; }
-    const tk = take ? takeOf(take) : []; if (take && !tk.length) { skipped.push(text); continue; }
+    const tk = take ? takeOf(take) : []; if (take && !tk.length) { const known = whItems(take).some(it => pool.some(p => whBase(p.w.name) === whBase(it.t))) || pool.some(p => whBase(p.w.name) === whBase(take)); if (known) { skipped.push(text); continue; } }
     const srcs = lis.length ? lis : [rest.replace(/\.$/, '')]; const choices = srcs.map(choiceOf).filter(Boolean);
-    if (!choices.length || (!take && !choices.some(c => c.add.length))) { skipped.push(text); continue; }
+    if (!choices.length) { skipped.push(text); continue; }
+    for (const c of choices) if (!c.add.length) c.equip = c.name.replace(/\*+/g, '').replace(/\s*\(.*$/, '').replace(/^\d+\s+/, '').trim() || c.name;
+    if (!tk.length && choices.every(c => c.equip && !c.add.length) === false && !choices.some(c => c.add.length)) { skipped.push(text); continue; }
     const base = Object.assign({ text: head + (lis.length ? ': ' + lis.join('; ') : ''), take: tk }, gate ? { gate } : {});
     if (perN) {
       const grp = choices.length > 1 ? 'g' + n : undefined;
@@ -21509,6 +21511,7 @@ function applyOpts(u, W, models) {
       if (r.grp) { n = Math.min(n, optMax(r, models || u.models) - (grpUsed[r.grp] || 0)); grpUsed[r.grp] = (grpUsed[r.grp] || 0) + Math.max(0, n); }
       if (!n || n < 1) continue;
       const c = r.choices[0];
+      if (c.equip) { u.abilities = u.abilities || []; u.abilities.push({ name: 'Wargear: ' + c.equip + (n > 1 ? ' x' + n : ''), text: 'This unit is equipped with ' + (n > 1 ? n + ' x ' : '') + c.equip + '.', fx: [] }); }
       for (const a of c.add || []) { const w = OPT_CLONE(a.w); w.count = n; add.push({ melee: !!a.melee, w }); }
       for (const t of r.take || []) cnt[t] = (cnt[t] || 0) + n;
       continue;
@@ -21517,6 +21520,7 @@ function applyOpts(u, W, models) {
     if (c.once) usedOnce.add(c.once);
     if (r.partial) { (r.take || []).forEach(t => { cnt[t] = (cnt[t] || 0) + 1; }); for (const a of c.add || []) { const w = OPT_CLONE(a.w); w.count = 1; add.push({ melee: !!a.melee, w }); } }
     else { (r.take || []).forEach(t => gone.add(t)); for (const a of c.add || []) { const w = OPT_CLONE(a.w); if (!(r.take || []).length) w.count = 1; add.push({ melee: !!a.melee, w }); } }
+    if (c.equip) { u.abilities = u.abilities || []; u.abilities.push({ name: 'Wargear: ' + c.equip, text: 'Equipped with ' + c.equip + '.', fx: [] }); }
     if (c.flagMelee) for (const w of u.melee) Object.assign(w, c.flagMelee);
     if (c.abil) { u.abilities = u.abilities || []; u.abilities.push({ name: c.abil.name, text: c.abil.text, fx: [] }); }
   }
