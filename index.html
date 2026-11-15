@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.15-1648';
+  const VERSION = '2026.11.15-1659';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -21078,11 +21078,11 @@ function checks() {
   const chars = B.roster.filter(e => isChar(libOf(e)));
   if (!chars.length) out.push({ e: true, t: 'You need at least one Character to be your Warlord.' });
   else if (!B.warlord || !chars.some(c => c.key === B.warlord)) out.push({ e: true, t: 'Choose a Warlord on the Characters step.' });
-  if (curDets().some(d => /infernal pacts/i.test(d.name || ''))) {   /* Infernal Pacts: Scintillating Legions units, capped by points and never the Warlord */
+  if (curDets().some(d => /changehost of deceit|infernal pacts/i.test((d.name || '') + ' ' + (d.rule || '')))) {   /* Infernal Pacts: Scintillating Legions units, capped by points and never the Warlord */
     const isSL = u => (u.facKw || u.kw || []).some(k => /scintillating legions/i.test(k)) || (u.faction === 'Thousand Sons' && /^(kairos fateweaver|lord of change|flamers|screamers|pink horrors|blue horrors)$/i.test(u.name)), cap = { incursion: 500, strike: 1000, onslaught: 1500 }[size.key] || 1000;
     const sl = B.roster.filter(e => isSL(libOf(e))), pts = sl.reduce((a, e) => a + (+e.pts || 0), 0);
-    if (pts > cap) out.push({ e: true, t: `Infernal Pacts: Scintillating Legions units can total up to ${cap} pts at ${size.name}, but yours total ${pts} pts.` });
-    const wl = B.roster.find(e => e.key === B.warlord); if (wl && isSL(libOf(wl))) out.push({ e: true, t: 'Infernal Pacts: Scintillating Legions models cannot be your Warlord. Choose another Character.' });
+    if (pts > cap) out.push({ e: true, t: `Changehost of Deceit (Infernal Pacts): Scintillating Legions units can total up to ${cap} pts at ${size.name}, but yours total ${pts} pts.` });
+    const wl = B.roster.find(e => e.key === B.warlord); if (wl && isSL(libOf(wl))) out.push({ e: true, t: 'Changehost of Deceit (Infernal Pacts): Scintillating Legions models cannot be your Warlord. Choose another Character.' });
   }
   if (!B.dets.length) out.push({ e: false, t: 'No detachment chosen. The army will have no detachment rule, enhancements or detachment stratagems.' });
   const counts = {};
