@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.15-1256';
+  const VERSION = '2026.11.15-1258';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -15310,13 +15310,14 @@ uniform sampler2DShadow uSh; uniform vec3 uSun, uSunC, uAmbT, uAmbB, uFog, uCam,
 float h31(vec3 p){ p=fract(p*.3183099+.1); p*=17.; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }
 float vn(vec3 x){ vec3 i=floor(x), f=fract(x); f=f*f*(3.-2.*f); return mix(mix(mix(h31(i),h31(i+vec3(1,0,0)),f.x),mix(h31(i+vec3(0,1,0)),h31(i+vec3(1,1,0)),f.x),f.y),mix(mix(h31(i+vec3(0,0,1)),h31(i+vec3(1,0,1)),f.x),mix(h31(i+vec3(0,1,1)),h31(i+vec3(1,1,1)),f.x),f.y),f.z); }
 void main(){
+  float gls=floor(vM.x*.5+.001), wx=vM.x-2.*gls;
   vec3 n=normalize(vN); vec3 c=vC;
-  n=normalize(n+(vec3(vn(vW*9.),vn(vW*9.+7.),vn(vW*9.+13.))-.5)*.38*vM.x);
-  if(abs(vM.x-.8125)<.003 && abs(n.y)<.6){ vec3 t=normalize(cross(n,vec3(0.,1.,0.))); float ph=dot(vW,t)*24.; n=normalize(n+t*cos(ph)*.55); c*=.84+.16*sin(ph);
+  n=normalize(n+(vec3(vn(vW*9.),vn(vW*9.+7.),vn(vW*9.+13.))-.5)*.38*wx);
+  if(abs(wx-.8125)<.004 && abs(n.y)<.6){ vec3 t=normalize(cross(n,vec3(0.,1.,0.))); float ph=dot(vW,t)*24.; n=normalize(n+t*cos(ph)*.55); c*=.84+.16*sin(ph);
     float st=vn(vec3(dot(vW,t)*5.,vW.y*.35,3.)); c=mix(c,c*vec3(.7,.46,.34),smoothstep(.58,.82,st)*clamp(1.-vW.y*.25,0.,1.));
     float ed=vn(vW*14.); c=mix(c,c*1.35+.03,smoothstep(.72,.9,ed)*.5); }
   float g=vn(vW*2.3)*.6+vn(vW*7.1)*.3+vn(vW*19.)*.25;
-  c*=1.-vM.x*(g*.55-.12);
+  c*=1.-wx*(g*.55-.12);
   float low=1.-smoothstep(0.,1.6,vW.y);
   c=mix(c,c*vec3(1.1,1.04,.92)+uDust*.05,low*(1.-abs(n.y))*uDust*.5);
   float ndl=max(dot(n,uSun),0.);
@@ -15324,11 +15325,13 @@ void main(){
   if(uShadow>.5){ vec3 p=vL.xyz/vL.w*.5+.5; float b=.0022; sh=0.;
     for(int x=-1;x<=1;x++) for(int y=-1;y<=1;y++) sh+=texture(uSh,vec3(p.xy+vec2(x,y)*uTexel,p.z-b));
     sh/=9.; if(p.x<0.||p.x>1.||p.y<0.||p.y>1.) sh=1.; }
+  vec3 vd0=normalize(uCam-vW);
   vec3 amb=mix(uAmbB,uAmbT,n.y*.5+.5);
   float ao=mix(.62,1.,smoothstep(0.,1.4,vW.y)); ao=mix(1.,ao,1.-abs(n.y)*.6);
   vec3 col=c*(amb*ao+uSunC*ndl*sh);
   col+=c*vM.y*2.2;
-  for(int i=0;i<12;i++){ if(i>=uLN) break; vec3 d=uLP[i].xyz-vW; float L=length(d); float a=clamp(1.-L/uLP[i].w,0.,1.); a*=a; col+=c*uLC[i]*a*(max(dot(n,d/max(L,.001)),0.)*.9+.22); }
+  if(gls>.5){ vec3 hh=normalize(uSun+vd0); float sp=pow(max(dot(n,hh),0.),6.+gls*34.)*ndl*sh*gls*(.22+.18*gls); col+=uSunC*sp; if(gls>1.5) col=mix(col,uFog*1.6+.05,pow(1.-max(dot(n,vd0),0.),4.)*.38); }
+  for(int i=0;i<12;i++){ if(i>=uLN) break; vec3 d=uLP[i].xyz-vW; float L=length(d); float a=clamp(1.-L/uLP[i].w,0.,1.); a*=a; col+=c*uLC[i]*a*(max(dot(n,d/max(L,.001)),0.)*.9+.22); if(gls>.5) col+=uLC[i]*pow(max(dot(n,normalize(d/max(L,.001)+vd0)),0.),22.)*a*gls*.45; }
   float d=length(vW-uCam); float f=1.-exp(-d*uFogD); f=max(f,.0); f*=mix(1.,.55,smoothstep(0.,3.,vW.y)*0.); 
   float hz=exp(-max(vW.y,0.)*.6)*clamp((d-16.)*.011,0.,.4); col=mix(col,uFog*1.7+.03,hz);
   col=mix(col,uFog,clamp(f,0.,1.));
@@ -15341,6 +15344,17 @@ void main(){
   vec2 uv=gl_FragCoord.xy/uRes; col*=mix(.7,1.,smoothstep(1.05,.4,length(uv-.5)*1.3));
   o=vec4(col,1.);
 }`;
+const VS_Q = `#version 300 es
+void main(){ vec2 p=vec2(float((gl_VertexID<<1)&2),float(gl_VertexID&2)); gl_Position=vec4(p*2.-1.,0.,1.); }`;
+const FS_BRIGHT = `#version 300 es
+precision highp float; uniform sampler2D uT; uniform vec2 uRes; out vec4 o;
+void main(){ vec3 c=texture(uT,gl_FragCoord.xy/uRes).rgb; float l=max(c.r,max(c.g,c.b)); o=vec4(c*smoothstep(.7,.98,l),1.); }`;
+const FS_BLUR = `#version 300 es
+precision highp float; uniform sampler2D uT; uniform vec2 uRes, uDir; out vec4 o;
+void main(){ vec2 uv=gl_FragCoord.xy/uRes, st=uDir/uRes; vec3 s=texture(uT,uv).rgb*.227; s+=(texture(uT,uv+st*1.38).rgb+texture(uT,uv-st*1.38).rgb)*.316; s+=(texture(uT,uv+st*3.23).rgb+texture(uT,uv-st*3.23).rgb)*.0703; o=vec4(s,1.); }`;
+const FS_COMP = `#version 300 es
+precision highp float; uniform sampler2D uS, uB; uniform vec2 uRes; uniform float uK; out vec4 o;
+void main(){ vec2 uv=gl_FragCoord.xy/uRes; o=vec4(texture(uS,uv).rgb+texture(uB,uv).rgb*uK,1.); }`;
 const FS_FLAT = `#version 300 es
 precision highp float; in vec3 vW, vN, vC; in vec2 vM; in vec4 vL; out vec4 o; void main(){ o=vec4(vC,vM.x); }`;
 const VS_SH = `#version 300 es
@@ -15354,6 +15368,8 @@ class Renderer {
     this.cv = canvas; this.q = { shadow: 2048, dpr: Math.min(devicePixelRatio || 1, 1.75), shadowOn: true };
     const mk = (vs, fs) => { const p = gl.createProgram(); for (const [t, s] of [[gl.VERTEX_SHADER, vs], [gl.FRAGMENT_SHADER, fs]]) { const sh = gl.createShader(t); gl.shaderSource(sh, s); gl.compileShader(sh); if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh)); gl.attachShader(p, sh); } gl.linkProgram(p); if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p)); const U = {}; const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS); for (let i = 0; i < n; i++) { const a = gl.getActiveUniform(p, i); U[a.name] = gl.getUniformLocation(p, a.name); } return { p, U }; };
     this.main = mk(VS, FS); this.flat = mk(VS, FS_FLAT); this.sh = mk(VS_SH, FS_SH);
+    this.q.bloom = (() => { try { return localStorage.getItem('bd.bloom') !== '0'; } catch (e) { return true; } })();
+    try { this.bright = mk(VS_Q, FS_BRIGHT); this.blur = mk(VS_Q, FS_BLUR); this.comp = mk(VS_Q, FS_COMP); this.qvao = gl.createVertexArray(); } catch (e) { this.q.bloom = false; }
     this.meshes = []; this.makeShadow();
   }
   makeShadow() {
@@ -15370,6 +15386,32 @@ class Renderer {
     gl.bindVertexArray(null); const m = { vao, count: mb.I.length, kind: kind || 'solid', bs, ib }; this.meshes.push(m); return m;
   }
   clear() { const gl = this.gl; for (const m of this.meshes) { gl.deleteVertexArray(m.vao); m.bs.forEach(b => gl.deleteBuffer(b)); gl.deleteBuffer(m.ib); } this.meshes = []; }
+  postTargets(W, H) {
+    const gl = this.gl; if (this.pt && this.pt.W === W && this.pt.H === H) return this.pt;
+    if (this.pt) { gl.deleteFramebuffer(this.pt.fMs); gl.deleteRenderbuffer(this.pt.rbC); gl.deleteRenderbuffer(this.pt.rbD); gl.deleteFramebuffer(this.pt.fRes); gl.deleteTexture(this.pt.tRes); for (const k of [0, 1]) { gl.deleteFramebuffer(this.pt.fB[k]); gl.deleteTexture(this.pt.tB[k]); } }
+    const tex = (w, h) => { const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t); gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, w, h); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); return t; };
+    const fb = t => { const f = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, f); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0); return f; };
+    const samples = Math.min(4, gl.getParameter(gl.MAX_SAMPLES) || 0), rbC = gl.createRenderbuffer(), rbD = gl.createRenderbuffer(), fMs = gl.createFramebuffer();
+    gl.bindRenderbuffer(gl.RENDERBUFFER, rbC); gl.renderbufferStorageMultisample(gl.RENDERBUFFER, samples, gl.RGBA8, W, H);
+    gl.bindRenderbuffer(gl.RENDERBUFFER, rbD); gl.renderbufferStorageMultisample(gl.RENDERBUFFER, samples, gl.DEPTH_COMPONENT24, W, H);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fMs); gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, rbC); gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, rbD);
+    const tRes = tex(W, H), fRes = fb(tRes), hw = Math.max(2, W >> 1), hh = Math.max(2, H >> 1), tB = [tex(hw, hh), tex(hw, hh)], fB = tB.map(fb);
+    const ok = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE; gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fMs); const okMs = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE; gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    return this.pt = { W, H, hw, hh, fMs, rbC, rbD, fRes, tRes, tB, fB, ok: ok && okMs };
+  }
+  postDraw(pt, W, H) {
+    const gl = this.gl;
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, pt.fMs); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, pt.fRes); gl.blitFramebuffer(0, 0, W, H, 0, 0, W, H, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+    gl.disable(gl.DEPTH_TEST); gl.bindVertexArray(this.qvao); gl.activeTexture(gl.TEXTURE1);
+    const pass = (prog, fbo, w, h, set) => { gl.bindFramebuffer(gl.FRAMEBUFFER, fbo); gl.viewport(0, 0, w, h); gl.useProgram(prog.p); gl.uniform2f(prog.U.uRes, w, h); set(prog.U); gl.drawArrays(gl.TRIANGLES, 0, 3); };
+    const bind = (t, loc) => { gl.bindTexture(gl.TEXTURE_2D, t); gl.uniform1i(loc, 1); };
+    pass(this.bright, pt.fB[0], pt.hw, pt.hh, U => bind(pt.tRes, U.uT));
+    for (let k = 0; k < 2; k++) { pass(this.blur, pt.fB[1], pt.hw, pt.hh, U => { bind(pt.tB[0], U.uT); gl.uniform2f(U.uDir, 1.6, 0); }); pass(this.blur, pt.fB[0], pt.hw, pt.hh, U => { bind(pt.tB[1], U.uT); gl.uniform2f(U.uDir, 0, 1.6); }); }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, W, H); gl.useProgram(this.comp.p); gl.uniform2f(this.comp.U.uRes, W, H); gl.uniform1f(this.comp.U.uK, .85);
+    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, pt.tRes); gl.uniform1i(this.comp.U.uS, 1); gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, pt.tB[0]); gl.uniform1i(this.comp.U.uB, 2);
+    gl.drawArrays(gl.TRIANGLES, 0, 3); gl.bindVertexArray(null); gl.enable(gl.DEPTH_TEST); gl.activeTexture(gl.TEXTURE0);
+  }
   resize() { const d = this.q.dpr, w = Math.max(2, Math.floor(this.cv.clientWidth * d)), h = Math.max(2, Math.floor(this.cv.clientHeight * d)); if (this.cv.width !== w || this.cv.height !== h) { this.cv.width = w; this.cv.height = h; } }
   draw(cam, env) {
     const gl = this.gl; this.resize(); const W = this.cv.width, H = this.cv.height;
@@ -15382,6 +15424,7 @@ class Renderer {
       for (const m of this.meshes) if (m.kind === 'solid' && !m.hidden) { gl.bindVertexArray(m.vao); gl.drawElements(gl.TRIANGLES, m.count, gl.UNSIGNED_INT, 0); }
       gl.colorMask(true, true, true, true); gl.disable(gl.CULL_FACE); gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     }
+    const pt = this.q.bloom && this.comp ? this.postTargets(W, H) : null, usePost = !!(pt && pt.ok); if (usePost) gl.bindFramebuffer(gl.FRAMEBUFFER, pt.fMs);
     gl.viewport(0, 0, W, H); gl.clearColor(env.fog[0], env.fog[1], env.fog[2], 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     const mp = this.main; gl.useProgram(mp.p); const U = mp.U;
     gl.uniformMatrix4fv(U.uVP, false, VP); gl.uniformMatrix4fv(U.uLVP, false, LVP);
@@ -15394,6 +15437,7 @@ class Renderer {
     gl.enable(gl.BLEND); gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ZERO, gl.ONE); gl.depthMask(false);
     for (const m of this.meshes) if (m.kind === 'decal' && m.on !== false) { gl.bindVertexArray(m.vao); gl.drawElements(gl.TRIANGLES, m.count, gl.UNSIGNED_INT, 0); }
     gl.depthMask(true); gl.disable(gl.BLEND); gl.bindVertexArray(null);
+    if (usePost) this.postDraw(pt, W, H);
   }
 }
 class Cam {
@@ -15472,7 +15516,7 @@ function crate(mb, x, y, z, s, ry, col, rng) {
   box(mb, x, y + s * .3, z, s * 1.02, .12, s * 1.02, ry, [.45, .38, .12], [.3, 0], 0, rng);
 }
 function container(mb, x, z, ry, rng) {
-  const col = CONT[Math.floor(rng() * CONT.length)], L = 4.4, cs = Math.cos(ry), sn = Math.sin(ry); box(mb, x, 0, z, L, 1.75, 1.7, ry, col, [.8125, 0], .01, rng);
+  const col = CONT[Math.floor(rng() * CONT.length)], L = 4.4, cs = Math.cos(ry), sn = Math.sin(ry); box(mb, x, 0, z, L, 1.75, 1.7, ry, col, [2.8125, 0], .01, rng);
   for (let k = 0; k < 14; k++) { const lx = -L / 2 + .2 + k * (L - .4) / 13; for (const sd of [-1, 1]) box(mb, x + lx * cs - sd * .9 * sn, .1, z + lx * sn + sd * .9 * cs, .08, 1.55, .17, ry, shade(col, .72), [.6, 0], 0, rng); }
   for (const e of [-1, 1]) box(mb, x + e * (L / 2 + .02) * cs, .05, z + e * (L / 2 + .02) * sn, .08, 1.65, 1.6, ry, shade(col, .65), [.5, 0], 0, rng);
   /* roof markings, worn edges and door rods so it reads as a steel cargo container */
@@ -15754,7 +15798,7 @@ function buildMap(spec) {
   if (floodT) {
     const fr = mulberry(seed * 71 + th.seed), IRN = [.06, .06, .07];
     OB.slice(0, 5).forEach((o, k) => { const a = k * 1.9 + fr() * .5, fx = o.x + Math.cos(a) * (OR + .9), fz = o.y + Math.sin(a) * (OR + .9), y = H(fx, fz); if (fx < 1 || fz < 1 || fx > BW - 1 || fz > BH - 1) return; tube(solid, [fx, y, fz], [fx, y + 3.6, fz], .1, .08, 6, IRN, [.6, 0]); box(solid, fx, y + 3.7, fz, .7, .3, .45, a, [1, .78, .4], [.2, 1], 0, fr); floods.push({ x: fx - Math.cos(a) * .6, y: y + 3.2, z: fz - Math.sin(a) * .6, r: 17, c: [2.3, 1.2, .45] }); ground(decal, o.x, o.y, OR + 1.2, OR + 1.2, 28, [1, .7, .3], [.07, 0], .069, H, fr, .1); });
-    for (let i = 0; i < 9; i++) { const px = 3 + fr() * (BW - 6), pz = 3 + fr() * (BH - 6); if (!ok(px, pz, 2)) continue; const red = pz < BH / 2; ground(decal, px, pz, 1 + fr() * 1.4, .7 + fr() * .9, 16, [.012, .02, .035], [.7, 0], .067, H, fr, .3); ground(decal, px, pz, .55, .4, 12, red ? [.9, .2, .15] : [.2, .45, 1], [.16, 0], .068, H, fr, .3); }
+    for (let i = 0; i < 9; i++) { const px = 3 + fr() * (BW - 6), pz = 3 + fr() * (BH - 6); if (!ok(px, pz, 2)) continue; const red = pz < BH / 2; ground(solid, px, pz, 1 + fr() * 1.4, .7 + fr() * .9, 16, [.012, .02, .035], [6, 0], .067, H, fr, .3); ground(decal, px, pz, .55, .4, 12, red ? [.9, .2, .15] : [.2, .45, 1], [.16, 0], .068, H, fr, .3); }
     for (let i = 0; i < 7; i++) { const px = 3 + fr() * (BW - 6), pz = 3 + fr() * (BH - 6); if (ok(px, pz, 2)) ground(decal, px, pz, .9 + fr() * .8, .7 + fr() * .6, 14, [.01, .01, .014], [.5, 0], .066, H, fr, .4); }
   }
   const chaosOn = spec.chaos !== false && localStorage.getItem('bd.chaos') !== '0', lights = floods.concat(chaosOn ? chaosDetail(solid, decal, mulberry(seed * 37 + th.seed), ok, H, spec.theme) : []);
