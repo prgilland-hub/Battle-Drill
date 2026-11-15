@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.15-0011';
+  const VERSION = '2026.11.15-0024';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -15442,7 +15442,7 @@ function rubbleAt(solid, rng, H, x, z, tint, spread) {
 function dressing(solid, decal, rng, ok, H, th, key) {
   /* even spread: no two features closer than the spacing, and none on a ruin or an objective */
   const pts = [], gap = 5.2; for (let tries = 0; tries < 900 && pts.length < 80; tries++) { const x = 2.5 + rng() * (BW - 5), z = 2.5 + rng() * (BH - 5); if (!ok(x, z, 1.6)) continue; if (pts.some(q => Math.hypot(q[0] - x, q[1] - z) < gap)) continue; pts.push([x, z]); }
-  const T = { desert: { rock: STONE, drift: [.62, .49, .33], stain: [.1, .07, .045] }, base: { rock: CONC, drift: [.3, .32, .36], stain: [.035, .04, .045] }, marsh: { rock: MOSSY, drift: [.15, .22, .11], stain: [.025, .04, .025] } }[key] || { rock: STONE, drift: [.5, .4, .3], stain: [.1, .07, .05] };
+  const T = { desert: { rock: STONE, drift: [.62, .49, .33], stain: [.1, .07, .045] }, base: { rock: CONC, drift: [.3, .32, .36], stain: [.035, .04, .045] }, marsh: { rock: MOSSY, drift: [.15, .22, .11], stain: [.025, .04, .025] }, ice: { rock: ICEC, drift: [.85, .89, .96], stain: [.1, .13, .18] }, forge: { rock: FORGEC, drift: [.2, .15, .13], stain: [.02, .015, .015] }, jungle: { rock: [.3, .31, .24], drift: [.12, .22, .08], stain: [.03, .06, .02] }, hive: { rock: HIVEC, drift: [.22, .22, .26], stain: [.03, .03, .04] } }[key] || { rock: STONE, drift: [.5, .4, .3], stain: [.1, .07, .05] };
   for (const [x, z] of pts) {
     const k = rng();
     if (k < .26) craterAt(solid, decal, rng, H, x, z, .8 + rng() * 1.1, T.rock);
@@ -15463,6 +15463,110 @@ THEMES.desert.poly = { wall: { h: [3.2, 5], th: .5, col: STONE, floor: [.17, .13
 THEMES.base.poly = { wall: { h: [1, 1.2], th: .6, col: CONC, floor: [.15, .16, .17] }, pillar: null, clutter: (mb, x, z, rng, k) => { const m = k % 4; if (m === 3) { const a = rng() * 3, d = [Math.cos(a), Math.sin(a)]; for (let q = 0; q < 3; q++) profileRun(mb, [x + d[0] * q * 1.9, z + d[1] * q * 1.9], [x + d[0] * (q * 1.9 + 1.8), z + d[1] * (q * 1.9 + 1.8)], JB, vary(CONC, rng, .1), [.9, 0], 1.12); } else if (m === 2 && rng() < .6) container(mb, x, z, rng() * 3, rng); else { const s = .9 + rng() * .7, ry = rng() * 1.5; crate(mb, x, 0, z, s, ry, CRATE[Math.floor(rng() * 4)], rng); if (rng() < .5) crate(mb, x, s * .92, z, s * .85, ry + .3, CRATE[Math.floor(rng() * 4)], rng); } } };
 THEMES.marsh.poly = { wall: { h: [3.4, 5.2], th: .55, col: MOSSY, floor: [.11, .12, .1], moss: MOSS }, pillar: (mb, x, z, rng) => pillar(mb, x, z, 4.5 + rng() * 1.5, .55, MOSSY, rng), clutter: (mb, x, z, rng, k) => { if (k % 3 === 0) deadTree(mb, x, z, 3.8 + rng() * 2, rng); else if (k % 3 === 1) { ground(mb, x, z, 1 + rng() * .8, .8 + rng() * .5, 14, [.1, .26, .1], [0, .3], .06, null, rng, .5); for (let q = 0; q < 4; q++) { const a = rng() * 6.28, d = 1.1 + rng() * 1; blob(mb, x + Math.cos(a) * d, .1, z + Math.sin(a) * d, .2 + rng() * .2, .18 + rng() * .2, .2 + rng() * .2, [.55, .6, .35], [.2, .35], rng, .4); } } else rubble(mb, x, z, rng, MOSSY, 4, 1, .32); } };
 
+/* ---------- more environments, and tabletop-style two-storey ruins ---------- */
+/* a raised floor on pillars over the walled half of a ruin, with a low parapet, like the multi-level ruins on a gaming table (looks only; the rules still treat the footprint as one area) */
+function upperDeck(mb, r, rng, col, floorCol, hgt) {
+  hgt = hgt || 3; const horiz = r.w >= r.h, fw = horiz ? Math.min(r.w * .5, 4.2) : r.w - .7, fd = horiz ? r.h - .7 : Math.min(r.h * .5, 4.2), wl = r.walls.includes('left'), wt = r.walls.includes('top');
+  const cx = horiz ? (wl ? r.x + fw / 2 + .35 : r.x + r.w - fw / 2 - .35) : r.x + r.w / 2, cz = horiz ? r.y + r.h / 2 : (wt ? r.y + fd / 2 + .35 : r.y + r.h - fd / 2 - .35);
+  box(mb, cx, hgt, cz, fw, .2, fd, 0, floorCol, [.9, 0], .02, rng);
+  for (const [a, b] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) tube(mb, [cx + a * (fw / 2 - .2), 0, cz + b * (fd / 2 - .2)], [cx + a * (fw / 2 - .2), hgt, cz + b * (fd / 2 - .2)], .2, .2, 6, col, [.9, 0]);
+  for (const sd of [-1, 1]) { box(mb, cx, hgt + .2, cz + sd * (fd / 2 - .06), fw, .5 + rng() * .3, .12, 0, col, [.9, 0], .03, rng); box(mb, cx + sd * (fw / 2 - .06), hgt + .2, cz, .12, .45 + rng() * .3, fd, 0, col, [.9, 0], .03, rng); }
+  const sx = cx + (horiz ? (wl ? 1 : -1) * (fw / 2 + 1) : 0), sz = cz + (horiz ? 0 : (wt ? 1 : -1) * (fd / 2 + 1));
+  for (let k = 0; k < 3; k++) box(mb, sx + (horiz ? (wl ? -1 : 1) * k * .02 : 0), k * hgt / 3.4, sz, horiz ? .9 : 1.2, hgt / 3.4 * (1) + .05, horiz ? 1.2 : .9, 0, shade(col, .85), [.9, 0], .03, rng);
+}
+function ember(mb, x, y, z, s, rng) { box(mb, x, y, z, s, s * .4, s * .8, rng() * 3, [1, .38, .08], [0, .9], .02, rng); }
+
+/* Frozen Hive */
+const ICEC = [.5, .56, .66], SNOW = [.86, .9, .97];
+function shard(mb, x, z, h, rng, col) { const a = rng() * 6.28, l = .35 + rng() * .5; tube(mb, [x, 0, z], [x + Math.cos(a) * l * .5, h, z + Math.sin(a) * l * .5], .18 + rng() * .12, .01, 5, col || [.55, .78, .95], [.25, .15]); }
+function propsIce(mb, r, rng, i) {
+  box(mb, r.x + r.w / 2, 0, r.y + r.h / 2, r.w - .2, .09, r.h - .2, 0, [.5, .56, .64], [.4, 0], .03, rng);
+  for (const s of r.walls) { const [a, b] = sideIn(r, s, .26); wallRun(mb, a, b, { h: 3.4 + rng() * 1.8, th: .5, col: ICEC, windows: rng() < .6 ? 1 + Math.floor(rng() * 2) : 0, sill: 1, lintel: rng() < .5, var: .08, moss: SNOW }, rng); }
+  const cx = r.walls.includes('left') ? r.x + .55 : r.x + r.w - .55, cz = r.walls.includes('top') ? r.y + .55 : r.y + r.h - .55; pillar(mb, cx, cz, 5.4, .5, shade(ICEC, 1.08), rng);
+  for (let k = 0; k < 6; k++) shard(mb, r.x + .8 + rng() * (r.w - 1.6), r.y + .8 + rng() * (r.h - 1.6), .6 + rng() * 1.3, rng);
+  rubble(mb, r.x + r.w / 2, r.y + r.h / 2, rng, SNOW, 6, Math.min(r.w, r.h) * .42, .36);
+  if (i % 2 === 0) upperDeck(mb, r, rng, ICEC, [.45, .5, .58], 3);
+}
+function scatterIce(mb, rng, ok, H) {
+  for (let i = 0; i < 70; i++) { const x = rng() * BW, z = rng() * BH; if (!ok(x, z, .8)) continue; const s = .12 + rng() * .25; blob(mb, x, H(x, z) + s * .1, z, s * 2.4, s * .55, s * 1.6, vary(SNOW, rng, .06), [.9, 0], rng, .3); }
+  for (let i = 0; i < 40; i++) { const x = rng() * BW, z = rng() * BH; if (!ok(x, z, 1)) continue; shard(mb, x, z, .25 + rng() * .5, rng); }
+  for (let i = 0; i < 30; i++) { const x = rng() * BW, z = rng() * BH; if (!ok(x, z, 1)) continue; const s = .05 + rng() * .08; blob(mb, x, H(x, z) + s * .1, z, s * 1.4, s * .6, s, vary([.36, .38, .42], rng, .2), [1, 0], rng, .8); }
+}
+THEMES.ice = { name: 'Frozen Hive', sub: 'Snow-capped ruins, ice shards and drifts', props: propsIce, scatter: scatterIce, amp: .55, freq: .1, seed: 41,
+  env: { sun: [-.5, .42, .55], sunC: [1.15, 1.3, 1.55], ambT: [.2, .24, .32], ambB: [.12, .14, .18], fog: [.2, .23, .29], fogD: .0055, dust: 0 },
+  ground: (x, z, h, n) => mixc([.4, .45, .53], [.76, .8, .87], clamp(n * 1.5 + h * .1, 0, 1)) };
+THEMES.ice.poly = { wall: { h: [3.2, 5], th: .5, col: ICEC, floor: [.4, .45, .53], moss: SNOW }, pillar: (mb, x, z, rng) => pillar(mb, x, z, 4 + rng() * 2, .5, ICEC, rng), clutter: (mb, x, z, rng, k) => { if (k % 2) for (let q = 0; q < 4; q++) shard(mb, x + (rng() - .5) * 1.6, z + (rng() - .5) * 1.6, .5 + rng(), rng); else rubble(mb, x, z, rng, SNOW, 5, 1.1, .34); } };
+
+/* Forge World */
+const FORGEC = [.17, .16, .17], RUSTC = [.34, .17, .09];
+function propsForge(mb, r, rng, i) {
+  box(mb, r.x + r.w / 2, 0, r.y + r.h / 2, r.w - .2, .1, r.h - .2, 0, [.1, .095, .1], [.5, 0], .02, rng);
+  for (const s of r.walls) { const [a, b] = sideIn(r, s, .26); wallRun(mb, a, b, { h: 3.2 + rng() * 1.6, th: .45, col: FORGEC, windows: rng() < .5 ? 1 : 0, sill: 1.1, var: .06 }, rng); const L = Math.hypot(b[0] - a[0], b[1] - a[1]); tube(mb, [a[0], 2.5, a[1]], [b[0], 2.5, b[1]], .17, .17, 7, RUSTC, [.6, 0]); for (let k = 1; k < 4; k++) { const t = k / 4; box(mb, a[0] + (b[0] - a[0]) * t, 2.2, a[1] + (b[1] - a[1]) * t, .14, .6, .14, 0, shade(RUSTC, .8), [.6, 0], 0, rng); } void L; }
+  const cx = r.walls.includes('left') ? r.x + .9 : r.x + r.w - .9, cz = r.walls.includes('top') ? r.y + .9 : r.y + r.h - .9;
+  tube(mb, [cx, 0, cz], [cx, 6.4, cz], .85, .6, 10, shade(FORGEC, 1.15), [.7, 0]); tube(mb, [cx, 6.3, cz], [cx, 6.55, cz], .66, .66, 10, [1, .4, .08], [.2, .9], true);
+  const tx = r.x + r.w * (.35 + rng() * .3), tz = r.y + r.h * (.35 + rng() * .3); tube(mb, [tx, 0, tz], [tx, 2.1, tz], 1, 1, 12, shade(RUSTC, .9), [.6, 0]); for (const yy of [.5, 1.1, 1.7]) tube(mb, [tx, yy, tz], [tx, yy + .06, tz], 1.04, 1.04, 12, shade(RUSTC, .6), [.5, 0], false);
+  for (let k = 0; k < 4; k++) ember(mb, r.x + .8 + rng() * (r.w - 1.6), .1, r.y + .8 + rng() * (r.h - 1.6), .35 + rng() * .35, rng);
+  rubble(mb, r.x + r.w / 2, r.y + r.h / 2, rng, shade(FORGEC, 1.2), 5, Math.min(r.w, r.h) * .4, .32);
+  if (i % 2 === 1) upperDeck(mb, r, rng, FORGEC, [.2, .19, .2], 3);
+}
+function scatterForge(mb, rng, ok, H) {
+  for (let i = 0; i < 80; i++) { const x = rng() * BW, z = rng() * BH; if (!ok(x, z, .6)) continue; const s = .05 + rng() * .1; blob(mb, x, H(x, z) + s * .1, z, s * 1.6, s * .7, s, vary([.1, .09, .095], rng, .25), [1, 0], rng, .8); }
+  for (let i = 0; i < 26; i++) { const x = rng() * BW, z = rng() * BH; if (!ok(x, z, .8)) continue; ember(mb, x, H(x, z) + .02, z, .12 + rng() * .2, rng); }
+}
+THEMES.forge = { name: 'Forge World', sub: 'Black steel, chimneys and glowing slag', props: propsForge, scatter: scatterForge, amp: .35, freq: .13, seed: 53,
+  env: { sun: [-.5, .36, .5], sunC: [1.5, .68, .32], ambT: [.15, .075, .06], ambB: [.1, .045, .03], fog: [.15, .055, .035], fogD: .008, dust: 1 },
+  ground: (x, z, h, n) => { const v = Math.abs(n - .52); if (v < .006) return [.95, .34, .07]; return mixc([.055, .05, .052], [.16, .125, .11], clamp(n * 1.3 + h * .1, 0, 1)); } };
+THEMES.forge.poly = { wall: { h: [3, 4.6], th: .5, col: FORGEC, floor: [.09, .085, .09] }, pillar: (mb, x, z, rng) => pillar(mb, x, z, 4.4 + rng() * 1.5, .5, FORGEC, rng), clutter: (mb, x, z, rng, k) => { if (k % 3 === 0) { tube(mb, [x, 0, z], [x, 1.8, z], .8, .8, 10, shade(RUSTC, .9), [.6, 0]); } else if (k % 3 === 1) { for (let q = 0; q < 3; q++) ember(mb, x + (rng() - .5) * 1.6, .1, z + (rng() - .5) * 1.6, .3 + rng() * .3, rng); } else rubble(mb, x, z, rng, shade(FORGEC, 1.2), 5, 1.1, .34); } };
+
+/* Death World jungle */
+const LEAFC = [.07, .19, .06], VINEC = [.08, .2, .06];
+function jungleTree(mb, x, z, h, rng) {
+  const bark = [.2, .14, .09]; let p = [x, 0, z], th = .34; for (let k = 0; k < 3; k++) { const q = [p[0] + (rng() - .5) * .5, p[1] + h / 3, p[2] + (rng() - .5) * .5]; tube(mb, p, q, th, th * .78, 7, bark, [.9, 0], k === 2); p = q; th *= .78; }
+  for (let k = 0; k < 5; k++) { const a = rng() * 6.283, d = .5 + rng() * 1.1; blob(mb, p[0] + Math.cos(a) * d, p[1] - .2 + rng() * .8, p[2] + Math.sin(a) * d, 1 + rng() * .6, .5 + rng() * .35, 1 + rng() * .6, vary(LEAFC, rng, .25), [.8, 0], rng, .6); }
+}
+function fern(mb, x, y, z, rng) { for (let k = 0; k < 6; k++) { const a = k / 6 * 6.283 + rng(), l = .35 + rng() * .35; tube(mb, [x, y, z], [x + Math.cos(a) * l, y + .22 + rng() * .15, z + Math.sin(a) * l], .04, .008, 3, vary([.12, .32, .1], rng, .2), [.4, 0], false); } }
+function propsJungle(mb, r, rng, i) {
+  box(mb, r.x + r.w / 2, 0, r.y + r.h / 2, r.w - .3, .08, r.h - .3, 0, [.15, .17, .12], [.9, 0], .05, rng);
+  for (const s of r.walls) { const [a, b] = sideIn(r, s, .28); wallRun(mb, a, b, { h: 3.4 + rng() * 1.6, th: .55, col: [.3, .31, .24], windows: 1 + Math.floor(rng() * 2), sill: .9, lintel: true, moss: [.1, .3, .07], var: .12 }, rng); const L = Math.hypot(b[0] - a[0], b[1] - a[1]); for (let k = 0; k < 3; k++) { const t = rng(), px = a[0] + (b[0] - a[0]) * t, pz = a[1] + (b[1] - a[1]) * t; tube(mb, [px, 0, pz], [px + (rng() - .5) * .3, 2.2 + rng() * 1.6, pz], .06, .03, 4, VINEC, [.4, 0], false); } void L; }
+  const cx = r.walls.includes('left') ? r.x + r.w - .7 : r.x + .7, cz = r.walls.includes('top') ? r.y + r.h - .7 : r.y + .7; jungleTree(mb, cx, cz, 5.2 + rng() * 2, rng);
+  for (let k = 0; k < 6; k++) fern(mb, r.x + .6 + rng() * (r.w - 1.2), 0, r.y + .6 + rng() * (r.h - 1.2), rng);
+  rubble(mb, r.x + r.w / 2, r.y + r.h / 2, rng, [.3, .31, .24], 5, Math.min(r.w, r.h) * .4, .33);
+  if (i % 3 === 1) upperDeck(mb, r, rng, [.3, .31, .24], [.17, .2, .13], 3);
+}
+function scatterJungle(mb, rng, ok, H) {
+  for (let i = 0; i < 90; i++) { const x = rng() * BW, z = rng() * BH; if (!ok(x, z, .8)) continue; fern(mb, x, H(x, z), z, rng); }
+  for (let i = 0; i < 30; i++) { const x = rng() * BW, z = rng() * BH; if (!ok(x, z, 1)) continue; const s = .15 + rng() * .25; blob(mb, x, H(x, z) + s * .3, z, s * 1.8, s * .8, s * 1.5, vary(LEAFC, rng, .3), [.8, 0], rng, .6); }
+  for (let i = 0; i < 14; i++) { const x = rng() * BW, z = rng() * BH; if (!ok(x, z, 1.8)) continue; jungleTree(mb, x, z, 4.6 + rng() * 2.4, rng); }
+  for (let i = 0; i < 24; i++) { const x = rng() * BW, z = rng() * BH; if (!ok(x, z, 1)) continue; blob(mb, x, H(x, z) + .08, z, .07, .05, .07, rng() < .5 ? [.9, .2, .15] : [.95, .8, .2], [.3, .3], rng, .3); }
+}
+THEMES.jungle = { name: 'Death World', sub: 'Overgrown ruins, ferns and tall trees', props: propsJungle, scatter: scatterJungle, amp: .5, freq: .1, seed: 67,
+  env: { sun: [-.35, .6, .45], sunC: [1.3, 1.2, .72], ambT: [.1, .17, .1], ambB: [.06, .09, .05], fog: [.07, .11, .06], fogD: .009, dust: 0 },
+  ground: (x, z, h, n) => mixc([.08, .14, .045], [.2, .28, .1], clamp(n * 1.4 + h * .1, 0, 1)) };
+THEMES.jungle.poly = { wall: { h: [3.2, 5], th: .55, col: [.3, .31, .24], floor: [.1, .14, .08], moss: [.1, .3, .07] }, pillar: (mb, x, z, rng) => pillar(mb, x, z, 4.4 + rng() * 1.5, .55, [.3, .31, .24], rng), clutter: (mb, x, z, rng, k) => { if (k % 3 === 0) jungleTree(mb, x, z, 4.6 + rng() * 2, rng); else { for (let q = 0; q < 5; q++) fern(mb, x + (rng() - .5) * 1.8, 0, z + (rng() - .5) * 1.8, rng); } } };
+
+/* Hive City streets */
+const HIVEC = [.25, .26, .3];
+function sign(mb, x, y, z, ry, rng) { const c = [[.1, .9, 1], [1, .2, .7], [1, .75, .1]][Math.floor(rng() * 3)]; box(mb, x, y, z, 1.1 + rng() * .8, .32, .06, ry, c, [0, .95], 0, rng); }
+function propsHive(mb, r, rng, i) {
+  box(mb, r.x + r.w / 2, 0, r.y + r.h / 2, r.w - .2, .09, r.h - .2, 0, [.14, .145, .17], [.5, 0], .01, rng);
+  for (const s of r.walls) { const [a, b] = sideIn(r, s, .26); wallRun(mb, a, b, { h: 4.6 + rng() * 2.4, th: .5, col: HIVEC, windows: 2 + Math.floor(rng() * 2), sill: 1.1, lintel: true, var: .06 }, rng); if (rng() < .7) { const t = .25 + rng() * .5, n = inward(r, s); sign(mb, a[0] + (b[0] - a[0]) * t + n[0] * .36, 2.6 + rng() * 1.8, a[1] + (b[1] - a[1]) * t + n[1] * .36, Math.atan2(b[1] - a[1], b[0] - a[0]), rng); } }
+  const nC = 2 + Math.floor(rng() * 3); for (let k = 0; k < nC; k++) { const x = r.x + 1 + rng() * (r.w - 2), z = r.y + 1 + rng() * (r.h - 2), s = .8 + rng() * .6, ry = (rng() - .5) * .5; crate(mb, x, 0, z, s, ry, CRATE[Math.floor(rng() * 4)], rng); }
+  if (r.w >= 6 || r.h >= 6) container(mb, r.walls.includes('left') ? r.x + r.w - 2.3 : r.x + 2.3, r.walls.includes('top') ? r.y + r.h - 1.1 : r.y + 1.1, 0, rng);
+  const px = r.walls.includes('left') ? r.x + .45 : r.x + r.w - .45, pz = r.walls.includes('top') ? r.y + .45 : r.y + r.h - .45; tube(mb, [px, 0, pz], [px, 6, pz], .16, .12, 6, [.2, .2, .23], [.4, 0]);
+  rubble(mb, r.x + r.w / 2, r.y + r.h / 2, rng, shade(HIVEC, 1.1), 5, Math.min(r.w, r.h) * .4, .33);
+  if (i % 2 === 0) upperDeck(mb, r, rng, HIVEC, [.16, .17, .2], 3);
+}
+function scatterHive(mb, rng, ok, H) { for (let i = 0; i < 70; i++) { const x = rng() * BW, z = rng() * BH; if (!ok(x, z, .6)) continue; const s = .03 + rng() * .06; box(mb, x, 0, z, s * 2, s, s * 1.4, rng() * 3, vary([.2, .2, .24], rng, .2), [.8, 0], .01, rng); } for (let i = 0; i < 12; i++) { const x = rng() * BW, z = rng() * BH; if (!ok(x, z, 1)) continue; box(mb, x, 0, z, .5, .9, .3, rng() * 3, [.22, .24, .28], [.7, 0], .02, rng); box(mb, x, .55, z, .3, .05, .02, 0, [.1, .9, 1], [0, .9], 0, rng); } }
+THEMES.hive = { name: 'Hive City', sub: 'Dark streets, neon signs and tall ruins', props: propsHive, scatter: scatterHive, amp: .05, freq: .2, seed: 79,
+  env: { sun: [.4, .38, -.5], sunC: [.9, .62, 1.05], ambT: [.12, .1, .19], ambB: [.065, .055, .09], fog: [.065, .045, .1], fogD: .009, dust: 0 },
+  ground: (x, z, h, n) => { let c = mixc([.07, .075, .09], [.15, .155, .18], n); const gx = Math.abs(((x / 8) % 1 + 1) % 1 - .5); if (gx > .497) c = [.4, .33, .08]; const gz = Math.abs(((z / 6) % 1 + 1) % 1 - .5); if (gz > .485) c = shade(c, .6); return c; } };
+THEMES.hive.poly = { wall: { h: [1, 1.3], th: .6, col: HIVEC, floor: [.12, .125, .15] }, pillar: null, clutter: (mb, x, z, rng, k) => { if (k % 2) container(mb, x, z, rng() * 3, rng); else crate(mb, x, 0, z, .9 + rng() * .5, rng() * 1.5, CRATE[Math.floor(rng() * 4)], rng); } };
+
+/* the original three get the same two-storey ruins now and then */
+{ const wrap = (th, col, fl) => { const p = th.props; th.props = (mb, r, rng, i) => { p(mb, r, rng, i); if (i % 3 === 1) upperDeck(mb, r, rng, col, fl, 3); }; };
+  wrap(THEMES.desert, STONE, [.2, .16, .11]); wrap(THEMES.marsh, MOSSY, [.12, .13, .11]); }
+const ENV_KEYS = ['desert', 'base', 'marsh', 'ice', 'forge', 'jungle', 'hive'];
+
 /* ---------- the whole map, from the game's own layout ---------- */
 /* spec: { theme, seed, terrain:[{x,y,w,h,walls?,poly?}], objs:[{x,y,poly?}], objR, zones:{player,ai}, decor:[{x,y,r,kind}] } */
 const zoneHas = (z, x, y) => z.pts ? inPoly(x, y, z.pts) : (x >= z.x && x <= z.x + z.w && y >= z.y && y <= z.y + z.h && !(z.kind === 'quarter' && Math.hypot(x - z.cx, y - z.cy) < z.cut));
@@ -15471,7 +15575,7 @@ function buildMap(spec) {
   const mask = (x, z) => { let d = 99; for (const r of rects) d = Math.min(d, tdist(x, z, r)); for (const o of OB) d = Math.min(d, Math.hypot(x - o.x, z - o.y) - (OR + .6)); return sstep(.6, 4.2, d); };
   const outD = (x, z) => Math.hypot(Math.max(-x, 0, x - BW), Math.max(-z, 0, z - BH)), H = (x, z) => th.amp * (fbm(x * th.freq + sd, z * th.freq * 1.3 + sd) - .5) * 2.4 * mask(x, z) * (1 - sstep(.5, 4, outD(x, z)));
   const ok = (x, z, m) => { for (const r of rects) if (tdist(x, z, r) < m + .3) return false; for (const o of OB) if (Math.hypot(x - o.x, z - o.y) < OR + .6) return false; return true; };
-  const solid = new MB(), decal = new MB(), zdec = new MB(), odec = new MB();
+  const solid = new MB(), decal = new MB(), zdec = new MB(), odec = new MB(); DECAL = decal;
   const step = 1, x0 = -36, z0 = -36, nx = Math.ceil((BW + 72) / step), nz = Math.ceil((BH + 72) / step), idx = (i, j) => i * (nz + 1) + j, base = solid.n;
   for (let i = 0; i <= nx; i++) for (let j = 0; j <= nz; j++) { const x = x0 + i * step, z = z0 + j * step, h = H(x, z), e = .3, dx = (H(x + e, z) - H(x - e, z)) / (2 * e), dz = (H(x, z + e) - H(x, z - e)) / (2 * e), n = v3.norm([-dx, 1, -dz]); solid.vtx([x, h, z], n, th.ground(x, z, h, fbm(x * .22 + sd, z * .22)), [.9, 0]); }
   for (let i = 0; i < nx; i++) for (let j = 0; j < nz; j++) { const a = base + idx(i, j), b = base + idx(i + 1, j), c = base + idx(i + 1, j + 1), d = base + idx(i, j + 1); solid.I.push(a, d, c, a, c, b); }
@@ -15491,7 +15595,7 @@ function buildMap(spec) {
   return { solid, decal, zdec, odec, th, H, ok, rects };
 }
 
-return { Renderer, Cam, MB, buildMap, THEMES, layoutTerrain, OBJS, CLEAR, mulberry, box, tube, blob, ground, profileRun, shade, vary, v3, m4, lerp, clamp, BW, BH, inPoly, crate, container, deadTree, rubble, pillar, JB, CRATE, STONE, MOSSY };
+return { ENV_KEYS, Renderer, Cam, MB, buildMap, THEMES, layoutTerrain, OBJS, CLEAR, mulberry, box, tube, blob, ground, profileRun, shade, vary, v3, m4, lerp, clamp, BW, BH, inPoly, crate, container, deadTree, rubble, pillar, JB, CRATE, STONE, MOSSY };
 })();
 
 /* ===== 3D board view: look-only; draws the game's real terrain, zones, objectives and models ===== */
@@ -15501,9 +15605,8 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
   const $b = () => document.getElementById('board'), $m = () => document.getElementById('b-map');
   function themeKey() {
     if (BF3D.theme !== 'auto') return BF3D.theme;
-    let dg = false; try { dg = G.units.some(u => (miniFactionOf(u) || '') === 'Death Guard'); } catch (e) { }
-    if (dg) return 'marsh';
-    return ['desert', 'base', 'marsh'][hash(BF3D.tsig) % 3];
+    if (!G.env3d || !BF.THEMES[G.env3d]) { let dg = false; try { dg = G.units.some(u => (miniFactionOf(u) || '') === 'Death Guard'); } catch (e) { } G.env3d = (dg && Math.random() < .5) ? 'marsh' : BF.ENV_KEYS[Math.floor(Math.random() * BF.ENV_KEYS.length)]; }
+    return G.env3d;
   }
   function specNow() {
     return {
@@ -15631,7 +15734,7 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
     addEventListener('blur', () => keys.clear());
     /* controls */
     const bar = document.createElement('div'); bar.id = 'b-3dbar'; bar.hidden = true;
-    bar.innerHTML = '<button type="button" id="b-3dmore" aria-expanded="false" title="3D view options and controls">View options \u25BE</button><div id="b-3dpanel"><select id="b-3dtheme" aria-label="Terrain theme"><option value="auto">Theme: auto</option><option value="desert">Desert ruins</option><option value="base">Hive base</option><option value="marsh">Rot marsh</option></select><button type="button" data-o="zones" aria-pressed="true" title="Show or hide the deployment zones">Zones</button><button type="button" data-o="objs" aria-pressed="true" title="Show or hide the objective markers">Objectives</button><button type="button" data-o="dice" aria-pressed="true" title="Show or hide the dice trays">Dice trays</button><button type="button" data-o="guides" aria-pressed="true" title="Show or hide the placement guides: 8 inch rings and the 6 inch edge band">Guides</button><button type="button" id="b-3dsight" aria-pressed="true" title="Show or hide sight lines, with the distance to every enemy">Sight lines</button><button type="button" id="b-3dtop" title="Top-down view">Top</button><button type="button" id="b-3dtab" title="Tabletop view">Table</button><span id="b-3dnote">Drag = select units · Alt-drag = turn models · right-drag = orbit · WASD move · Q/E turn view · Z/X zoom · right-click or 1 = datasheet</span></div>';
+    bar.innerHTML = '<button type="button" id="b-3dmore" aria-expanded="false" title="3D view options and controls">View options \u25BE</button><div id="b-3dpanel"><select id="b-3dtheme" aria-label="Terrain theme"><option value="auto">Theme: auto</option><option value="desert">Desert ruins</option><option value="base">Hive base</option><option value="marsh">Rot marsh</option><option value="ice">Frozen hive</option><option value="forge">Forge world</option><option value="jungle">Death world</option><option value="hive">Hive city</option></select><button type="button" data-o="zones" aria-pressed="true" title="Show or hide the deployment zones">Zones</button><button type="button" data-o="objs" aria-pressed="true" title="Show or hide the objective markers">Objectives</button><button type="button" data-o="dice" aria-pressed="true" title="Show or hide the dice trays">Dice trays</button><button type="button" data-o="guides" aria-pressed="true" title="Show or hide the placement guides: 8 inch rings and the 6 inch edge band">Guides</button><button type="button" id="b-3dsight" aria-pressed="true" title="Show or hide sight lines, with the distance to every enemy">Sight lines</button><button type="button" id="b-3dtop" title="Top-down view">Top</button><button type="button" id="b-3dtab" title="Tabletop view">Table</button><span id="b-3dnote">Drag = select units · Alt-drag = turn models · right-drag = orbit · WASD move · Q/E turn view · Z/X zoom · right-click or 1 = datasheet</span></div>';
     bar.querySelector('#b-3dmore').addEventListener('click', () => { const o = bar.classList.toggle('open'); bar.querySelector('#b-3dmore').setAttribute('aria-expanded', String(o)); });
     holder.appendChild(bar);
     bar.querySelectorAll('[data-o]').forEach(b => b.addEventListener('click', () => { BF3D.opt[b.dataset.o] = !BF3D.opt[b.dataset.o]; try { localStorage.setItem(OPT_KEY, JSON.stringify(BF3D.opt)); } catch (e) { } applyOpts(); if (b.dataset.o === 'guides') buildGhost(); }));
