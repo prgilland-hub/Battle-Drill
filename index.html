@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.15-1223';
+  const VERSION = '2026.11.15-1229';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -15528,7 +15528,7 @@ function rubbleAt(solid, rng, H, x, z, tint, spread) {
 }
 function dressing(solid, decal, rng, ok, H, th, key) {
   /* even spread: no two features closer than the spacing, and none on a ruin or an objective */
-  const pts = [], gap = 5.2; for (let tries = 0; tries < 900 && pts.length < 80; tries++) { const x = 2.5 + rng() * (BW - 5), z = 2.5 + rng() * (BH - 5); if (!ok(x, z, 1.6)) continue; if (pts.some(q => Math.hypot(q[0] - x, q[1] - z) < gap)) continue; pts.push([x, z]); }
+  const pts = [], gap = 7.6; for (let tries = 0; tries < 900 && pts.length < 34; tries++) { const x = 2.5 + rng() * (BW - 5), z = 2.5 + rng() * (BH - 5); if (!ok(x, z, 1.6)) continue; if (pts.some(q => Math.hypot(q[0] - x, q[1] - z) < gap)) continue; pts.push([x, z]); }
   const T = { desert: { rock: STONE, drift: [.62, .49, .33], stain: [.1, .07, .045] }, base: { rock: CONC, drift: [.3, .32, .36], stain: [.035, .04, .045] }, marsh: { rock: MOSSY, drift: [.15, .22, .11], stain: [.025, .04, .025] }, ice: { rock: ICEC, drift: [.85, .89, .96], stain: [.1, .13, .18] }, forge: { rock: FORGEC, drift: [.2, .15, .13], stain: [.02, .015, .015] }, jungle: { rock: [.3, .31, .24], drift: [.12, .22, .08], stain: [.03, .06, .02] }, hive: { rock: HIVEC, drift: [.22, .22, .26], stain: [.03, .03, .04] } }[key] || { rock: STONE, drift: [.5, .4, .3], stain: [.1, .07, .05] };
   for (const [x, z] of pts) {
     const k = rng();
@@ -15540,7 +15540,7 @@ function dressing(solid, decal, rng, ok, H, th, key) {
     else rubbleAt(solid, rng, H, x, z, T.rock, 1.6);
   }
   /* wheel ruts and tracks wandering across the field, so the open ground reads as ground that has been fought over */
-  for (let t = 0; t < 3; t++) {
+  for (let t = 0; t < 2; t++) {
     const x0 = 3 + rng() * (BW - 6), z0 = rng() < .5 ? 1 : BH - 1, x1 = 3 + rng() * (BW - 6), z1 = BH - z0, cx = (x0 + x1) / 2 + (rng() - .5) * 26, cz = BH / 2 + (rng() - .5) * 14, N = 120;
     for (let i = 0; i <= N; i++) { const u = i / N, a = (1 - u) * (1 - u), b = 2 * u * (1 - u), c = u * u, x = a * x0 + b * cx + c * x1, z = a * z0 + b * cz + c * z1, dx = 2 * (1 - u) * (cx - x0) + 2 * u * (x1 - cx), dz = 2 * (1 - u) * (cz - z0) + 2 * u * (z1 - cz), l = Math.hypot(dx, dz) || 1, nx = -dz / l, nz = dx / l; for (const o of [-.55, .55]) ground(decal, x + nx * o, z + nz * o, .42, .42, 7, T.stain, [.1, 0], .06, H, rng, .15); }
   }
@@ -15613,23 +15613,23 @@ function jungleTree(mb, x, z, h, rng) {
 }
 function fern(mb, x, y, z, rng) { for (let k = 0; k < 6; k++) { const a = k / 6 * 6.283 + rng(), l = .35 + rng() * .35; tube(mb, [x, y, z], [x + Math.cos(a) * l, y + .22 + rng() * .15, z + Math.sin(a) * l], .04, .008, 3, vary([.12, .32, .1], rng, .2), [.4, 0], false); } }
 function propsJungle(mb, r, rng, i) {
-  box(mb, r.x + r.w / 2, 0, r.y + r.h / 2, r.w - .3, .08, r.h - .3, 0, [.15, .17, .12], [.9, 0], .05, rng);
-  for (const s of r.walls) { const [a, b] = sideIn(r, s, .28); wallRun(mb, a, b, { h: 3.4 + rng() * 1.6, th: .55, col: [.3, .31, .24], windows: 1 + Math.floor(rng() * 2), sill: .9, lintel: true, moss: [.1, .3, .07], var: .12 }, rng); const L = Math.hypot(b[0] - a[0], b[1] - a[1]); for (let k = 0; k < 3; k++) { const t = rng(), px = a[0] + (b[0] - a[0]) * t, pz = a[1] + (b[1] - a[1]) * t; tube(mb, [px, 0, pz], [px + (rng() - .5) * .3, 2.2 + rng() * 1.6, pz], .06, .03, 4, VINEC, [.4, 0], false); } void L; }
-  const cx = r.walls.includes('left') ? r.x + r.w - .7 : r.x + .7, cz = r.walls.includes('top') ? r.y + r.h - .7 : r.y + .7; jungleTree(mb, cx, cz, 5.2 + rng() * 2, rng);
-  for (let k = 0; k < 6; k++) fern(mb, r.x + .6 + rng() * (r.w - 1.2), 0, r.y + .6 + rng() * (r.h - 1.2), rng);
-  rubble(mb, r.x + r.w / 2, r.y + r.h / 2, rng, [.3, .31, .24], 5, Math.min(r.w, r.h) * .4, .33);
-  if (i % 3 === 1) upperDeck(mb, r, rng, [.3, .31, .24], [.17, .2, .13], 3);
+  box(mb, r.x + r.w / 2, 0, r.y + r.h / 2, r.w - .3, .12, r.h - .3, 0, [.36, .34, .28], [.9, 0], .05, rng);
+  for (const s of r.walls) { const [a, b] = sideIn(r, s, .28); wallRun(mb, a, b, { h: 3.4 + rng() * 1.6, th: .55, col: [.52, .5, .42], windows: 1 + Math.floor(rng() * 2), sill: .9, lintel: true, moss: [.1, .3, .07], var: .1 }, rng); const L = Math.hypot(b[0] - a[0], b[1] - a[1]); for (let k = 0; k < 3; k++) { const t = rng(), px = a[0] + (b[0] - a[0]) * t, pz = a[1] + (b[1] - a[1]) * t; tube(mb, [px, 0, pz], [px + (rng() - .5) * .3, 2.2 + rng() * 1.6, pz], .06, .03, 4, VINEC, [.4, 0], false); } void L; }
+  const cx = r.walls.includes('left') ? r.x + r.w - .7 : r.x + .7, cz = r.walls.includes('top') ? r.y + r.h - .7 : r.y + .7; void cx; void cz;
+  for (let k = 0; k < 3; k++) fern(mb, r.x + .6 + rng() * (r.w - 1.2), 0, r.y + .6 + rng() * (r.h - 1.2), rng);
+  rubble(mb, r.x + r.w / 2, r.y + r.h / 2, rng, [.52, .5, .42], 5, Math.min(r.w, r.h) * .4, .33);
+  if (i % 3 === 1) upperDeck(mb, r, rng, [.52, .5, .42], [.36, .34, .28], 3);
 }
 function scatterJungle(mb, rng, ok, H) {
-  for (let i = 0; i < 90; i++) { const x = rng() * BW, z = rng() * BH; if (!ok(x, z, .8)) continue; fern(mb, x, H(x, z), z, rng); }
-  for (let i = 0; i < 30; i++) { const x = rng() * BW, z = rng() * BH; if (!ok(x, z, 1)) continue; const s = .15 + rng() * .25; blob(mb, x, H(x, z) + s * .3, z, s * 1.8, s * .8, s * 1.5, vary(LEAFC, rng, .3), [.8, 0], rng, .6); }
-  for (let i = 0; i < 14; i++) { const x = rng() * BW, z = rng() * BH; if (!ok(x, z, 1.8)) continue; jungleTree(mb, x, z, 4.6 + rng() * 2.4, rng); }
+  for (let i = 0; i < 40; i++) { const x = rng() * BW, z = rng() * BH; if (!ok(x, z, .8)) continue; fern(mb, x, H(x, z), z, rng); }
+  for (let i = 0; i < 10; i++) { const x = rng() * BW, z = rng() * BH; if (!ok(x, z, 1)) continue; const s = .15 + rng() * .25; blob(mb, x, H(x, z) + s * .3, z, s * 1.8, s * .8, s * 1.5, vary(LEAFC, rng, .3), [.8, 0], rng, .6); }
+  for (let i = 0; i < 24; i++) { const x = rng() * BW, z = rng() * BH; if (!ok(x, z, 4.2)) continue; if (x > 8 && x < BW - 8 && z > 10 && z < BH - 10) continue; jungleTree(mb, x, z, 4.6 + rng() * 2.4, rng); }
   for (let i = 0; i < 24; i++) { const x = rng() * BW, z = rng() * BH; if (!ok(x, z, 1)) continue; blob(mb, x, H(x, z) + .08, z, .07, .05, .07, rng() < .5 ? [.9, .2, .15] : [.95, .8, .2], [.3, .3], rng, .3); }
 }
 THEMES.jungle = { name: 'Death World', sub: 'Overgrown ruins, ferns and tall trees', props: propsJungle, scatter: scatterJungle, amp: .5, freq: .1, seed: 67,
-  env: { sun: [-.35, .6, .45], sunC: [1.3, 1.2, .72], ambT: [.1, .17, .1], ambB: [.06, .09, .05], fog: [.07, .11, .06], fogD: .009, dust: 0 },
-  ground: (x, z, h, n) => mixc([.08, .14, .045], [.2, .28, .1], clamp(n * 1.4 + h * .1, 0, 1)) };
-THEMES.jungle.poly = { wall: { h: [3.2, 5], th: .55, col: [.3, .31, .24], floor: [.1, .14, .08], moss: [.1, .3, .07] }, pillar: (mb, x, z, rng) => pillar(mb, x, z, 4.4 + rng() * 1.5, .55, [.3, .31, .24], rng), clutter: (mb, x, z, rng, k) => { if (k % 3 === 0) jungleTree(mb, x, z, 4.6 + rng() * 2, rng); else { for (let q = 0; q < 5; q++) fern(mb, x + (rng() - .5) * 1.8, 0, z + (rng() - .5) * 1.8, rng); } } };
+  env: { sun: [-.35, .6, .45], sunC: [1.5, 1.4, .95], ambT: [.18, .22, .17], ambB: [.08, .1, .07], fog: [.07, .11, .06], fogD: .006, dust: 0 },
+  ground: (x, z, h, n) => mixc([.07, .11, .045], [.13, .19, .08], clamp(n * 1.2 + h * .1, 0, 1)) };
+THEMES.jungle.poly = { wall: { h: [3.2, 5], th: .55, col: [.52, .5, .42], floor: [.36, .34, .28], moss: [.1, .3, .07] }, pillar: (mb, x, z, rng) => pillar(mb, x, z, 4.4 + rng() * 1.5, .55, [.52, .5, .42], rng), clutter: (mb, x, z, rng, k) => { for (let q = 0; q < 3; q++) fern(mb, x + (rng() - .5) * 1.8, 0, z + (rng() - .5) * 1.8, rng); } };
 
 /* Hive City streets */
 const HIVEC = [.25, .26, .3];
