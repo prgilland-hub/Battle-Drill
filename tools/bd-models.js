@@ -235,7 +235,7 @@ const BDModels = (function () {
   }
   async function clearAll() { const d = await idbOpen(); const t = tx(d, ['figs', 'index'], 'readwrite'); t.objectStore('figs').clear(); t.objectStore('index').clear(); await done(t); d.close(); index = []; cache.clear(); poolCache.clear(); ping(); }
   const factions = () => { const c = {}; for (const m of index) c[m.faction] = (c[m.faction] || 0) + 1; return c; };
-  return { variants: (ds, fac) => pool(ds, fac) || [], fig: m => fetchFig(m) || cache.get(m.key) || null, why: (ds, fac) => { const p = pool(ds, fac); return p ? p.map(f => f.faction + ': ' + f.name) : 'no match among ' + index.length + ' models'; }, load, pick, add, scan, importFactions, clearAll, factions, on: () => index.length > 0 && get('on', '1') === '1', count: () => index.length, get, set, reprep: async () => { cache.clear(); poolCache.clear(); ping(); } };
+  return { debug: (ds, fac) => { const t = toks(ds).filter(w => w.length > 3)[0] || toks(ds)[0] || '', hits = index.filter(f => toks(f.name).some(w => w === t || w.includes(t))); const mine = index.filter(f => String(f.faction).toLowerCase() === String(fac).toLowerCase()); return 'faction has ' + mine.length + ' models' + (mine.length ? ' (tallest ' + Math.max(...mine.map(f => f.h)).toFixed(2) + ')' : '') + '; name hits for "' + t + '": ' + (hits.length ? hits.slice(0, 3).map(f => f.faction + ': ' + f.name + ' h=' + f.h.toFixed(2)).join(' | ') : 'none'); }, variants: (ds, fac) => pool(ds, fac) || [], fig: m => fetchFig(m) || cache.get(m.key) || null, why: (ds, fac) => { const p = pool(ds, fac); return p ? p.map(f => f.faction + ': ' + f.name) : 'no match among ' + index.length + ' models'; }, load, pick, add, scan, importFactions, clearAll, factions, on: () => index.length > 0 && get('on', '1') === '1', count: () => index.length, get, set, reprep: async () => { cache.clear(); poolCache.clear(); ping(); } };
 })();
 window.BDModels = BDModels; window.MODELIMP = MODELIMP;
 
@@ -280,7 +280,7 @@ window.BDModels = BDModels; window.MODELIMP = MODELIMP;
     const slot = document.querySelector('#modal-box .ds-img'); if (!slot || !cur) return;
     const note = t => { let b = document.getElementById('bdp-bar'); if (!b) { b = document.createElement('div'); b.id = 'bdp-bar'; b.style.cssText = 'text-align:center;font-size:12px;opacity:.85;margin-bottom:8px'; slot.after(b); } b.textContent = t; };
     if (!BDModels.on()) return note('3D models are switched off or none are imported.');
-    const vars = BDModels.variants(cur.ds, cur.faction); if (!vars.length) return note('No 3D model matched "' + cur.ds + '" (' + cur.faction + '). ' + BDModels.count() + ' models loaded.');
+    const vars = BDModels.variants(cur.ds, cur.faction); if (!vars.length) return note('No 3D model matched "' + cur.ds + '" (' + cur.faction + '). ' + BDModels.count() + ' models loaded; ' + BDModels.debug(cur.ds, cur.faction));
     cur.vi = ((cur.vi % vars.length) + vars.length) % vars.length; const m = vars[cur.vi], fig = BDModels.fig(m); if (!fig) return note('Loading 3D model: ' + m.name + '…'); if (!ensureGL()) return note('3D view needs WebGL 2.');
     slot.classList.add('mini'); slot.style.cssText = 'position:static;display:block;width:min(100%,340px);height:auto;aspect-ratio:1;margin:2px auto 4px;background:#16181c;border-radius:10px;overflow:hidden';
     try { if (cur.fig !== fig) { upload(fig); cur.fig = fig; } } catch (e) { console.warn(e); return note('Could not draw ' + m.name + ': ' + (e && e.message || e)); }
