@@ -277,7 +277,8 @@ window.BDModels = BDModels; window.MODELIMP = MODELIMP;
   }
   /* put the current model into the datasheet's picture slot */
   function mount() {
-    const slot = document.querySelector('#modal-box .ds-img'); if (!slot || !cur) return;
+    let slot = document.querySelector('#modal-box .ds-img'); if (!cur) return; const head = document.querySelector('#modal-box .ds-head');
+    if (!slot) { if (!head) return; slot = document.createElement('div'); slot.className = 'ds-img mini'; slot.style.cssText = 'display:none'; head.insertBefore(slot, head.firstChild); }
     const note = t => { let b = document.getElementById('bdp-bar'); if (!b) { b = document.createElement('div'); b.id = 'bdp-bar'; b.style.cssText = 'text-align:center;font-size:12px;opacity:.85;margin-bottom:8px'; slot.after(b); } b.textContent = t; };
     if (!BDModels.on()) return note('3D models are switched off or none are imported.');
     const vars = BDModels.variants(cur.ds, cur.faction); if (!vars.length) return note('No 3D model matched "' + cur.ds + '" (' + cur.faction + '). ' + BDModels.count() + ' models loaded; ' + BDModels.debug(cur.ds, cur.faction));
