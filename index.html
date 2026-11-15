@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.15-1236';
+  const VERSION = '2026.11.15-1246';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -734,7 +734,14 @@ input[type=checkbox]{accent-color:var(--brass);width:17px;height:17px}
 .wtab table{border-collapse:collapse;width:100%;font-size:.82rem}
 .wtab th,.wtab td{padding:3px 4px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
 .wtab th{color:var(--muted);font-weight:500}
-#b-log{list-style:none;margin:0;padding:0;max-height:300px;overflow-y:auto;font-size:.88rem}
+#b-log{list-style:none;margin:0;padding:0;max-height:none;overflow-y:auto;font-size:.88rem;flex:1;min-height:0}
+#b-logbtn{position:fixed;right:16px;bottom:16px;z-index:9100;padding:9px 16px;border-radius:6px;border:1px solid var(--brass);background:var(--surface);color:var(--text);font-weight:700;cursor:pointer;box-shadow:0 4px 18px rgba(0,0,0,.5)}
+#b-logbtn[hidden]{display:none}
+#b-lognew{display:inline-block;min-width:18px;padding:0 5px;margin-left:6px;border-radius:9px;background:var(--brass);color:#000;font-size:.75rem;text-align:center}
+#b-logwrap{position:fixed;right:16px;bottom:62px;z-index:9100;width:min(440px,94vw);height:min(62vh,620px);flex-direction:column;padding:10px;background:var(--surface);border:1px solid var(--brass);border-radius:8px;box-shadow:0 8px 30px rgba(0,0,0,.6)}
+#b-logwrap:not([hidden]){display:flex}
+.b-loghd{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.b-loghd button{cursor:pointer;background:transparent;border:1px solid var(--line);color:var(--text);border-radius:4px;padding:3px 9px}
 #b-log li{padding:5px 8px;border-left:3px solid var(--line);margin-bottom:4px;background:var(--raised);border-radius:0 3px 3px 0}
 #b-log li.player{border-left-color:var(--you)}#b-log li.ai{border-left-color:var(--them)}#b-log li.sys{border-left-color:var(--brass)}
 details.rules{margin-top:10px;font-size:.92rem}
@@ -1587,7 +1594,7 @@ html[data-look="cog"]{
   --dz-you:rgba(95,212,255,.12) !important;--dz-them:rgba(255,106,77,.12) !important;color-scheme:dark;
   --cg-mono:"Share Tech Mono","Courier New",monospace;--cg-glow:rgba(168,255,74,.2)}
 html[data-look="cog"] body{font-family:var(--cg-mono);background:radial-gradient(ellipse at 50% -10%,rgba(168,255,74,.07),transparent 60%),#040605 !important}
-html[data-look="cog"] body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:9998;background:repeating-linear-gradient(0deg,rgba(0,0,0,.22) 0 1px,transparent 1px 3px);mix-blend-mode:multiply}
+html[data-look="cog"]:not([data-3d]) body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:9998;background:repeating-linear-gradient(0deg,rgba(0,0,0,.22) 0 1px,transparent 1px 3px);mix-blend-mode:multiply}
 html[data-look="cog"] h1,html[data-look="cog"] h2,html[data-look="cog"] h3,html[data-look="cog"] h4{font-family:var(--cg-mono);font-weight:400;letter-spacing:.12em;text-transform:uppercase;color:var(--brass);text-shadow:0 0 8px var(--cg-glow)}
 html[data-look="cog"] h2::after{content:"_";animation:cgblink 1.1s steps(1) infinite}
 @keyframes cgblink{50%{opacity:0}}
@@ -2052,8 +2059,8 @@ html[data-look="cog"] .muted{color:var(--muted)}
         <summary>Game options</summary>
         <div id="b-opts-side"></div>
       </details>
-      <h3 style="margin:.4rem 0">Battle log</h3>
-      <ol id="b-log"></ol>
+      <button type="button" id="b-logbtn" aria-expanded="false" aria-controls="b-logwrap">Battle log <span id="b-lognew" hidden></span></button>
+      <div id="b-logwrap" hidden role="dialog" aria-label="Battle log"><div class="b-loghd"><b>Battle log</b><button type="button" id="b-logx" aria-label="Close battle log">Close \u2715</button></div><ol id="b-log"></ol></div>
     </aside>
     </div>
   </div>
@@ -4380,6 +4387,13 @@ function autoMods(name, text) {
   amRule(/^at the start of the fight phase, each enemy unit within 6" of this model must take a battle-shock test\.?$/, ['fight-shock 6']);
   amRule(/^at the start of the fight phase, every enemy unit \(excluding monsters and vehicles\) within 6" of this model must take a battle-shock test\.?$/, ['fight-shock 6 nomv']);
 })();
+/* battle log drawer */
+document.addEventListener('click', e => {
+  const wrap = document.getElementById('b-logwrap'); if (!wrap) return;
+  if (e.target.closest && e.target.closest('#b-logbtn')) { wrap.hidden = !wrap.hidden; document.getElementById('b-logbtn').setAttribute('aria-expanded', String(!wrap.hidden)); if (!wrap.hidden) { const lg = document.getElementById('b-log'); window.__logSeen = (typeof G !== 'undefined' && G && G.log) ? G.log.length : 0; const nb = document.getElementById('b-lognew'); if (nb) nb.hidden = true; lg.scrollTop = lg.scrollHeight; } }
+  else if (e.target.closest && e.target.closest('#b-logx')) { wrap.hidden = true; document.getElementById('b-logbtn').setAttribute('aria-expanded', 'false'); }
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { const w = document.getElementById('b-logwrap'); if (w && !w.hidden) { w.hidden = true; document.getElementById('b-logbtn').setAttribute('aria-expanded', 'false'); } } });
 /* ---- Wahapedia 11th edition wargear and ability phrasings ---- */
 amRule(/^add 1 to charge rolls made for the bearer's unit\.?$/, ['charge+1']);
 amRule(/^this unit has \+1 to advance rolls and charge rolls\.?$/, ['advance+1', 'charge+1']);
@@ -8119,7 +8133,8 @@ function renderSide() {
   renderEmbarked();
   const info = G.sel || (G.info && G.info.alive ? G.info : null);
   $('#b-unit').innerHTML = info ? `<p class="uinfo">${info === G.sel ? 'Selected' : 'Last clicked'}: <span class="un ${info.side}" data-uid="${info.id}" tabindex="0">${escH(info.name)}</span>, ${totalModels(info)}/${startModels(info)} models${info.W > 1 && info.models > 0 ? `, ${info.cur}/${info.W} wounds on the damaged model` : ''}${info.shocked ? ', battle-shocked' : ''}${tyrArmy(info.side) && info.faction === 'Tyranids' && info.placed ? (inSynapse(info) ? ', in Synapse range' : ', out of Synapse range') : ''}${afflicted(info) ? ', Afflicted (' + plaguesOn(info).map(plagueName).join(' + ') + ')' : ''}${info.warlord ? ', ' + (info.side === 'player' ? 'your' : 'the AI\'s') + ' Warlord' : ''}${enhNames(info).length ? '. Enhancement: ' + enhNames(info).join(', ') : ''}. <span class="muted">Hover a unit name or token to see its datasheet.</span></p>` : '<p class="uinfo muted">Hover a unit on the board, or any unit name, to see its datasheet.</p>';
-  $('#b-log').innerHTML = G.log.map(l => `<li class="${l.cls}">${linkNames(l.html)}</li>`).join('');
+  { const lg = $('#b-log'), wrap = $('#b-logwrap'), open = wrap && !wrap.hidden, atEnd = lg.scrollHeight - lg.scrollTop - lg.clientHeight < 40; lg.innerHTML = G.log.map(l => `<li class="${l.cls}">${linkNames(l.html)}</li>`).join('');
+    if (open && atEnd) lg.scrollTop = lg.scrollHeight; const nb = $('#b-lognew'); if (nb) { if (open) { window.__logSeen = G.log.length; } if (G.log.length < (window.__logSeen || 0)) window.__logSeen = 0; const n = Math.max(0, G.log.length - (window.__logSeen || 0)); nb.hidden = !n || open; nb.textContent = n > 99 ? '99+' : n; } }
 }
 function renderCards() {
   const S = G.sec.player, A2 = G.sec.ai;
@@ -15291,7 +15306,7 @@ void main(){ vW=aP; vN=aN; vC=aC; vM=aM; vL=uLVP*vec4(aP,1.); gl_Position=uVP*ve
 const FS = `#version 300 es
 precision highp float; precision highp sampler2DShadow;
 in vec3 vW, vN, vC; in vec2 vM; in vec4 vL; out vec4 o;
-uniform sampler2DShadow uSh; uniform vec3 uSun, uSunC, uAmbT, uAmbB, uFog, uCam, uSky; uniform float uFogD, uShadow, uTexel, uDust; uniform int uLN; uniform vec4 uLP[8]; uniform vec3 uLC[8];
+uniform sampler2DShadow uSh; uniform vec3 uSun, uSunC, uAmbT, uAmbB, uFog, uCam, uSky; uniform float uFogD, uShadow, uTexel, uDust; uniform vec2 uRes; uniform int uLN; uniform vec4 uLP[8]; uniform vec3 uLC[8];
 float h31(vec3 p){ p=fract(p*.3183099+.1); p*=17.; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }
 float vn(vec3 x){ vec3 i=floor(x), f=fract(x); f=f*f*(3.-2.*f); return mix(mix(mix(h31(i),h31(i+vec3(1,0,0)),f.x),mix(h31(i+vec3(0,1,0)),h31(i+vec3(1,1,0)),f.x),f.y),mix(mix(h31(i+vec3(0,0,1)),h31(i+vec3(1,0,1)),f.x),mix(h31(i+vec3(0,1,1)),h31(i+vec3(1,1,1)),f.x),f.y),f.z); }
 void main(){
@@ -15311,8 +15326,12 @@ void main(){
   col+=c*vM.y*2.2;
   for(int i=0;i<8;i++){ if(i>=uLN) break; vec3 d=uLP[i].xyz-vW; float L=length(d); float a=clamp(1.-L/uLP[i].w,0.,1.); a*=a; col+=c*uLC[i]*a*(max(dot(n,d/max(L,.001)),0.)*.9+.22); }
   float d=length(vW-uCam); float f=1.-exp(-d*uFogD); f=max(f,.0); f*=mix(1.,.55,smoothstep(0.,3.,vW.y)*0.); 
+  float hz=exp(-max(vW.y,0.)*.6)*clamp((d-16.)*.011,0.,.4); col=mix(col,uFog*1.7+.03,hz);
   col=mix(col,uFog,clamp(f,0.,1.));
   col=col/(1.+col*.55); col=pow(col,vec3(1./2.2));
+  col=mix(col,col*col*(3.-2.*col),.38);
+  col*=mix(vec3(.95,1.,1.06),vec3(1.06,1.,.93),smoothstep(.15,.75,dot(col,vec3(.33))));
+  vec2 uv=gl_FragCoord.xy/uRes; col*=mix(.7,1.,smoothstep(1.05,.4,length(uv-.5)*1.3));
   o=vec4(col,1.);
 }`;
 const FS_FLAT = `#version 300 es
@@ -15359,7 +15378,7 @@ class Renderer {
     gl.viewport(0, 0, W, H); gl.clearColor(env.fog[0], env.fog[1], env.fog[2], 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     const mp = this.main; gl.useProgram(mp.p); const U = mp.U;
     gl.uniformMatrix4fv(U.uVP, false, VP); gl.uniformMatrix4fv(U.uLVP, false, LVP);
-    gl.uniform3fv(U.uSun, sd); gl.uniform3fv(U.uSunC, env.sunC); gl.uniform3fv(U.uAmbT, env.ambT); gl.uniform3fv(U.uAmbB, env.ambB); gl.uniform3fv(U.uFog, env.fog); gl.uniform3fv(U.uCam, eye); gl.uniform3fv(U.uSky, env.fog);
+    gl.uniform3fv(U.uSun, sd); gl.uniform3fv(U.uSunC, env.sunC.map(v => v * 1.18)); gl.uniform3fv(U.uAmbT, env.ambT.map(v => v * .68)); gl.uniform3fv(U.uAmbB, env.ambB.map(v => v * .68)); gl.uniform2f(U.uRes, W, H); gl.uniform3fv(U.uFog, env.fog); gl.uniform3fv(U.uCam, eye); gl.uniform3fv(U.uSky, env.fog);
     gl.uniform1f(U.uFogD, env.fogD); gl.uniform1f(U.uShadow, this.q.shadowOn ? 1 : 0); gl.uniform1f(U.uTexel, 1 / this.q.shadow); gl.uniform1f(U.uDust, env.dust || 0);
     { const Ls = (env.lights || []).slice(0, 8), lp = new Float32Array(32), lc = new Float32Array(24); Ls.forEach((l, i) => { lp.set([l.x, l.y, l.z, l.r], i * 4); lc.set(l.c, i * 3); }); gl.uniform1i(U.uLN, Ls.length); if (Ls.length) { gl.uniform4fv(U['uLP[0]'], lp); gl.uniform3fv(U['uLC[0]'], lc); } }
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.shTex); gl.uniform1i(U.uSh, 0);
@@ -15540,8 +15559,8 @@ function chaosDetail(solid, decal, rng, ok, H, key) {
   for (let i = 0; i < 2; i++) { let R = 2.4 + rng() * .6, p = null; for (let t = 0; t < 12 && !p; t++) { const q = place(R + 3.2); if (q && sigils.every(o => Math.hypot(o[0] - q[0], o[1] - q[1]) > 16)) p = q; } if (!p) continue; sigils.push(p); const [x, z] = p, rot = rng() * 6.28, pt = q => [x + q[0], H(x + q[0], z + q[1]) + .076, z + q[1]];
     ground(decal, x, z, R * 1.05, R * 1.05, 28, [.03, .01, .01], [.34, 0], .072, H, rng, .15);
     chaosStar(q => decal.quad(pt(q[0]), pt(q[1]), pt(q[2]), pt(q[3]), [.62, .06, .05], [.78, 0]), R, rot);
-    lights.push({ x, y: 1.3, z, r: 13, c: [.95, .12, .35] });
-    for (let k = 0; k < 3; k++) { const a = rot + k * 2.0944 + .5, bx = x + Math.cos(a) * (R + 1.1), bz = z + Math.sin(a) * (R + 1.1), by = H(bx, bz); tube(solid, [bx, by, bz], [bx, by + .95, bz], .13, .09, 6, IRON, [.7, 0]); blob(solid, bx, by + 1.05, bz, .4, .2, .4, IRON, [.7, 0], rng, .15); blob(solid, bx, by + 1.3, bz, .24, .38, .24, [1, .52, .1], [.3, 1], rng, .4); ground(decal, bx, bz, 1.7, 1.7, 18, [1, .5, .12], [.13, 0], .074, H, rng, .2); if (lights.length < 8) lights.push({ x: bx, y: by + 1.8, z: bz, r: 8, c: [1.1, .5, .16] }); } }
+    lights.push({ x, y: 1.3, z, r: 16, c: [1.4, .16, .5] });
+    for (let k = 0; k < 3; k++) { const a = rot + k * 2.0944 + .5, bx = x + Math.cos(a) * (R + 1.1), bz = z + Math.sin(a) * (R + 1.1), by = H(bx, bz); tube(solid, [bx, by, bz], [bx, by + .95, bz], .13, .09, 6, IRON, [.7, 0]); blob(solid, bx, by + 1.05, bz, .4, .2, .4, IRON, [.7, 0], rng, .15); blob(solid, bx, by + 1.3, bz, .24, .38, .24, [1, .52, .1], [.3, 1], rng, .4); ground(decal, bx, bz, 2.4, 2.4, 18, [1, .5, .12], [.13, 0], .074, H, rng, .2); if (lights.length < 8) lights.push({ x: bx, y: by + 1.8, z: bz, r: 12, c: [1.9, .85, .26] }); } }
   for (let i = 0; i < 6; i++) { const p = place(1.6); if (!p) continue; const [x, z] = p, y = H(x, z), h = 3 + rng() * .8, cw = 1.05, ch = 1.7, cy = y + h - ch / 2 - .15;
     tube(solid, [x, y, z], [x, y + h, z], .06, .045, 6, IRON, [.7, 0]); box(solid, x, y + h - .05, z, cw + .3, .07, .07, 0, IRON, [.7, 0], 0, rng); box(solid, x, cy, z, cw, ch, .05, 0, [.34, .04, .04], [.9, 0], 0, rng);
     for (const f of [-1, 1]) { const o = f * .04; chaosStar(q => solid.quad([x + q[0][0] * .3, cy + .1 + q[0][1] * .3, z + o], [x + q[1][0] * .3, cy + .1 + q[1][1] * .3, z + o], [x + q[2][0] * .3, cy + .1 + q[2][1] * .3, z + o], [x + q[3][0] * .3, cy + .1 + q[3][1] * .3, z + o], [.95, .72, .2], [.3, .75], [x, cy, z]), 1.35, .39); } }
@@ -15683,7 +15702,7 @@ function propsHive(mb, r, rng, i) {
 function scatterHive(mb, rng, ok, H) { for (let i = 0; i < 70; i++) { const x = rng() * BW, z = rng() * BH; if (!ok(x, z, .6)) continue; const s = .03 + rng() * .06; box(mb, x, 0, z, s * 2, s, s * 1.4, rng() * 3, vary([.2, .2, .24], rng, .2), [.8, 0], .01, rng); } for (let i = 0; i < 12; i++) { const x = rng() * BW, z = rng() * BH; if (!ok(x, z, 1)) continue; box(mb, x, 0, z, .5, .9, .3, rng() * 3, [.22, .24, .28], [.7, 0], .02, rng); box(mb, x, .55, z, .3, .05, .02, 0, [.1, .9, 1], [0, .9], 0, rng); } }
 THEMES.hive = { name: 'Hive City', sub: 'Dark streets, neon signs and tall ruins', props: propsHive, scatter: scatterHive, amp: .05, freq: .2, seed: 79,
   env: { sun: [.4, .38, -.5], sunC: [.9, .62, 1.05], ambT: [.12, .1, .19], ambB: [.065, .055, .09], fog: [.065, .045, .1], fogD: .009, dust: 0 },
-  ground: (x, z, h, n) => { let c = mixc([.07, .075, .09], [.15, .155, .18], n); const gx = Math.abs(((x / 8) % 1 + 1) % 1 - .5); if (gx > .497) c = [.4, .33, .08]; const gz = Math.abs(((z / 6) % 1 + 1) % 1 - .5); if (gz > .485) c = shade(c, .6); return c; } };
+  ground: (x, z, h, n) => { let c = mixc([.08, .085, .11], [.2, .19, .21], n); const m = fbm(x * .13 + 9, z * .13); c = mixc(c, m > .55 ? [.22, .15, .12] : [.1, .17, .2], clamp(Math.abs(m - .5) * 2.2, 0, .55)); const gx = Math.abs(((x / 8) % 1 + 1) % 1 - .5); if (gx > .494) c = shade(c, .55); const gz = Math.abs(((z / 6) % 1 + 1) % 1 - .5); if (gz > .488) c = shade(c, .6); return c; } };
 THEMES.hive.poly = { wall: { h: [1, 1.3], th: .6, col: HIVEC, floor: [.12, .125, .15] }, pillar: null, clutter: (mb, x, z, rng, k) => { if (k % 2) container(mb, x, z, rng() * 3, rng); else crate(mb, x, 0, z, .9 + rng() * .5, rng() * 1.5, CRATE[Math.floor(rng() * 4)], rng); } };
 
 /* the original three get the same two-storey ruins now and then */
@@ -15700,22 +15719,25 @@ function buildMap(spec) {
   const outD = (x, z) => Math.hypot(Math.max(-x, 0, x - BW), Math.max(-z, 0, z - BH)), H = (x, z) => th.amp * (fbm(x * th.freq + sd, z * th.freq * 1.3 + sd) - .5) * 2.4 * mask(x, z) * (1 - sstep(.5, 4, outD(x, z)));
   const ok = (x, z, m) => { for (const r of rects) if (tdist(x, z, r) < m + .3) return false; for (const o of OB) if (Math.hypot(x - o.x, z - o.y) < OR + .6) return false; return true; };
   const solid = new MB(), decal = new MB(), zdec = new MB(), odec = new MB(); DECAL = decal;
-  const step = 1, x0 = -36, z0 = -36, nx = Math.ceil((BW + 72) / step), nz = Math.ceil((BH + 72) / step), idx = (i, j) => i * (nz + 1) + j, base = solid.n;
-  for (let i = 0; i <= nx; i++) for (let j = 0; j <= nz; j++) { const x = x0 + i * step, z = z0 + j * step, h = H(x, z), e = .3, dx = (H(x + e, z) - H(x - e, z)) / (2 * e), dz = (H(x, z + e) - H(x, z - e)) / (2 * e), n = v3.norm([-dx, 1, -dz]); solid.vtx([x, h, z], n, th.ground(x, z, h, fbm(x * .22 + sd, z * .22)), [.9, 0]); }
+  const step = 1, x0 = -60, z0 = -60, nx = Math.ceil((BW + 120) / step), nz = Math.ceil((BH + 120) / step), idx = (i, j) => i * (nz + 1) + j, base = solid.n;
+  for (let i = 0; i <= nx; i++) for (let j = 0; j <= nz; j++) { const x = x0 + i * step, z = z0 + j * step, h = H(x, z), e = .3, dx = (H(x + e, z) - H(x - e, z)) / (2 * e), dz = (H(x, z + e) - H(x, z - e)) / (2 * e), n = v3.norm([-dx, 1, -dz]); { const g0 = th.ground(x, z, h, fbm(x * .22 + sd, z * .22)), w = fbm(x * .06 + sd + 40, z * .06 + 7) - .5, d = fbm(x * .5 + sd, z * .5) - .5, k = 1 + d * .22; solid.vtx([x, h, z], n, [clamp(g0[0] * (1 + w * .7) * k, 0, 1), clamp(g0[1] * k, 0, 1), clamp(g0[2] * (1 - w * .7) * k, 0, 1)], [.9, 0]); } }
   for (let i = 0; i < nx; i++) for (let j = 0; j < nz; j++) { const a = base + idx(i, j), b = base + idx(i + 1, j), c = base + idx(i + 1, j + 1), d = base + idx(i, j + 1); solid.I.push(a, d, c, a, c, b); }
+  const tv0 = solid.n;
   rects.forEach((r, i) => { const rr = mulberry(seed * 101 + i * 17 + th.seed); if (r.poly) propsPoly(solid, r, rr, i, th.poly); else th.props(solid, r, rr, i); });
+  { const warm = !(spec.theme === 'desert' || spec.theme === 'forge'), tn = warm ? [1.14, 1.02, .84] : [.86, .98, 1.16]; for (let v = tv0; v < solid.n; v++) for (let k = 0; k < 3; k++) solid.C[v * 3 + k] = Math.min(1, solid.C[v * 3 + k] * tn[k]); }
   th.scatter(solid, mulberry(seed * 13 + th.seed), ok, H);
   dressing(solid, decal, mulberry(seed * 29 + th.seed), ok, H, th, spec.theme);
   surround(solid, decal, mulberry(seed * 53 + th.seed), H, spec.theme, th);
   const chaosOn = spec.chaos !== false && localStorage.getItem('bd.chaos') !== '0', lights = chaosOn ? chaosDetail(solid, decal, mulberry(seed * 37 + th.seed), ok, H, spec.theme) : [];
   /* what kind of cover each footprint is: heavy ruins read cold and pale, light cover reads warm and dark */
+  rects.forEach((r, i) => { const rr = mulberry(seed * 211 + i * 7 + th.seed), ex = [[r.x - .6, r.y - .6, r.w + 1.2, .9], [r.x - .6, r.y + r.h - .3, r.w + 1.2, .9], [r.x - .6, r.y - .6, .9, r.h + 1.2], [r.x + r.w - .3, r.y - .6, .9, r.h + 1.2]]; for (const [x, z, w, d] of ex) decal.quad([x, .066, z], [x, .066, z + d], [x + w, .066, z + d], [x + w, .066, z], [.01, .01, .01], [.32, 0]); for (let k = 0; k < 4; k++) { const x = r.x + rr() * r.w, z = rr() < .5 ? r.y - .3 : r.y + r.h + .3; rubbleAt(solid, rr, H, x, z, (th.poly && th.poly.wall && th.poly.wall.col) || [.3, .3, .3], .5 + rr() * .5); } });
   rects.forEach(r => { const heavy = (r.walls || []).length >= 2, c = heavy ? [.56, .53, .47] : [.2, .16, .1]; decal.quad([r.x, .068, r.y], [r.x, .068, r.y + r.h], [r.x + r.w, .068, r.y + r.h], [r.x + r.w, .068, r.y], c, [heavy ? .22 : .3, 0]); });
   /* zones, as flat tint over the ground */
-  const zoneTint = (z, col) => { if (!z) return; const s = 1, b = z.pts ? z.pts.reduce((m, p) => [Math.min(m[0], p[0]), Math.min(m[1], p[1]), Math.max(m[2], p[0]), Math.max(m[3], p[1])], [1e9, 1e9, -1e9, -1e9]) : [z.x, z.y, z.x + z.w, z.y + z.h]; for (let x = Math.floor(b[0]); x < b[2]; x += s) for (let y = Math.floor(b[1]); y < b[3]; y += s) { if (!zoneHas(z, x + .5, y + .5)) continue; const p = (X, Z) => [X, H(X, Z) + .07, Z]; zdec.quad(p(x, y), p(x, y + s), p(x + s, y + s), p(x + s, y), col, [.045, 0]); } const E = z.pts || (z.kind === 'quarter' ? null : [[z.x, z.y], [z.x + z.w, z.y], [z.x + z.w, z.y + z.h], [z.x, z.y + z.h]]); if (E) for (let k = 0; k < E.length; k++) { const a = E[k], c = E[(k + 1) % E.length], L = Math.hypot(c[0] - a[0], c[1] - a[1]), n = Math.max(1, Math.ceil(L / 1.5)), nn = [-(c[1] - a[1]) / L * .09, (c[0] - a[0]) / L * .09]; for (let q = 0; q < n; q++) { const t0 = q / n, t1 = (q + 1) / n, f = (t, s) => { const X = a[0] + (c[0] - a[0]) * t + nn[0] * s, Z = a[1] + (c[1] - a[1]) * t + nn[1] * s; return [X, H(X, Z) + .08, Z]; }; zdec.quad(f(t0, -1), f(t1, -1), f(t1, 1), f(t0, 1), col, [.5, 0]); } } };
+  const zoneTint = (z, col) => { if (!z) return; const s = 1, b = z.pts ? z.pts.reduce((m, p) => [Math.min(m[0], p[0]), Math.min(m[1], p[1]), Math.max(m[2], p[0]), Math.max(m[3], p[1])], [1e9, 1e9, -1e9, -1e9]) : [z.x, z.y, z.x + z.w, z.y + z.h]; for (let x = Math.floor(b[0]); x < b[2]; x += s) for (let y = Math.floor(b[1]); y < b[3]; y += s) { if (!zoneHas(z, x + .5, y + .5)) continue; const p = (X, Z) => [X, H(X, Z) + .07, Z]; zdec.quad(p(x, y), p(x, y + s), p(x + s, y + s), p(x + s, y), col, [.045, 0]); } const E = z.pts || (z.kind === 'quarter' ? null : [[z.x, z.y], [z.x + z.w, z.y], [z.x + z.w, z.y + z.h], [z.x, z.y + z.h]]); if (E) for (let k = 0; k < E.length; k++) { const a = E[k], c = E[(k + 1) % E.length], L = Math.hypot(c[0] - a[0], c[1] - a[1]), n = Math.max(1, Math.ceil(L / 1.5)), nn = [-(c[1] - a[1]) / L * .09, (c[0] - a[0]) / L * .09]; for (let q = 0; q < n; q++) { const t0 = q / n, t1 = (q + 1) / n, f = (t, s) => { const X = a[0] + (c[0] - a[0]) * t + nn[0] * s, Z = a[1] + (c[1] - a[1]) * t + nn[1] * s; return [X, H(X, Z) + .08, Z]; }; zdec.quad(f(t0, -4.5), f(t1, -4.5), f(t1, 4.5), f(t0, 4.5), col, [.11, 0]); const tm = t0 + (t1 - t0) * .68; zdec.quad(f(t0, -1), f(tm, -1), f(tm, 1), f(t0, 1), col, [.62, 0]); } } };
   if (spec.zones) { zoneTint(spec.zones.ai, [.95, .25, .2]); zoneTint(spec.zones.player, [.3, .55, 1]); }
   /* objectives: the ring (or the terrain-area outline), a faint fill and a flat marker */
   for (const o of OB) {
-    const ring = (pts) => { for (let k = 0; k < pts.length; k++) { const a = pts[k], c = pts[(k + 1) % pts.length], L = Math.hypot(c[0] - a[0], c[1] - a[1]) || 1, n = Math.max(1, Math.ceil(L / 1.2)), nn = [-(c[1] - a[1]) / L * .1, (c[0] - a[0]) / L * .1]; for (let q = 0; q < n; q++) { const t0 = q / n, t1 = (q + 1) / n, f = (t, s) => { const X = a[0] + (c[0] - a[0]) * t + nn[0] * s, Z = a[1] + (c[1] - a[1]) * t + nn[1] * s; return [X, H(X, Z) + .1, Z]; }; odec.quad(f(t0, -1), f(t1, -1), f(t1, 1), f(t0, 1), GOLD, [.6, 0]); } } };
+    const ring = (pts) => { for (let k = 0; k < pts.length; k++) { const a = pts[k], c = pts[(k + 1) % pts.length], L = Math.hypot(c[0] - a[0], c[1] - a[1]) || 1, n = Math.max(1, Math.ceil(L / 1.2)), nn = [-(c[1] - a[1]) / L * .1, (c[0] - a[0]) / L * .1]; for (let q = 0; q < n; q++) { const t0 = q / n, t1 = (q + 1) / n, f = (t, s) => { const X = a[0] + (c[0] - a[0]) * t + nn[0] * s, Z = a[1] + (c[1] - a[1]) * t + nn[1] * s; return [X, H(X, Z) + .1, Z]; }; odec.quad(f(t0, -4), f(t1, -4), f(t1, 4), f(t0, 4), GOLD, [.12, 0]); odec.quad(f(t0, -1), f(t1, -1), f(t1, 1), f(t0, 1), GOLD, [.6, 0]); } } };
     if (o.poly) { ring(o.poly); } else { const pts = []; for (let k = 0; k < 48; k++) pts.push([o.x + Math.cos(k / 48 * 6.283) * OR, o.y + Math.sin(k / 48 * 6.283) * OR]); ring(pts); ground(odec, o.x, o.y, OR, OR, 48, GOLD, [.08, 0], .085, H, rng, 0); }
     ground(odec, o.x, o.y, .5, .5, 20, GOLD, [.55, 0], .11, H, rng, 0);
   }
@@ -15880,7 +15902,7 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
   }
   function set3D(on) {
     if (on && !ensure()) { (typeof flash === 'function' && G) ? flash('3D view needs WebGL 2, which this browser does not offer.') : 0; return; }
-    BF3D.on = on; const cv = document.getElementById('b-3d'), bar = document.getElementById('b-3dbar'), b = document.getElementById('b-3dbtn'), s = $b();
+    BF3D.on = on; document.documentElement.toggleAttribute('data-3d', !!on); const cv = document.getElementById('b-3d'), bar = document.getElementById('b-3dbar'), b = document.getElementById('b-3dbtn'), s = $b();
     if (!cv) return; cv.hidden = !on; bar.hidden = !on; { const ov = document.getElementById('b-3dov'); if (ov) ov.hidden = !on; } b.setAttribute('aria-pressed', on); b.textContent = on ? '2D' : '3D'; s.style.visibility = on ? 'hidden' : '';
     document.getElementById('b-map').classList.toggle('is3d', on);
     if (on) { place(); sync(true); }
