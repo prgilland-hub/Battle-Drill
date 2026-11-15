@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.15-1537';
+  const VERSION = '2026.11.15-1039';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -4309,6 +4309,65 @@ function autoMods(name, text) {
   return out;
 }
 
+/* ---- Ability simulation, batches 50-99: parametric rules covering the leader-grant, self and unit attack phrasings ---- */
+(function () {
+  const sc = s => s ? ' ' + String(s).trim() : '';
+  const L = '^while this (?:model|unit) is leadings? (?:a )?unit, ';
+  const ATK = '(?:an|a ranged|a melee) attack', scOf = t => /ranged/.test(t) ? ' ranged' : /melee/.test(t) ? ' melee' : '';
+  const VS = { 'monster or vehicle': 'vs-mv', 'vehicle': 'vs-veh', 'monster': 'vs-monster', 'character': 'vs-character', 'infantry': 'vs-infantry' };
+  const vsRe = '(monster or vehicle|vehicle|monster|character|infantry)';
+  const GR = { 'lethal hits': 'lethal', 'sustained hits 1': 'sus1', 'devastating wounds': 'dev' };
+  /* batches 50-58: leaders granting weapon abilities to the led unit */
+  amRule(new RegExp(L + '(ranged |melee )?weapons equipped by models in that unit have the \\[(lethal hits|sustained hits 1|devastating wounds)\\] ability\\.?$'), m => ['mod ' + GR[m[2]] + sc(m[1])]);
+  amRule(new RegExp(L + '(ranged |melee )?weapons equipped by models in that unit have the \\[sustained hits 1\\] and \\[lance\\] abilities\\.?$'), m => ['mod sus1' + sc(m[1]), 'mod lance' + sc(m[1])]);
+  amRule(new RegExp(L + 'ranged weapons equipped by models in that unit have the \\[ignores cover\\] ability\\.?$'), ['mod ignore-cover ranged']);
+  /* batches 59-66: leaders improving rolls for the led unit */
+  amRule(new RegExp(L + 'each time a model in that unit makes ' + ATK + ', re-roll a hit roll of 1\\.?$'), m => ['mod rr-hit-1s' + scOf(m[0].split('makes')[1])]);
+  amRule(new RegExp(L + 'each time a model in that unit makes ' + ATK + ', re-roll a wound roll of 1\\.?$'), m => ['mod rr-wound-1s' + scOf(m[0].split('makes')[1])]);
+  amRule(new RegExp(L + 'each time a model in that unit makes ' + ATK + ', you can re-roll the (hit|wound) roll\\.?$'), m => ['mod rr-' + m[1] + '-all' + scOf(m[0].split('makes')[1])]);
+  amRule(new RegExp(L + 'each time a model in that unit makes ' + ATK + ', you can add 1 to the (hit|wound) roll\\.?$'), m => ['mod ' + m[1] + '+1' + scOf(m[0].split('makes')[1])]);
+  amRule(new RegExp(L + 'each time a model in that unit makes (?:an|a ranged|a melee) attack, a successful unmodified hit roll of 5\\+ scores a critical hit\\.?$'), m => ['mod crit5' + scOf(m[0].split('makes')[1])]);
+  amRule(new RegExp(L + 'improve the armour penetration characteristic of (melee|ranged) weapons equipped by models in that unit by 1\\.?$'), m => ['mod ap+1 ' + m[1]]);
+  amRule(new RegExp(L + 'you can re-roll charge rolls made for that unit\\.?$'), ['reroll-charge']);
+  amRule(new RegExp(L + 'you can re-roll advance rolls made for that unit\\.?$'), ['reroll-advance']);
+  amRule(new RegExp(L + 'models in that unit have the fights first ability\\.?$'), ['grant-ff']);
+  amRule(new RegExp(L + 'improve the leadership and objective control characteristics of models in that unit by 1\\.?$'), ['oc+1']);
+  amRule(new RegExp(L + 'add 1 to the move characteristic of models in that unit and you can re-roll advance rolls made for that unit\\.?$'), ['reroll-advance']);
+  /* batches 67-74: the model's own attacks against named target types */
+  amRule(new RegExp('^each time this model makes (an|a ranged|a melee) attack that targets (?:a|an) ' + vsRe + ' unit, add 1 to the wound roll\\.?$'), m => ['mod wound+1' + scOf(m[1]) + ' ' + VS[m[2]] + ' self']);
+  amRule(new RegExp('^each time this model makes (an|a ranged|a melee) attack that targets (?:a|an) ' + vsRe + ' unit, you can re-roll the damage roll\\.?$'), m => ['mod rr-dmg' + scOf(m[1]) + ' ' + VS[m[2]] + ' self']);
+  amRule(new RegExp('^each time this model makes (an|a ranged|a melee) attack that targets (?:a|an) ' + vsRe + ' unit, you can re-roll the hit roll and you can re-roll the wound roll\\.?'), m => ['mod rr-hit-all' + scOf(m[1]) + ' ' + VS[m[2]] + ' self', 'mod rr-wound-all' + scOf(m[1]) + ' ' + VS[m[2]] + ' self']);
+  amRule(new RegExp('^each time this model makes (an|a ranged|a melee) attack that targets (?:a|an) ' + vsRe + ' unit, you can re-roll the wound roll\\.?'), m => ['mod rr-wound-all' + scOf(m[1]) + ' ' + VS[m[2]] + ' self']);
+  amRule(/^each time this model makes a melee attack, if it made a charge move this turn, you can re-roll the hit roll and you can re-roll the wound roll\.?$/, ['mod rr-hit-all melee if-charged self', 'mod rr-wound-all melee if-charged self']);
+  amRule(/^each time this model makes an attack that targets a unit that is below its starting strength, you can re-roll the hit roll\. if that target is below half-strength, you can re-roll the wound roll as well\.?$/, ['mod rr-hit-all vs-below-start self', 'mod rr-wound-all vs-below-half self']);
+  amRule(/^each time this model makes a ranged attack, re-roll a hit roll of 1\.?$/, ['mod rr-hit-1s ranged self']);
+  amRule(/^each time this model makes a melee attack, re-roll a hit roll of 1\.?$/, ['mod rr-hit-1s melee self']);
+  /* batches 75-86: whole-unit attack phrasings */
+  amRule(new RegExp('^each time a model in this unit makes ' + ATK + ', re-roll a hit roll of 1\\.?(?: if the target of that attack is (?:an enemy unit )?within range of an objective marker, you can re-roll the hit roll instead\\.?)?$'), m => { const s = scOf(m[0].split('makes')[1]); return ['mod rr-hit-1s' + s].concat(/instead/.test(m[0]) ? ['mod rr-hit-all vs-objective' + s] : []); });
+  amRule(new RegExp('^each time a model in this unit makes ' + ATK + ', re-roll a wound roll of 1\\.?(?: if the target (?:of that attack )?is (?:an enemy unit )?within range of an objective marker, you can re-roll the wound roll(?: instead)?\\.?)?$'), m => { const s = scOf(m[0].split('makes')[1]); return ['mod rr-wound-1s' + s].concat(/objective/.test(m[0]) ? ['mod rr-wound-all vs-objective' + s] : []); });
+  amRule(/^each time a model in this unit makes a ranged attack, re-roll a wound roll of 1\.?$/, ['mod rr-wound-1s ranged']);
+  amRule(/^each time a model in this unit makes a ranged attack that targets an enemy unit \(excluding units that can fly\), add 1 to the hit roll\.?$/, ['mod hit+1 ranged vs-nofly']);
+  amRule(/^each time a model in this unit makes an attack that targets a character unit, re-roll a wound roll\.?$/, ['mod rr-wound-all vs-character']);
+  amRule(/^each time a model in this unit makes an attack that targets (?:an enemy|a) unit that is below its starting strength, add 1 to the hit roll\. if that enemy unit is below half-strength, add 1 to the wound roll as well\.?$/, ['mod hit+1 vs-below-start', 'mod wound+1 vs-below-half']);
+  amRule(/^each time a model in this unit makes an attack that targets a unit that is not below half-strength, add 1 to the hit roll\.?$/, ['mod hit+1 vs-not-below-half']);
+  amRule(/^while this model is leading a unit, each time a model in that unit makes an attack that targets a unit that is below half-strength, add 1 to the hit roll\.?$/, ['mod hit+1 vs-below-half']);
+  amRule(/^each time a model in this unit makes a ranged attack, you can ignore any or all modifiers to the hit roll\.?$/, ['mod ignore-hit-mods ranged']);
+  amRule(/^each time a model in this unit makes (?:a )?(melee )?attack that targets a unit \(excluding monsters and vehicles\), improve the armour penetration characteristic of that attack by 1\.?$/, ['mod ap+1 melee vs-not-mv']);
+  amRule(/^each time a model in this unit makes a melee attack that targets a unit \(excluding monsters and vehicles\), improve the armour penetration characteristic of that attack by 1\.?$/, ['mod ap+1 melee vs-not-mv']);
+  /* batches 87-99: named leader perks with a plain mechanical effect */
+  amRule(/^while this model is leading a unit, models in that unit have the feel no pain (\d)\+ ability\. if that unit has the [a-z ]+ keyword, models in that unit have the feel no pain (\d)\+ ability instead\.?$/, m => ['lead-fnp ' + m[1]]);
+  amRule(/^while this (?:model|unit) is leading a unit, models in that unit have the feel no pain (\d)\+ ability\.?$/, m => ['lead-fnp ' + m[1]]);
+  amRule(/^while this model is leading a unit, melee weapons equipped by models in that unit have the \[lethal hits\] ability\.?$/, ['mod lethal melee']);
+  /* second sweep */
+  amRule(/^each time this model makes an attack that targets the closest eligible enemy unit, re-roll a hit roll of 1 and re-roll a wound roll (?:of|or) 1\.?$/, ['mod rr-hit-1s closest self', 'mod rr-wound-1s closest self']);
+  amRule(/^each time this model makes an attack that targets an enemy unit that is battle-shocked, add 1 to the wound roll\.?$/, ['mod wound+1 vs-shocked self']);
+  amRule(/^each time this model makes a melee attack that targets a character or monster unit, you can re-roll the wound roll\./, ['mod rr-wound-all melee vs-cmv self']);
+  amRule(/^each time a model in this unit makes an attack, re-roll a hit roll of 1\. while this unit is within 6" of one or more friendly [a-z ]+ battleline units, you can re-roll the hit roll instead\.?$/, ['mod rr-hit-1s']);
+  amRule(/^each time a model in this unit makes an attack, re-roll a hit roll of 1\. if the target is within range of one or more objective markers, re-roll a wound roll of 1 as well\.?$/, ['mod rr-hit-1s', 'mod rr-wound-1s vs-objective']);
+  amRule(/^each time this model has shot, select one enemy unit hit by one or more of those attacks\. until the end of the phase, that unit cannot have the benefit of cover\.?$/, ['burning-spray']);
+  amRule(/^each time this model ends a normal move, you can select one enemy unit it moved over during that move\. until the end of the turn, models in that unit cannot have the benefit of cover\.?$/, ['ts-flame']);
+  amRule(/^while this model is leading a unit, weapons equipped by models in that unit have the \[lethal hits\] ability\. in addition, each time a model in that unit makes an attack, a critical hit is scored on an unmodified hit roll of 5\+/, ['mod lethal', 'mod crit5']);
+})();
 /* ---- Wahapedia 11th edition wargear and ability phrasings ---- */
 amRule(/^add 1 to charge rolls made for the bearer's unit\.?$/, ['charge+1']);
 amRule(/^this unit has \+1 to advance rolls and charge rolls\.?$/, ['advance+1', 'charge+1']);
