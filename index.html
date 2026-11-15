@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.15-1312';
+  const VERSION = '2026.11.15-1315';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -15654,6 +15654,7 @@ function surround(solid, decal, rng, H, key, th) {
   for (const [x, z, w, d] of [[BW / 2, -.6, BW + 2.4, 1.2], [BW / 2, BH + .6, BW + 2.4, 1.2], [-.6, BH / 2, 1.2, BH], [BW + .6, BH / 2, 1.2, BH]]) box(solid, x, .15, z, w, .5, d, 0, skirt, [.9, 0], 0, rng);
   for (let i = 0; i < 70; i++) {
     const x = -30 + rng() * (BW + 60), z = -24 + rng() * (BH + 48), o = out(x, z); if (o < 3.5 || o > 30) continue;
+    if ((Math.abs(x - 30) < 17.5 && (Math.abs(z + 7) < 7 || Math.abs(z - BH - 7) < 7))) continue;
     const k = rng();
     if (key === 'jungle') { if (k < .55) jungleTree(solid, x, z, 5 + rng() * 3.5, rng); else fern(solid, x, H(x, z), z, rng); }
     else if (key === 'marsh') { if (k < .4) deadTree(solid, x, z, 3.8 + rng() * 2.4, rng); else rubbleAt(solid, rng, H, x, z, rock, 1.4 + rng()); }
