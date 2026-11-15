@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.15-1039';
+  const VERSION = '2026.11.15-1205';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -4367,6 +4367,7 @@ function autoMods(name, text) {
   amRule(/^each time this model has shot, select one enemy unit hit by one or more of those attacks\. until the end of the phase, that unit cannot have the benefit of cover\.?$/, ['burning-spray']);
   amRule(/^each time this model ends a normal move, you can select one enemy unit it moved over during that move\. until the end of the turn, models in that unit cannot have the benefit of cover\.?$/, ['ts-flame']);
   amRule(/^while this model is leading a unit, weapons equipped by models in that unit have the \[lethal hits\] ability\. in addition, each time a model in that unit makes an attack, a critical hit is scored on an unmodified hit roll of 5\+/, ['mod lethal', 'mod crit5']);
+  amRule(/^once per battle round, one unit from your army with this ability can use it when its unit is targeted with a stratagem\. if it does, reduce the cp cost of that use of that stratagem by 1cp\.?$/, ['strat-discount']);
 })();
 /* ---- Wahapedia 11th edition wargear and ability phrasings ---- */
 amRule(/^add 1 to charge rolls made for the bearer's unit\.?$/, ['charge+1']);
