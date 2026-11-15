@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.15-1618';
+  const VERSION = '2026.11.15-1627';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -20369,15 +20369,17 @@ function whOptRules(rows, u) {
   for (const row of rows) {
     const raw = String(row.description || ''), lis = [...raw.matchAll(/<li[^>]*>([\s\S]*?)<\/li>/gi)].map(m => whNm(m[1]));
     const head = whNm(raw.replace(/<ul[\s\S]*$/i, '')).replace(/[.:]\s*$/, ''), text = whNm(raw.replace(/<li[^>]*>/gi, ' | ').replace(/<\/li>/gi, ''));
-    let subj, take = '', rest = '', m;
-    if ((m = head.match(/^(.*?)\s+(?:can|may)\s+(?:each\s+)?have\s+(?:their|its|his|her)\s+(.+?)\s+replaced with\s*(.*)$/i))) { subj = m[1]; take = m[2]; rest = m[3]; }
-    else if ((m = head.match(/^(.*?)['’]s\s+(.+?)\s+can be replaced with\s*(.*)$/i))) { subj = m[1]; take = m[2]; rest = m[3]; }
-    else if ((m = head.match(/^(.*?)\s+(?:can|may)\s+(?:each\s+)?replace\s+(?:their|its|his|her)\s+(.+?)\s+with\s*(.*)$/i))) { subj = m[1]; take = m[2]; rest = m[3]; }
-    else if ((m = head.match(/^(.*?)\s+(?:can|may)\s+(?:each\s+)?(?:be equipped with|have)\s+(.*)$/i))) { subj = m[1]; rest = m[2]; }
+    let subj, take = '', rest = '', m, gate = null, hd = head;
+    if ((m = hd.match(/^if this unit contains (\d+) models?,\s*(.*)$/i))) { gate = { eq: +m[1] }; hd = m[2]; } else if ((m = hd.match(/^if this unit contains (\d+) or (fewer|more) models?,\s*(.*)$/i))) { gate = m[2].toLowerCase() === 'more' ? { min: +m[1] } : { max: +m[1] }; hd = m[3]; }
+    if ((m = hd.match(/^each of (?:this model|its)['’]?s?\s+(.+?)\s+can be replaced with\s*(.*)$/i))) { subj = 'this model'; take = m[1]; rest = m[2]; }
+    else if ((m = hd.match(/^(.*?)\s+(?:can|may)\s+(?:each\s+)?have\s+(?:their|its|his|her)\s+(.+?)\s+replaced with\s*(.*)$/i))) { subj = m[1]; take = m[2]; rest = m[3]; }
+    else if ((m = hd.match(/^(.*?)['’]s\s+(.+?)\s+can be replaced with\s*(.*)$/i))) { subj = m[1]; take = m[2]; rest = m[3]; }
+    else if ((m = hd.match(/^(.*?)\s+(?:can|may)\s+(?:each\s+)?replace\s+(?:their|its|his|her)\s+(.+?)\s+with\s*(.*)$/i))) { subj = m[1]; take = m[2]; rest = m[3]; }
+    else if ((m = hd.match(/^(.*?)\s+(?:can|may)\s+(?:each\s+)?(?:be equipped with|have)\s+(.*)$/i))) { subj = m[1]; rest = m[2]; }
     else { if (head && !/^none$/i.test(head) && !/^\*|^maximum|cannot/i.test(head)) skipped.push(text); continue; }
     if (/\bif\b/i.test(subj) || /\bfollowing\b/i.test(take)) { skipped.push(text); continue; }
     let perN = 0, each = 1, cap = 0, partial = false, s = subj.toLowerCase().replace(/’/g, "'");
-    if ((m = s.match(/^for every (\d+) models?(?: in this unit)?,?\s*(?:(up to )?(\d+|one|two)\s)?/))) { perN = +m[1]; if (m[3]) each = ({ one: 1, two: 2 }[m[3]] || +m[3]); }
+    if ((m = s.match(/^for every (\d+) (?:models?|[a-z' -]+?)(?: in this unit)?,?\s*(?:(up to )?(\d+|one|two)\s)?/)) && /^for every \d+ [a-z' -]+? in this unit|^for every \d+ models?/.test(s)) { perN = +m[1]; if (m[3]) each = ({ one: 1, two: 2 }[m[3]] || +m[3]); }
     else if (/^(any number of|all)\b/.test(s)) perN = 1;
     else if ((m = s.match(/^(?:up to )?(\d+|one|two|three|four)\s+(?!.*\bin this unit\b).*/))) { cap = ({ one: 1, two: 2, three: 3, four: 4 }[m[1]] || +m[1]); perN = 1; }
     else if (/^this (model|unit)$/.test(s) || /^it$/.test(s)) { if (!single) partial = true; }
@@ -20387,10 +20389,10 @@ function whOptRules(rows, u) {
     const tk = take ? takeOf(take) : []; if (take && !tk.length) { skipped.push(text); continue; }
     const srcs = lis.length ? lis : [rest.replace(/\.$/, '')]; const choices = srcs.map(choiceOf).filter(Boolean);
     if (!choices.length || (!take && !choices.some(c => c.add.length))) { skipped.push(text); continue; }
-    const base = { text: head + (lis.length ? ': ' + lis.join('; ') : ''), take: tk };
+    const base = Object.assign({ text: head + (lis.length ? ': ' + lis.join('; ') : ''), take: tk }, gate ? { gate } : {});
     if (perN) {
       const grp = choices.length > 1 ? 'g' + n : undefined;
-      choices.forEach((c, i) => rules.push(Object.assign({ id: 'o' + (n++), perN, each, choices: [c] }, cap ? { cap } : {}, grp ? { grp } : {}, { text: base.text.split(':')[0] + (choices.length > 1 ? ': ' + c.name : ': ' + c.name), take: tk })));
+      choices.forEach((c, i) => rules.push(Object.assign({ id: 'o' + (n++), perN, each, choices: [c] }, cap ? { cap } : {}, grp ? { grp } : {}, gate ? { gate } : {}, { text: base.text.split(':')[0] + (choices.length > 1 ? ': ' + c.name : ': ' + c.name), take: tk })));
     } else rules.push(Object.assign({ id: 'o' + (n++), choices }, partial ? { partial: true } : {}, base));
   }
   return { rules, skipped };
@@ -21267,9 +21269,9 @@ function optionsHtml(e, u, W) {
   const rules = u.wgOpts || []; if (!rules.length) return '';
   const sel = W.opt || {};
   const body = rules.map(r => {
-    const ok = optRuleOk(rules, sel, r), v = sel[r.id];
+    const ok = optRuleOk(rules, sel, r) && optGate(r, e.models), v = sel[r.id];
     if (r.perN) {
-      const max = Math.max(0, Math.min(optMax(r, e.models), r.grp ? optMax(r, e.models) - optGroupUsed(rules, sel, r) : 1e9)), c = r.choices[0];
+      const max = Math.max(0, Math.min(optMax(r, e.models), r.grp ? optMax(r, e.models) - optGroupUsed(rules, sel, r) : 1e9, e.models - optTakeUsed(rules, sel, r, e.models))), c = r.choices[0];
       return `<div class="wg-row"><label class="wg-lab" title="${escH(r.text)}">${escH(r.text)}</label> <label class="muted">${escH(c.name)} <input type="number" min="0" max="${max}" data-wg-opt="${e.key}|${r.id}" value="${+v || 0}" style="width:54px"${ok && max ? '' : ' disabled'}> <small>(up to ${max}${r.grp ? ', shared with the other choices above/below' : ''})</small></label></div>`;
     }
     return `<div class="wg-row"><label class="wg-lab" style="display:block">${escH(r.text)}</label><select data-wg-opt="${e.key}|${r.id}" aria-label="${escH(r.text)}"${ok || (v !== undefined && v !== '') ? '' : ' disabled'}><option value="">Keep the standard weapon${(r.take || []).length ? ' (' + escH(r.take.join(', ')) + ')' : ''}</option>${r.choices.map((c, i) => `<option value="${i}"${String(v) === String(i) ? ' selected' : ''}${optChoiceOk(rules, sel, r, c) || String(v) === String(i) ? '' : ' disabled'}>${escH(c.name)}</option>`).join('')}</select>${ok || (v !== undefined && v !== '') ? '' : ' <small class="muted">Another option already replaced this weapon.</small>'}</div>`;
@@ -21283,7 +21285,8 @@ function wargearHtml(e) {
   const ch = wpnAddChoices(e);
   return `<details class="wg" data-wg-open="${e.key}"${B.wOpen.has(e.key) ? ' open' : ''}><summary>Wargear (${rows.filter(x => !W.off[x.w.name]).length + (W.add || []).length} weapons${(u.wgOpts || []).length ? ', options' : ''})</summary>
     ${optionsHtml(e, u, W)}${rows.map(x => line(x.w, x.melee)).join('')}${added}
-    <div class="wg-row"><select data-wg-add="${e.key}" aria-label="Add a weapon"><option value="">Add a weapon from another ${escH(B.faction)} datasheet…</option>${ch.map((c, i) => `<option value="${i}">${c.melee ? '[melee] ' : ''}${escH(c.w.name)} (${escH(c.from)})</option>`).join('')}</select></div>
+    <div class="wg-row"><label class="muted" style="font-size:.78rem"><input type="checkbox" data-wg-free="1"${B.freeWpn ? ' checked' : ''}> Allow weapons from other datasheets (not by the rules)</label></div>
+    ${B.freeWpn || (W.add || []).length ? `<div class="wg-row"><select data-wg-add="${e.key}" aria-label="Add a weapon"><option value="">Add a weapon from another ${escH(B.faction)} datasheet…</option>${ch.map((c, i) => `<option value="${i}">${c.melee ? '[melee] ' : ''}${escH(c.w.name)} (${escH(c.from)})</option>`).join('')}</select></div>` : ''}
     <p class="muted" style="margin:2px 0 0;font-size:.78rem">Unticked weapons are left off the unit. Points don't change when you swap weapons: edit the points box if your list charges for it.</p></details>`;
 }
 function rosterRows(filterFn, opts) {
@@ -21412,6 +21415,7 @@ function renderBuilder() {
   on('[data-wg-n]', 'change', ev => { const [k, n] = ev.currentTarget.dataset.wgN.split('|'), e = B.roster.find(x => x.key === +k), v = Math.max(0, Math.min(e.models, Math.floor(+ev.currentTarget.value) || 0)); wpnState(e).cnt[n] = v; renderBuilder(); });
   on('[data-wg-addn]', 'change', ev => { const [k, n] = ev.currentTarget.dataset.wgAddn.split('|'), e = B.roster.find(x => x.key === +k), a = (wpnState(e).add || []).find(z => z.w.name === n); if (a) a.count = Math.max(1, Math.min(e.models, Math.floor(+ev.currentTarget.value) || 1)); renderBuilder(); });
   on('[data-wg-rm]', 'click', ev => { const [k, n] = ev.currentTarget.dataset.wgRm.split('|'), e = B.roster.find(x => x.key === +k); wpnState(e).add = wpnState(e).add.filter(z => z.w.name !== n); renderBuilder(); });
+  on('[data-wg-free]', 'change', ev => { B.freeWpn = ev.currentTarget.checked; renderBuilder(); });
   on('[data-wg-add]', 'change', ev => { const e = B.roster.find(x => x.key === +ev.currentTarget.dataset.wgAdd), c = wpnAddChoices(e)[+ev.currentTarget.value]; if (!c) return; wpnState(e).add.push({ w: JSON.parse(JSON.stringify(c.w)), melee: c.melee, from: c.from, count: 1 }); B.wOpen.add(e.key); renderBuilder(); });
   const dn = $('#det-new'); if (dn) dn.addEventListener('click', () => editDetachment(null));
   box.querySelectorAll('[data-detedit]').forEach(b => b.addEventListener('click', () => editDetachment(detsFor(B.faction).find(x => x.id === b.dataset.detedit))));
@@ -21467,8 +21471,21 @@ function editDetachment(d) {
 /* Datasheet wargear options (u.wgOpts): each rule swaps some of the model's weapons for others. W.opt holds the choice per rule. */
 const OPT_CLONE = o => JSON.parse(JSON.stringify(o));
 const optHas = (w, n) => w.name === n || w.alt === n;
-const optMax = (r, models) => r.partial ? 1 : Math.min(r.cap || 1e9, Math.floor(models / (r.perN || 1)) * (r.each || 1));
+const optGate = (r, models) => !r.gate || (r.gate.eq != null ? models === r.gate.eq : r.gate.min != null ? models >= r.gate.min : models <= r.gate.max);
+const optMax = (r, models) => !optGate(r, models) ? 0 : r.partial ? 1 : Math.min(r.cap || 1e9, Math.floor(models / (r.perN || 1)) * (r.each || 1));
 const optGroupUsed = (rules, sel, r) => r.grp ? rules.filter(q => q !== r && q.grp === r.grp).reduce((a, q) => a + (Math.max(0, Math.floor(+sel[q.id]) || 0)), 0) : 0;
+function optTakeUsed(rules, sel, r, models, upto) {   /* models whose weapon is already swapped away by the other rules that take the same weapon (counting only what those rules can really use) */
+  if (!(r.take || []).length) return 0; const tU = {}, gU = {};
+  for (const q of rules) {
+    if (q === r) { if (upto) break; continue; }
+    const v = sel[q.id]; if (v === undefined || v === '' || v === null) continue; let n;
+    if (q.perN) { n = Math.max(0, Math.min(optMax(q, models), Math.floor(+v) || 0)); if (q.grp) { n = Math.min(n, optMax(q, models) - (gU[q.grp] || 0)); gU[q.grp] = (gU[q.grp] || 0) + Math.max(0, n); } }
+    else n = q.partial ? 1 : models;
+    for (const t of q.take || []) { const left = Math.max(0, models - (tU[t] || 0)); const k = q.perN ? Math.min(n, left) : n; if (q.perN) n = k; tU[t] = (tU[t] || 0) + (q.perN ? k : n); }
+  }
+  return Math.max(0, ...r.take.map(t => Math.min(models, tU[t] || 0)));
+}
+const selOrdered = (rules, sel, r) => sel;
 function optRuleOk(rules, sel, r) {   /* a rule can't be used when another chosen rule already swapped one of the same weapons or a unique item */
   const taken = new Set(), once = new Set();
   for (const q of rules) { if (q === r) continue; const v = sel[q.id]; if (q.perN || q.partial || v === undefined || v === '' || v === null) continue; const c = q.choices[+v]; if (!c) continue; (q.take || []).forEach(t => taken.add(t)); if (c.once) once.add(c.once); }
@@ -21485,9 +21502,10 @@ function applyOpts(u, W, models) {
   const gone = new Set(), cnt = {}, add = [], usedOnce = new Set(), grpUsed = {};
   for (const r of rules) {
     const v = sel[r.id]; if (v === undefined || v === '' || v === null) continue;
-    if (!optRuleOk(rules, sel, r)) continue;
+    if (!optRuleOk(rules, sel, r) || !optGate(r, models || u.models)) continue;
     if (r.perN) {
       let n = Math.max(0, Math.min(optMax(r, models || u.models), Math.floor(+v) || 0));
+      n = Math.min(n, Math.max(0, (models || u.models) - optTakeUsed(rules, sel, r, models || u.models, true)));
       if (r.grp) { n = Math.min(n, optMax(r, models || u.models) - (grpUsed[r.grp] || 0)); grpUsed[r.grp] = (grpUsed[r.grp] || 0) + Math.max(0, n); }
       if (!n || n < 1) continue;
       const c = r.choices[0];
@@ -21505,7 +21523,7 @@ function applyOpts(u, W, models) {
   u.ranged = (u.ranged || []).filter(w => ![...gone].some(t => optHas(w, t))); u.melee = (u.melee || []).filter(w => ![...gone].some(t => optHas(w, t)));
   for (const k of ['ranged', 'melee']) for (const w of u[k]) for (const t of Object.keys(cnt)) if (optHas(w, t)) { const left = (models || u.models) - cnt[t]; if (left > 0) w.count = left; else { u.ranged = u.ranged.filter(x => x !== w); u.melee = u.melee.filter(x => x !== w); } }
   const seen = [];
-  for (const a of add) { const dup = seen.find(x => x.melee === a.melee && x.w.name === a.w.name && x.w.count && a.w.count); if (dup) { dup.w.count += a.w.count; continue; } seen.push(a); (a.melee ? u.melee : u.ranged).push(a.w); }
+  for (const a of add) { const dup = seen.find(x => x.melee === a.melee && x.w.name === a.w.name && x.w.count && a.w.count); if (dup) { dup.w.count = Math.min(dup.w.count + a.w.count, models || u.models); continue; } seen.push(a); (a.melee ? u.melee : u.ranged).push(a.w); }
 }
 function applyWargear(u, W, models) {
   applyOpts(u, W, models);
