@@ -149,7 +149,7 @@ const BDModels = (function () {
   async function load() { try { const d = await idbOpen(); index = await rq(tx(d, 'index').objectStore('index').getAll()); d.close(); } catch (e) { index = []; } cache.clear(); loading.clear(); poolCache.clear(); return index.length; }
   function fetchFig(m) {
     if (cache.has(m.key)) return cache.get(m.key); if (loading.has(m.key)) return null; loading.add(m.key);
-    idbOpen().then(async d => { const rec = await rq(tx(d, 'figs').objectStore('figs').get(m.key)); d.close(); if (rec) { if (cache.size > 350) cache.delete(cache.keys().next().value); cache.set(m.key, prep(rec)); } loading.delete(m.key); ping(); }).catch(() => { loading.delete(m.key); });
+    idbOpen().then(async d => { const rec = await rq(tx(d, 'figs').objectStore('figs').get(m.key)); d.close(); if (!rec) console.warn('[BDModels] indexed but not stored:', m.key, m.name); if (rec) { if (cache.size > 350) cache.delete(cache.keys().next().value); cache.set(m.key, prep(rec)); } loading.delete(m.key); ping(); }).catch(e => { loading.delete(m.key); console.warn('[BDModels] could not load', m.name, e); });
     return null;
   }
   /* datasheet name (+faction) -> which stored models may stand in for it */
@@ -172,6 +172,8 @@ const BDModels = (function () {
   const FAM = [['space marines', 'black templars', 'ultramarines', 'imperial fists', 'iron hands', 'raven guard', 'salamanders', 'white scars', 'blood angels', 'dark angels', 'deathwatch', 'raptors'], ['chaos space marines', 'world eaters', 'thousand sons', 'night lords', 'word bearers', 'alpha legion', 'red corsairs', "emperor's children", 'death guard', 'chaos daemons'], ['imperial knights', 'chaos knights'], ['adepta sororitas', 'sisters and agents'], ['aeldari', 'drukhari']];
   const related = (a, b) => { a = String(a || '').toLowerCase(); b = String(b || '').toLowerCase(); if (!a || !b || b === '?' || a === '?') return true; if (a.includes(b) || b.includes(a)) return true; return FAM.some(g => g.some(x => a.includes(x)) && g.some(x => b.includes(x))); };
   const hash = s => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
+  const factionsNow = () => { const c = {}; for (const m of index) c[m.faction] = (c[m.faction] || 0) + 1; return c; };
+  pool.warned = new Set();
   function pool(ds, faction) {
     const k = ds + '|' + faction; if (poolCache.has(k)) return poolCache.get(k); const n = String(ds || '').toLowerCase().trim(); let out = null;
     for (const [re, fOk, pr] of RULES) { if (re.test(n) && fOk(faction)) { const l = index.filter(f => f.h > .45 && pr.test(f.name.toLowerCase())); if (l.length) { out = l; break; } } }
@@ -181,10 +183,11 @@ const BDModels = (function () {
         const find = tt => index.filter(f => { if (f.h <= .45) return false; const ft = new Set(toks(f.name)); return tt.every(w => ft.has(w)); });
         let m = find(t); if (!m.length && t2.length && t2.length < t.length) m = find(t2);
         if (!m.length) { const tt = t2.length ? t2 : t; m = index.filter(f => { if (f.h <= .45) return false; const ns = toks(f.name).join(''); return tt.every(w => ns.includes(w)); }); }
+        const VEH = /land ?raider|rhino|predator|repulsor|impulsor|bunker|dreadnought|gladiator|redemptor|razorback|vindicator|whirlwind|stormhawk|thunderhawk/i; if (!VEH.test(ds)) { const nv = m.filter(f => !VEH.test(f.name)); if (nv.length) m = nv; }
         const same = m.filter(f => related(faction, f.faction)); out = same.length ? same : (m.length && !FAM.some(g => g.some(x => String(faction || '').toLowerCase().includes(x))) ? m : null);
       }
     }
-    if (out && !out.length) out = null; poolCache.set(k, out); return out;
+    if (out && !out.length) out = null; if (!out && !pool.warned.has(k)) { pool.warned.add(k); try { console.info('[BDModels] no model for "' + ds + '" (' + faction + '). Library: ' + index.length + ' models in ' + JSON.stringify(factionsNow())); } catch (e) { } } poolCache.set(k, out); return out;
   }
   /* returns the model if it is ready; otherwise starts loading it and returns null (the board redraws when it arrives) */
   /* squads of mixed models: the first model is the sergeant/champion if one exists, every fourth model after that carries a special or heavy weapon, the rest are the plain troopers */
