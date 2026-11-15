@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.15-0032';
+  const VERSION = '2026.11.15-0034';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -364,7 +364,7 @@ const BDModels = (function () {
     [/maulerfiend/, ANY, /maulerfiend/], [/forgefiend/, ANY, /forgefiend/], [/plagueburst crawler/, ANY, /plagueburst crawler/], [/foetid bloat-?drone/, ANY, /bloatdrone|plague drone/], [/myphitic blight-?hauler/, ANY, /blight hauler/],
     [/mortarion/, ANY, /^mortarion/], [/lord of contagion|typhus/, ANY, /lord of contagion|lord felthius/], [/lord of poxes/, ANY, /lord of poxes/], [/lord of virulence/, ANY, /lord of virulence/], [/biologus putrifier/, ANY, /biologus/],
     [/plague surgeon/, ANY, /plague surgeon/], [/tallyman/, ANY, /tallyman/], [/foul blightspawn/, ANY, /foul blightspawn/], [/noxious blightbringer/, ANY, /noxious blightbringer/], [/malignant plaguecaster/, ANY, /malignant plaguecaster/],
-    [/chaos lord/, DG, /^chaos lord/], [/sorcerer/, DG, /sorcerer/], [/daemon prince/, ANY, /daemon prince of nurgle/], [/cultist/, DG, /cultist/], [/chaos spawn/, DG, /chaos spawn/], [/vindicator/, DG, /vindicator/], [/thunderhawk/, DG, /thunderhawk/],
+    [/chaos lord/, DG, /^chaos lord/], [/sorcerer/, DG, /sorcerer/], [/daemon prince/, DG, /daemon prince of nurgle/], [/cultist/, DG, /cultist/], [/chaos spawn/, DG, /chaos spawn/], [/vindicator/, DG, /vindicator/], [/thunderhawk/, DG, /thunderhawk/],
     [/nightmare hulk/, ANY, /nightmare hulk/], [/vulgrar/, ANY, /vulgrar/], [/vox-?shambler/, ANY, /vox-shambler/], [/glitchling/, ANY, /glitchling/], [/cursemite/, ANY, /cursemite/], [/eyestinger/, ANY, /eyestinger/], [/malignifier/, ANY, /malignifier/],
     [/^plaguebearers?/, ANY, /^plaguebearer( w\/ icon)?$|^plaguebearer - plagueridden/], [/great unclean one/, ANY, /^great unclean one/], [/rotigus/, ANY, /^rotigus/], [/beasts? of nurgle/, ANY, /^beasts? of nurgle/], [/^nurglings?/, ANY, /^nurglings/],
     [/poxbringer/, ANY, /^poxbringer/], [/sloppity|bilepiper/, ANY, /piper/], [/spoilpox/, ANY, /spoilpox/], [/slimux/, ANY, /slimux/], [/gnarlmaw/, ANY, /gnarlmaw/],
