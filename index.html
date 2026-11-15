@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.15-1251';
+  const VERSION = '2026.11.15-1252';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -15328,6 +15328,7 @@ void main(){
   float d=length(vW-uCam); float f=1.-exp(-d*uFogD); f=max(f,.0); f*=mix(1.,.55,smoothstep(0.,3.,vW.y)*0.); 
   float hz=exp(-max(vW.y,0.)*.6)*clamp((d-16.)*.011,0.,.4); col=mix(col,uFog*1.7+.03,hz);
   col=mix(col,uFog,clamp(f,0.,1.));
+  float ed=max(abs(vW.x-30.)/88.,abs(vW.z-22.)/80.); col=mix(col,uFog,smoothstep(.5,.98,ed));
   vec3 vd=normalize(uCam-vW); float rim=pow(1.-max(dot(n,vd),0.),3.)*(1.-abs(n.y))*smoothstep(.0,.7,vW.y+.3); col+=vec3(.05,.12,.26)*rim*(.35+.65*(1.-ndl));
   col=max(col-.018,0.)*1.05;
   col=col/(1.+col*.55); col=pow(col,vec3(1./2.2));
@@ -15468,8 +15469,14 @@ function crate(mb, x, y, z, s, ry, col, rng) {
 }
 function container(mb, x, z, ry, rng) {
   const col = CONT[Math.floor(rng() * CONT.length)], L = 4.4, cs = Math.cos(ry), sn = Math.sin(ry); box(mb, x, 0, z, L, 1.75, 1.7, ry, col, [.8, 0], .01, rng);
-  for (let k = 0; k < 14; k++) { const lx = -L / 2 + .2 + k * (L - .4) / 13; for (const sd of [-1, 1]) box(mb, x + lx * cs - sd * .88 * sn, .1, z + lx * sn + sd * .88 * cs, .08, 1.55, .1, ry, shade(col, .78), [.6, 0], 0, rng); }
+  for (let k = 0; k < 14; k++) { const lx = -L / 2 + .2 + k * (L - .4) / 13; for (const sd of [-1, 1]) box(mb, x + lx * cs - sd * .9 * sn, .1, z + lx * sn + sd * .9 * cs, .08, 1.55, .17, ry, shade(col, .72), [.6, 0], 0, rng); }
   for (const e of [-1, 1]) box(mb, x + e * (L / 2 + .02) * cs, .05, z + e * (L / 2 + .02) * sn, .08, 1.65, 1.6, ry, shade(col, .65), [.5, 0], 0, rng);
+  /* roof markings, worn edges and door rods so it reads as a steel cargo container */
+  box(mb, x, 1.77, z, L - .3, .03, 1.5, ry, shade(col, 1.12), [.7, 0], .02, rng);
+  for (const sd of [-1, 1]) box(mb, x - sd * .45 * sn, 1.795, z + sd * .45 * cs, L * .8, .02, .09, ry, [.86, .84, .78], [.6, 0], 0, rng);
+  box(mb, x + .9 * cs, 1.795, z + .9 * sn, .7, .02, .38, ry, [.82, .8, .74], [.6, 0], 0, rng);
+  for (const sd of [-1, 1]) for (const lx of [-L / 2 + .06, L / 2 - .06]) box(mb, x + lx * cs - sd * .84 * sn, 1.74, z + lx * sn + sd * .84 * cs, .12, .05, .12, ry, shade(col, 1.5), [.5, 0], 0, rng);
+  for (const k of [-.28, -.1, .1, .28]) box(mb, x + (L / 2 + .06) * cs - k * sn, .9, z + (L / 2 + .06) * sn + k * cs, .05, 1.5, .05, ry, [.5, .5, .52], [.3, 0], 0, rng);
 }
 function propsBase(mb, r, rng, i) {
   box(mb, r.x + r.w / 2, 0, r.y + r.h / 2, r.w - .2, .09, r.h - .2, 0, [.2, .21, .23], [.5, 0], .01, rng);
@@ -15712,7 +15719,7 @@ function propsHive(mb, r, rng, i) {
 }
 function scatterHive(mb, rng, ok, H) { for (let i = 0; i < 70; i++) { const x = rng() * BW, z = rng() * BH; if (!ok(x, z, .6)) continue; const s = .03 + rng() * .06; box(mb, x, 0, z, s * 2, s, s * 1.4, rng() * 3, vary([.2, .2, .24], rng, .2), [.8, 0], .01, rng); } for (let i = 0; i < 12; i++) { const x = rng() * BW, z = rng() * BH; if (!ok(x, z, 1)) continue; box(mb, x, 0, z, .5, .9, .3, rng() * 3, [.22, .24, .28], [.7, 0], .02, rng); box(mb, x, .55, z, .3, .05, .02, 0, [.1, .9, 1], [0, .9], 0, rng); } }
 THEMES.hive = { name: 'Hive City', sub: 'Dark streets, neon signs and tall ruins', props: propsHive, scatter: scatterHive, amp: .05, freq: .2, seed: 79,
-  env: { sun: [.4, .38, -.5], sunC: [1.25, .72, .42], ambT: [.07, .11, .17], ambB: [.035, .05, .08], fog: [.035, .05, .085], fogD: .009, dust: 0 },
+  env: { sun: [.4, .38, -.5], sunC: [.8, .98, 1.5], ambT: [.045, .07, .12], ambB: [.025, .035, .06], fog: [.03, .04, .09], fogD: .009, dust: 0 },
   ground: (x, z, h, n) => { let c = mixc([.055, .07, .09], [.17, .17, .18], n); const m = fbm(x * .13 + 9, z * .13); c = mixc(c, m > .52 ? [.26, .14, .08] : [.05, .17, .2], clamp(Math.abs(m - .5) * 3, 0, .7)); const gx = Math.abs(((x / 8) % 1 + 1) % 1 - .5); if (gx > .494) c = shade(c, .55); const gz = Math.abs(((z / 6) % 1 + 1) % 1 - .5); if (gz > .488) c = shade(c, .6); return c; } };
 THEMES.hive.poly = { wall: { h: [1, 1.3], th: .6, col: HIVEC, floor: [.12, .125, .15] }, pillar: null, clutter: (mb, x, z, rng, k) => { if (k % 2) container(mb, x, z, rng() * 3, rng); else crate(mb, x, 0, z, .9 + rng() * .5, rng() * 1.5, CRATE[Math.floor(rng() * 4)], rng); } };
 
@@ -15739,7 +15746,14 @@ function buildMap(spec) {
   th.scatter(solid, mulberry(seed * 13 + th.seed), ok, H);
   dressing(solid, decal, mulberry(seed * 29 + th.seed), ok, H, th, spec.theme);
   surround(solid, decal, mulberry(seed * 53 + th.seed), H, spec.theme, th);
-  const chaosOn = spec.chaos !== false && localStorage.getItem('bd.chaos') !== '0', lights = chaosOn ? chaosDetail(solid, decal, mulberry(seed * 37 + th.seed), ok, H, spec.theme) : [];
+  const floodT = spec.theme === 'base' || spec.theme === 'hive', floods = [];
+  if (floodT) {
+    const fr = mulberry(seed * 71 + th.seed), IRN = [.06, .06, .07];
+    OB.slice(0, 5).forEach((o, k) => { const a = k * 1.9 + fr() * .5, fx = o.x + Math.cos(a) * (OR + .9), fz = o.y + Math.sin(a) * (OR + .9), y = H(fx, fz); if (fx < 1 || fz < 1 || fx > BW - 1 || fz > BH - 1) return; tube(solid, [fx, y, fz], [fx, y + 3.6, fz], .1, .08, 6, IRN, [.6, 0]); box(solid, fx, y + 3.7, fz, .7, .3, .45, a, [1, .78, .4], [.2, 1], 0, fr); floods.push({ x: fx - Math.cos(a) * .6, y: y + 3.2, z: fz - Math.sin(a) * .6, r: 17, c: [2.3, 1.2, .45] }); ground(decal, o.x, o.y, OR + 1.2, OR + 1.2, 28, [1, .7, .3], [.07, 0], .069, H, fr, .1); });
+    for (let i = 0; i < 9; i++) { const px = 3 + fr() * (BW - 6), pz = 3 + fr() * (BH - 6); if (!ok(px, pz, 2)) continue; const red = pz < BH / 2; ground(decal, px, pz, 1 + fr() * 1.4, .7 + fr() * .9, 16, [.012, .02, .035], [.7, 0], .067, H, fr, .3); ground(decal, px, pz, .55, .4, 12, red ? [.9, .2, .15] : [.2, .45, 1], [.16, 0], .068, H, fr, .3); }
+    for (let i = 0; i < 7; i++) { const px = 3 + fr() * (BW - 6), pz = 3 + fr() * (BH - 6); if (ok(px, pz, 2)) ground(decal, px, pz, .9 + fr() * .8, .7 + fr() * .6, 14, [.01, .01, .014], [.5, 0], .066, H, fr, .4); }
+  }
+  const chaosOn = spec.chaos !== false && localStorage.getItem('bd.chaos') !== '0', lights = floods.concat(chaosOn ? chaosDetail(solid, decal, mulberry(seed * 37 + th.seed), ok, H, spec.theme) : []);
   /* what kind of cover each footprint is: heavy ruins read cold and pale, light cover reads warm and dark */
   rects.forEach((r, i) => { if (r.poly) return; const rr = mulberry(seed * 211 + i * 7 + th.seed), ex = [[r.x - .6, r.y - .6, r.w + 1.2, .9], [r.x - .6, r.y + r.h - .3, r.w + 1.2, .9], [r.x - .6, r.y - .6, .9, r.h + 1.2], [r.x + r.w - .3, r.y - .6, .9, r.h + 1.2]]; for (const [x, z, w, d] of ex) decal.quad([x, .066, z], [x, .066, z + d], [x + w, .066, z + d], [x + w, .066, z], [.01, .01, .01], [.32, 0]); for (let k = 0; k < 4; k++) { const x = r.x + rr() * r.w, z = rr() < .5 ? r.y - .3 : r.y + r.h + .3; rubbleAt(solid, rr, H, x, z, (th.poly && th.poly.wall && th.poly.wall.col) || [.3, .3, .3], .5 + rr() * .5); } });
   rects.forEach(r => { if (r.poly) return; const heavy = (r.walls || []).length >= 2, c = heavy ? [.56, .53, .47] : [.2, .16, .1]; decal.quad([r.x, .068, r.y], [r.x, .068, r.y + r.h], [r.x + r.w, .068, r.y + r.h], [r.x + r.w, .068, r.y], c, [heavy ? .22 : .3, 0]); });
