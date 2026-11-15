@@ -168,7 +168,7 @@ const BDModels = (function () {
   ];
   /* every other faction: match the datasheet's words against the model names */
   const STOP = new Set(['squad', 'unit', 'the', 'of', 'with', 'w', 'and', 'model', 'models', 'a', 'in', 'on']);
-  const toks = s => String(s || '').toLowerCase().replace(/\[[^\]]*\]/g, ' ').replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(w => w && !STOP.has(w)).map(w => w.length > 3 && w.endsWith('s') && !w.endsWith('ss') ? w.slice(0, -1) : w);
+  const toks = s => String(s || '').toLowerCase().replace(/armour/g, 'armor').replace(/\bwargear\b/g, ' ').replace(/\[[^\]]*\]/g, ' ').replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(w => w && !STOP.has(w)).map(w => w.length > 3 && w.endsWith('s') && !w.endsWith('ss') ? w.slice(0, -1) : w);
   const FAM = [['space marines', 'ultramarines', 'imperial fists', 'iron hands', 'raven guard', 'salamanders', 'white scars', 'blood angels', 'dark angels', 'deathwatch', 'raptors'], ['chaos space marines', 'world eaters', 'thousand sons', 'night lords', 'word bearers', 'alpha legion', 'red corsairs', "emperor's children", 'death guard', 'chaos daemons'], ['imperial knights', 'chaos knights'], ['adepta sororitas', 'sisters and agents'], ['aeldari', 'drukhari']];
   const related = (a, b) => { a = String(a || '').toLowerCase(); b = String(b || '').toLowerCase(); if (!a || !b) return false; if (a.includes(b) || b.includes(a)) return true; return FAM.some(g => g.some(x => a.includes(x)) && g.some(x => b.includes(x))); };
   const hash = s => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
@@ -177,9 +177,10 @@ const BDModels = (function () {
     for (const [re, fOk, pr] of RULES) { if (re.test(n) && fOk(faction)) { const l = index.filter(f => f.h > .45 && pr.test(f.name.toLowerCase())); if (l.length) { out = l; break; } } }
     if (!out) {
       const t = toks(ds); if (t.length) {
-        const FW = new Set(['chaos', 'heretic', 'astartes', 'traitor', 'imperial', 'adeptus', 'astra', 'dg', 'death', 'guard']), t2 = t.filter(w => !FW.has(w));
+        const FW = new Set(['chaos', 'heretic', 'astartes', 'traitor', 'imperial', 'adeptus', 'astra', 'dg', 'death', 'guard', 'thousand', 'son', 'word', 'bearer', 'world', 'eater', 'night', 'lord', 'emperor', 'child', 'alpha', 'legion', 'iron', 'hand', 'raven', 'fist', 'blood', 'angel', 'dark', 'salamander', 'ultramarine', 'tau', 'ork']), t2 = t.filter(w => !FW.has(w));
         const find = tt => index.filter(f => { if (f.h <= .45) return false; const ft = new Set(toks(f.name)); return tt.every(w => ft.has(w)); });
         let m = find(t); if (!m.length && t2.length && t2.length < t.length) m = find(t2);
+        if (!m.length) { const tt = t2.length ? t2 : t; m = index.filter(f => { if (f.h <= .45) return false; const ns = toks(f.name).join(''); return tt.every(w => ns.includes(w)); }); }
         const same = m.filter(f => related(faction, f.faction)); out = same.length ? same : (m.length && !FAM.some(g => g.some(x => String(faction || '').toLowerCase().includes(x))) ? m : null);
       }
     }
