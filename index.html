@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.15-1258';
+  const VERSION = '2026.11.15-1300';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -15352,9 +15352,18 @@ void main(){ vec3 c=texture(uT,gl_FragCoord.xy/uRes).rgb; float l=max(c.r,max(c.
 const FS_BLUR = `#version 300 es
 precision highp float; uniform sampler2D uT; uniform vec2 uRes, uDir; out vec4 o;
 void main(){ vec2 uv=gl_FragCoord.xy/uRes, st=uDir/uRes; vec3 s=texture(uT,uv).rgb*.227; s+=(texture(uT,uv+st*1.38).rgb+texture(uT,uv-st*1.38).rgb)*.316; s+=(texture(uT,uv+st*3.23).rgb+texture(uT,uv-st*3.23).rgb)*.0703; o=vec4(s,1.); }`;
+const FS_AO = `#version 300 es
+precision highp float; uniform sampler2D uD; uniform vec2 uRes; uniform float uP5, uRad, uHpx; out vec4 o;
+float lin(float d){ return 2.*.5*400./(400.+.5-(2.*d-1.)*(400.-.5)); }
+float h21(vec2 p){ return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453); }
+void main(){ vec2 uv=gl_FragCoord.xy/uRes; float d0=texture(uD,uv).r; if(d0>=.99999){ o=vec4(1.); return; }
+  float z0=lin(d0), occ=0., rot=h21(gl_FragCoord.xy)*6.2832, ru=uRad/z0*uP5*.5;
+  for(int k=0;k<14;k++){ float t=(float(k)+.5)/14., a=rot+float(k)*2.39996; vec2 suv=uv+vec2(cos(a)*uRes.y/uRes.x,sin(a))*ru*t;
+    float zs=lin(texture(uD,suv).r), df=z0-zs; float bi=uRad*t*.9+.08; if(df>bi && df<uRad*3.) occ+=1.-df/(uRad*3.); }
+  float ao=clamp(1.-occ/14.*2.2,0.,1.); o=vec4(vec3(ao),1.); }`;
 const FS_COMP = `#version 300 es
-precision highp float; uniform sampler2D uS, uB; uniform vec2 uRes; uniform float uK; out vec4 o;
-void main(){ vec2 uv=gl_FragCoord.xy/uRes; o=vec4(texture(uS,uv).rgb+texture(uB,uv).rgb*uK,1.); }`;
+precision highp float; uniform sampler2D uS, uB, uA; uniform vec2 uRes; uniform float uK, uAk; out vec4 o;
+void main(){ vec2 uv=gl_FragCoord.xy/uRes; vec3 sc=texture(uS,uv).rgb*mix(1.,texture(uA,uv).r,uAk); o=vec4(sc+texture(uB,uv).rgb*uK,1.); }`;
 const FS_FLAT = `#version 300 es
 precision highp float; in vec3 vW, vN, vC; in vec2 vM; in vec4 vL; out vec4 o; void main(){ o=vec4(vC,vM.x); }`;
 const VS_SH = `#version 300 es
@@ -15368,8 +15377,10 @@ class Renderer {
     this.cv = canvas; this.q = { shadow: 2048, dpr: Math.min(devicePixelRatio || 1, 1.75), shadowOn: true };
     const mk = (vs, fs) => { const p = gl.createProgram(); for (const [t, s] of [[gl.VERTEX_SHADER, vs], [gl.FRAGMENT_SHADER, fs]]) { const sh = gl.createShader(t); gl.shaderSource(sh, s); gl.compileShader(sh); if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh)); gl.attachShader(p, sh); } gl.linkProgram(p); if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p)); const U = {}; const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS); for (let i = 0; i < n; i++) { const a = gl.getActiveUniform(p, i); U[a.name] = gl.getUniformLocation(p, a.name); } return { p, U }; };
     this.main = mk(VS, FS); this.flat = mk(VS, FS_FLAT); this.sh = mk(VS_SH, FS_SH);
+    this.q.ao = (() => { try { return localStorage.getItem('bd.ao') !== '0'; } catch (e) { return true; } })();
+    try { const sq = +localStorage.getItem('bd.shadow'); if (sq === 1024 || sq === 2048 || sq === 4096) this.q.shadow = sq; } catch (e) { }
     this.q.bloom = (() => { try { return localStorage.getItem('bd.bloom') !== '0'; } catch (e) { return true; } })();
-    try { this.bright = mk(VS_Q, FS_BRIGHT); this.blur = mk(VS_Q, FS_BLUR); this.comp = mk(VS_Q, FS_COMP); this.qvao = gl.createVertexArray(); } catch (e) { this.q.bloom = false; }
+    try { this.ao = mk(VS_Q, FS_AO); this.bright = mk(VS_Q, FS_BRIGHT); this.blur = mk(VS_Q, FS_BLUR); this.comp = mk(VS_Q, FS_COMP); this.qvao = gl.createVertexArray(); } catch (e) { this.q.bloom = false; }
     this.meshes = []; this.makeShadow();
   }
   makeShadow() {
@@ -15388,34 +15399,42 @@ class Renderer {
   clear() { const gl = this.gl; for (const m of this.meshes) { gl.deleteVertexArray(m.vao); m.bs.forEach(b => gl.deleteBuffer(b)); gl.deleteBuffer(m.ib); } this.meshes = []; }
   postTargets(W, H) {
     const gl = this.gl; if (this.pt && this.pt.W === W && this.pt.H === H) return this.pt;
-    if (this.pt) { gl.deleteFramebuffer(this.pt.fMs); gl.deleteRenderbuffer(this.pt.rbC); gl.deleteRenderbuffer(this.pt.rbD); gl.deleteFramebuffer(this.pt.fRes); gl.deleteTexture(this.pt.tRes); for (const k of [0, 1]) { gl.deleteFramebuffer(this.pt.fB[k]); gl.deleteTexture(this.pt.tB[k]); } }
+    if (this.pt) { gl.deleteFramebuffer(this.pt.fMs); gl.deleteRenderbuffer(this.pt.rbC); gl.deleteRenderbuffer(this.pt.rbD); gl.deleteFramebuffer(this.pt.fRes); gl.deleteTexture(this.pt.tRes); gl.deleteTexture(this.pt.tD); gl.deleteTexture(this.pt.tA); gl.deleteFramebuffer(this.pt.fA); for (const k of [0, 1]) { gl.deleteFramebuffer(this.pt.fB[k]); gl.deleteTexture(this.pt.tB[k]); } }
     const tex = (w, h) => { const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t); gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, w, h); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); return t; };
     const fb = t => { const f = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, f); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0); return f; };
     const samples = Math.min(4, gl.getParameter(gl.MAX_SAMPLES) || 0), rbC = gl.createRenderbuffer(), rbD = gl.createRenderbuffer(), fMs = gl.createFramebuffer();
     gl.bindRenderbuffer(gl.RENDERBUFFER, rbC); gl.renderbufferStorageMultisample(gl.RENDERBUFFER, samples, gl.RGBA8, W, H);
     gl.bindRenderbuffer(gl.RENDERBUFFER, rbD); gl.renderbufferStorageMultisample(gl.RENDERBUFFER, samples, gl.DEPTH_COMPONENT24, W, H);
     gl.bindFramebuffer(gl.FRAMEBUFFER, fMs); gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, rbC); gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, rbD);
-    const tRes = tex(W, H), fRes = fb(tRes), hw = Math.max(2, W >> 1), hh = Math.max(2, H >> 1), tB = [tex(hw, hh), tex(hw, hh)], fB = tB.map(fb);
+    const tRes = tex(W, H), fRes = fb(tRes), tD = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tD); gl.texStorage2D(gl.TEXTURE_2D, 1, gl.DEPTH_COMPONENT24, W, H); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fRes); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, tD, 0);
+    const hw = Math.max(2, W >> 1), hh = Math.max(2, H >> 1), tB = [tex(hw, hh), tex(hw, hh)], fB = tB.map(fb), tA = tex(hw, hh), fA = fb(tA);
     const ok = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE; gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.bindFramebuffer(gl.FRAMEBUFFER, fMs); const okMs = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE; gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    return this.pt = { W, H, hw, hh, fMs, rbC, rbD, fRes, tRes, tB, fB, ok: ok && okMs };
+    return this.pt = { W, H, hw, hh, fMs, rbC, rbD, fRes, tRes, tD, tB, fB, tA, fA, ok: ok && okMs };
   }
   postDraw(pt, W, H) {
     const gl = this.gl;
-    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, pt.fMs); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, pt.fRes); gl.blitFramebuffer(0, 0, W, H, 0, 0, W, H, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, pt.fMs); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, pt.fRes); gl.blitFramebuffer(0, 0, W, H, 0, 0, W, H, gl.COLOR_BUFFER_BIT | (this.q.ao ? gl.DEPTH_BUFFER_BIT : 0), gl.NEAREST);
     gl.disable(gl.DEPTH_TEST); gl.bindVertexArray(this.qvao); gl.activeTexture(gl.TEXTURE1);
     const pass = (prog, fbo, w, h, set) => { gl.bindFramebuffer(gl.FRAMEBUFFER, fbo); gl.viewport(0, 0, w, h); gl.useProgram(prog.p); gl.uniform2f(prog.U.uRes, w, h); set(prog.U); gl.drawArrays(gl.TRIANGLES, 0, 3); };
     const bind = (t, loc) => { gl.bindTexture(gl.TEXTURE_2D, t); gl.uniform1i(loc, 1); };
+    if (this.q.ao) {
+      pass(this.ao, pt.fA, pt.hw, pt.hh, U => { bind(pt.tD, U.uD); gl.uniform1f(U.uP5, this.projP5 || 1.9); gl.uniform1f(U.uRad, 1.3); gl.uniform1f(U.uHpx, H); });
+      pass(this.blur, pt.fB[1], pt.hw, pt.hh, U => { bind(pt.tA, U.uT); gl.uniform2f(U.uDir, 1.5, 0); });
+      pass(this.blur, pt.fA, pt.hw, pt.hh, U => { bind(pt.tB[1], U.uT); gl.uniform2f(U.uDir, 0, 1.5); });
+    }
     pass(this.bright, pt.fB[0], pt.hw, pt.hh, U => bind(pt.tRes, U.uT));
     for (let k = 0; k < 2; k++) { pass(this.blur, pt.fB[1], pt.hw, pt.hh, U => { bind(pt.tB[0], U.uT); gl.uniform2f(U.uDir, 1.6, 0); }); pass(this.blur, pt.fB[0], pt.hw, pt.hh, U => { bind(pt.tB[1], U.uT); gl.uniform2f(U.uDir, 0, 1.6); }); }
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, W, H); gl.useProgram(this.comp.p); gl.uniform2f(this.comp.U.uRes, W, H); gl.uniform1f(this.comp.U.uK, .85);
-    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, pt.tRes); gl.uniform1i(this.comp.U.uS, 1); gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, pt.tB[0]); gl.uniform1i(this.comp.U.uB, 2);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, W, H); gl.useProgram(this.comp.p); gl.uniform2f(this.comp.U.uRes, W, H); gl.uniform1f(this.comp.U.uK, .85); gl.uniform1f(this.comp.U.uAk, this.q.ao ? .9 : 0);
+    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, pt.tRes); gl.uniform1i(this.comp.U.uS, 1); gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, pt.tB[0]); gl.uniform1i(this.comp.U.uB, 2); gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, pt.tA); gl.uniform1i(this.comp.U.uA, 3);
     gl.drawArrays(gl.TRIANGLES, 0, 3); gl.bindVertexArray(null); gl.enable(gl.DEPTH_TEST); gl.activeTexture(gl.TEXTURE0);
   }
   resize() { const d = this.q.dpr, w = Math.max(2, Math.floor(this.cv.clientWidth * d)), h = Math.max(2, Math.floor(this.cv.clientHeight * d)); if (this.cv.width !== w || this.cv.height !== h) { this.cv.width = w; this.cv.height = h; } }
   draw(cam, env) {
     const gl = this.gl; this.resize(); const W = this.cv.width, H = this.cv.height;
-    const eye = cam.eye(), V = m4.look(eye, cam.target, [0, 1, 0]), P = m4.persp(cam.fov, W / H, .5, 400), VP = m4.mul(P, V);
+    const eye = cam.eye(), V = m4.look(eye, cam.target, [0, 1, 0]), P = m4.persp(cam.fov, W / H, .5, 400), VP = m4.mul(P, V); this.projP5 = P[5];
     const sd = v3.norm(env.sun), c = [30, 0, 22], le = v3.add(c, v3.mul(sd, 80)), LV = m4.look(le, c, [0, 1, 0]), LP = m4.ortho(-46, 46, -46, 46, 10, 170), LVP = m4.mul(LP, LV);
     gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL);
     if (this.q.shadowOn) {
@@ -15958,12 +15977,14 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
     addEventListener('blur', () => keys.clear());
     /* controls */
     const bar = document.createElement('div'); bar.id = 'b-3dbar'; bar.hidden = true;
-    bar.innerHTML = '<button type="button" id="b-3dmore" aria-expanded="false" title="3D view options and controls">View options \u25BE</button><div id="b-3dpanel"><select id="b-3dtheme" aria-label="Terrain theme"><option value="auto">Theme: auto</option><option value="desert">Desert ruins</option><option value="base">Hive base</option><option value="marsh">Rot marsh</option><option value="ice">Frozen hive</option><option value="forge">Forge world</option><option value="jungle">Death world</option><option value="hive">Hive city</option></select><button type="button" data-o="zones" aria-pressed="true" title="Show or hide the deployment zones">Zones</button><button type="button" data-o="objs" aria-pressed="true" title="Show or hide the objective markers">Objectives</button><button type="button" data-o="dice" aria-pressed="true" title="Show or hide the dice trays">Dice trays</button><button type="button" data-o="guides" aria-pressed="true" title="Show or hide the placement guides: 8 inch rings and the 6 inch edge band">Guides</button><button type="button" id="b-3dsight" aria-pressed="true" title="Show or hide sight lines, with the distance to every enemy">Sight lines</button><button type="button" id="b-3dtop" title="Top-down view">Top</button><button type="button" id="b-3dtab" title="Tabletop view">Table</button><span id="b-3dnote">Drag = select units · Alt-drag = turn models · right-drag = orbit · WASD move · Q/E turn view · Z/X zoom · right-click or 1 = datasheet</span></div>';
+    bar.innerHTML = '<button type="button" id="b-3dmore" aria-expanded="false" title="3D view options and controls">View options \u25BE</button><div id="b-3dpanel"><select id="b-3dtheme" aria-label="Terrain theme"><option value="auto">Theme: auto</option><option value="desert">Desert ruins</option><option value="base">Hive base</option><option value="marsh">Rot marsh</option><option value="ice">Frozen hive</option><option value="forge">Forge world</option><option value="jungle">Death world</option><option value="hive">Hive city</option></select><button type="button" data-o="zones" aria-pressed="true" title="Show or hide the deployment zones">Zones</button><button type="button" data-o="objs" aria-pressed="true" title="Show or hide the objective markers">Objectives</button><button type="button" data-o="dice" aria-pressed="true" title="Show or hide the dice trays">Dice trays</button><button type="button" data-o="guides" aria-pressed="true" title="Show or hide the placement guides: 8 inch rings and the 6 inch edge band">Guides</button><button type="button" id="b-3dsight" aria-pressed="true" title="Show or hide sight lines, with the distance to every enemy">Sight lines</button><select id="b-3dq" aria-label="Graphics quality" title="Graphics quality"><option value="low">Quality: low</option><option value="std">Quality: standard</option><option value="high">Quality: high</option></select><button type="button" id="b-3dtop" title="Top-down view">Top</button><button type="button" id="b-3dtab" title="Tabletop view">Table</button><span id="b-3dnote">Drag = select units · Alt-drag = turn models · right-drag = orbit · WASD move · Q/E turn view · Z/X zoom · right-click or 1 = datasheet</span></div>';
     bar.querySelector('#b-3dmore').addEventListener('click', () => { const o = bar.classList.toggle('open'); bar.querySelector('#b-3dmore').setAttribute('aria-expanded', String(o)); });
     holder.appendChild(bar);
     bar.querySelectorAll('[data-o]').forEach(b => b.addEventListener('click', () => { BF3D.opt[b.dataset.o] = !BF3D.opt[b.dataset.o]; try { localStorage.setItem(OPT_KEY, JSON.stringify(BF3D.opt)); } catch (e) { } applyOpts(); if (b.dataset.o === 'guides') buildGhost(); }));
     bar.querySelector('#b-3dsight').addEventListener('click', () => { const cb = document.getElementById('b-sight'); if (cb) { cb.checked = !cb.checked; cb.dispatchEvent(new Event('change')); } });
     bar.querySelector('#b-3dtheme').addEventListener('change', e => { BF3D.theme = e.target.value; BF3D.tsig = ''; sync(true); });
+    { const qs = bar.querySelector('#b-3dq'), Rn = BF3D.R, cur = () => !Rn.q.bloom && !Rn.q.ao ? 'low' : Rn.q.shadow >= 4096 ? 'high' : 'std'; qs.value = cur();
+      qs.addEventListener('change', () => { const v = qs.value, set = (k, x) => { try { localStorage.setItem(k, x); } catch (e) { } }; Rn.q.bloom = v !== 'low' && !!Rn.comp; Rn.q.ao = v !== 'low'; const sh = v === 'low' ? 1024 : v === 'high' ? 4096 : 2048; set('bd.bloom', Rn.q.bloom ? '1' : '0'); set('bd.ao', Rn.q.ao ? '1' : '0'); set('bd.shadow', String(sh)); if (sh !== Rn.q.shadow) { Rn.q.shadow = sh; Rn.makeShadow(); } BF3D.dirty = true; kick(); }); }
     bar.querySelector('#b-3dtop').addEventListener('click', () => { cam.yaw = 0; cam.pitch = 1.5; cam.dist = BF3D.fit(true); cam.target = [30, 0, 22]; BF3D.dirty = true; kick(); });
     bar.querySelector('#b-3dtab').addEventListener('click', () => { cam.yaw = 0; cam.pitch = .95; cam.dist = BF3D.fit(); cam.target = [30, 0, 24]; BF3D.dirty = true; kick(); });
     new ResizeObserver(() => { place(); BF3D.dirty = true; kick(); }).observe($b());
