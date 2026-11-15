@@ -92,14 +92,14 @@ const MODELIMP = (function () {
   const mul = (A, B) => { const r = new Array(12); for (let i = 0; i < 3; i++) { for (let j = 0; j < 3; j++) r[i * 4 + j] = A[i * 4] * B[j] + A[i * 4 + 1] * B[4 + j] + A[i * 4 + 2] * B[8 + j]; r[i * 4 + 3] = A[i * 4] * B[3] + A[i * 4 + 1] * B[7] + A[i * 4 + 2] * B[11] + A[i * 4 + 3]; } return r; };
   /* unit = { name, parts:[{m,t,p,x}] }; files: id -> async () => Blob (mesh text via .text()). Returns { name, parts:[{V,N,C,T}], h, r, tris } */
   async function build(unit, getMesh, getTex, opt) {
-    opt = opt || {}; const parts = unit.parts, W = [], raw = [];
+    opt = opt || {}; build.err = ''; const parts = unit.parts, W = [], raw = [];
     for (let i = 0; i < parts.length; i++) {
       const p = parts[i], L = mat(p.x), par = p.p; let M;
       if (par < 0) M = mat([0, 0, 0, 0, (p.x[4] || 0) - 180, 0, p.x[6], p.x[7], p.x[8]]); else M = mul(W[par], L); W.push(M);
     }
     let total = 0; const texs = {};
     for (let i = 0; i < parts.length; i++) {
-      const p = parts[i]; let txt; try { txt = await getMesh(p.m); } catch (e) { raw.push(null); continue; }
+      const p = parts[i]; let txt; try { txt = await getMesh(p.m); } catch (e) { raw.push(null); if (!build.err) build.err = (e && e.name && e.name !== 'Error' ? e.name + ' ' : '') + (e && e.message || e); continue; }
       const m = parseOBJ(txt); let tex = null; if (p.t) { if (!(p.t in texs)) { try { texs[p.t] = await decodeTex(await getTex(p.t), opt.texMax || 1024); } catch (e) { texs[p.t] = null; } } tex = texs[p.t]; }
       const g = expand(m, tex, p.p < 0 ? [.2, .18, .15] : [.5, .5, .5]); raw.push(g); total += g.T.length / 3;
     }
@@ -215,14 +215,14 @@ const BDModels = (function () {
     const d = await idbOpen(); let ok = 0, bad = 0; const why = {};
     for (const fac of sc.factions.filter(f => names.includes(f.name))) {
       const units = JSON.parse(await fac.units.text()), map = fac.files ? JSON.parse(await fac.files.text()) : {};
-      const file = id => sc.byName.get(map[id] || '');
+      const file = id => sc.byName.get(map[id] || '') || sc.byName.get(id + '.obj') || sc.byName.get(id + '.tex.jpg') || sc.byName.get(id + '.tex.png') || sc.byName.get(id + '.tex.img');
       const getMesh = async id => { const f = file(id); if (!f) throw new Error('missing ' + id); return await f.text(); }, getTex = async id => { const f = file(id); if (!f) throw new Error('missing ' + id); return f; };
       { const t = tx(d, ['figs', 'index'], 'readwrite'), rngk = IDBKeyRange.bound(fac.name + '|', fac.name + '|￿'); t.objectStore('figs').delete(rngk); t.objectStore('index').delete(rngk); await done(t); }
       let i = 0;
       for (const u of units.units) {
         i++; say(fac.name + ': converting ' + i + ' of ' + units.units.length + ' (' + u.name + ')');
         try {
-          const r = await MODELIMP.build(u, getMesh, getTex, opt); if (!r.parts.length) { bad++; (why[fac.name] = why[fac.name] || []).push(u.name + ': empty'); continue; }
+          const r = await MODELIMP.build(u, getMesh, getTex, opt); if (!r.parts.length) { bad++; (why[fac.name] = why[fac.name] || []).push(u.name + ': empty' + (MODELIMP.build.err ? ' (' + MODELIMP.build.err + ')' : '')); continue; }
           let hy = 0; for (const p of r.parts) for (let k = 1; k < p.V.length; k += 3) if (p.V[k] > hy) hy = p.V[k];
           const key = fac.name + '|' + i, rec = { key, faction: fac.name, name: u.name, big: r.big, tris: r.tris, parts: r.parts.map(p => ({ V: p.V, N: p.N, C: p.C, T: p.T })) };
           const t = tx(d, ['figs', 'index'], 'readwrite'); t.objectStore('figs').put(rec); t.objectStore('index').put({ key, faction: fac.name, name: u.name, h: hy, tris: r.tris }); await done(t); ok++;
