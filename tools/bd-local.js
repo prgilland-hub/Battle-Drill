@@ -155,7 +155,7 @@
         $('bdl-fg').onclick = async () => {
           const names = cbs().filter(c => c.checked).map(c => sc.factions[+c.dataset.k].name); if (!names.length) return;
           const q = $('bdl-mq').value, t0 = Date.now(); $('bdl-fg').disabled = true;
-          try { const r = await M().importFactions(sc, names, q === 'full' ? { full: true } : { scale: +q }, t => { $('bdl-ms').textContent = t; }); box.textContent = ''; mstat(); mfx(); say('Imported ' + r.ok + ' models' + (r.bad ? ' (' + r.bad + ' skipped, e.g. ' + Object.values(r.why).flat().slice(0, 3).join('; ') + ')' : '') + ' in ' + Math.round((Date.now() - t0) / 1000) + ' s.'); }
+          try { const r = await M().importFactions(sc, names, q === 'full' ? { full: true } : { scale: +q }, t => { $('bdl-ms').textContent = t; }); box.textContent = ''; const fl = Object.entries(r.why || {}).flatMap(([f, l]) => l.map(x => f + ' - ' + x)); if (fl.length) { const dt = document.createElement('details'), sm = document.createElement('summary'), pr = document.createElement('pre'); sm.textContent = 'Show all ' + fl.length + ' skipped'; pr.style.cssText = 'white-space:pre-wrap;font-size:11px;max-height:220px;overflow:auto;user-select:text'; pr.textContent = fl.join('\n'); dt.append(sm, pr); box.appendChild(dt); } mstat(); mfx(); say('Imported ' + r.ok + ' models' + (r.bad ? ' (' + r.bad + ' skipped, e.g. ' + Object.values(r.why).flat().slice(0, 3).join('; ') + ')' : '') + ' in ' + Math.round((Date.now() - t0) / 1000) + ' s.'); }
           catch (e) { say('Import failed: ' + ((e && e.message) || e)); mstat(); $('bdl-fg').disabled = false; }
         };
       }; i.click();
