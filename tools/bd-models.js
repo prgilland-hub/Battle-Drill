@@ -212,7 +212,7 @@ const BDModels = (function () {
     out.sort((a, b) => a.name.localeCompare(b.name)); return { byName, factions: out };
   }
   async function importFactions(sc, names, opt, say) {
-    const d = await idbOpen(); let ok = 0, bad = 0;
+    const d = await idbOpen(); let ok = 0, bad = 0; const why = {};
     for (const fac of sc.factions.filter(f => names.includes(f.name))) {
       const units = JSON.parse(await fac.units.text()), map = fac.files ? JSON.parse(await fac.files.text()) : {};
       const file = id => sc.byName.get(map[id] || '');
@@ -222,15 +222,15 @@ const BDModels = (function () {
       for (const u of units.units) {
         i++; say(fac.name + ': converting ' + i + ' of ' + units.units.length + ' (' + u.name + ')');
         try {
-          const r = await MODELIMP.build(u, getMesh, getTex, opt); if (!r.parts.length) { bad++; continue; }
+          const r = await MODELIMP.build(u, getMesh, getTex, opt); if (!r.parts.length) { bad++; (why[fac.name] = why[fac.name] || []).push(u.name + ': empty'); continue; }
           let hy = 0; for (const p of r.parts) for (let k = 1; k < p.V.length; k += 3) if (p.V[k] > hy) hy = p.V[k];
           const key = fac.name + '|' + i, rec = { key, faction: fac.name, name: u.name, big: r.big, tris: r.tris, parts: r.parts.map(p => ({ V: p.V, N: p.N, C: p.C, T: p.T })) };
           const t = tx(d, ['figs', 'index'], 'readwrite'); t.objectStore('figs').put(rec); t.objectStore('index').put({ key, faction: fac.name, name: u.name, h: hy, tris: r.tris }); await done(t); ok++;
-        } catch (e) { bad++; console.warn('model skipped', u.name, e); }
+        } catch (e) { bad++; (why[fac.name] = why[fac.name] || []).push(u.name + ': ' + (e && e.message || e)); console.warn('model skipped', u.name, e); }
         if (i % 4 === 0) await new Promise(r => setTimeout(r, 0));
       }
     }
-    d.close(); await load(); ping(); return { ok, bad };
+    d.close(); await load(); ping(); window.__bdImportFails = why; return { ok, bad, why };
   }
   async function clearAll() { const d = await idbOpen(); const t = tx(d, ['figs', 'index'], 'readwrite'); t.objectStore('figs').clear(); t.objectStore('index').clear(); await done(t); d.close(); index = []; cache.clear(); poolCache.clear(); ping(); }
   const factions = () => { const c = {}; for (const m of index) c[m.faction] = (c[m.faction] || 0) + 1; return c; };

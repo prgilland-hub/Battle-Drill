@@ -136,7 +136,7 @@
     $('bdl-ks').onclick = () => { try { localStorage.setItem(KEY_LS, $('bdl-k').value.trim()); localStorage.setItem(MODEL_LS, $('bdl-m').value.trim() || DEFAULT_MODEL); say('Saved on this computer only.'); } catch (e) { say('Could not save: ' + e.message); } };
     $('bdl-ex').onclick = async () => { try { const j = await dump(); await downloads.save({ filename: 'battle-drill-backup-' + new Date().toISOString().slice(0, 10) + '.json', data: JSON.stringify(j) }); say('Backup downloaded.'); } catch (e) { say('Backup failed: ' + e.message); } };
     $('bdl-im').onclick = () => { const i = document.createElement('input'); i.type = 'file'; i.accept = '.json'; i.onchange = async () => { try { await restore(JSON.parse(await i.files[0].text())); say('Restored. Reloading…'); setTimeout(() => location.reload(), 800); } catch (e) { say('Restore failed: ' + e.message); } }; i.click(); };
-    const M = () => window.BDModels, mstat = () => { const m = M(); $('bdl-ms').textContent = m && m.count() ? m.count() + ' models loaded (' + Object.keys(m.factions()).length + ' factions).' : 'No models imported yet.'; };
+    const M = () => window.BDModels, mstat = () => { const m = M(); $('bdl-ms').textContent = m && m.count() ? m.count() + ' models loaded: ' + Object.entries(m.factions()).sort().map(([k, v]) => k + ' ' + v).join(', ') + '.' : 'No models imported yet.'; };
     const mfx = () => { try { document.dispatchEvent(new Event('bd-models-changed')); window.dispatchEvent(new Event('bd-models-changed')); } catch (e) { } };
     setTimeout(async () => { if (M()) { await M().load(); mstat(); $('bdl-mo').checked = M().get('on', '1') === '1'; $('bdl-mm').checked = M().get('mirror', '1') === '1'; $('bdl-my').value = M().get('yaw', '0'); $('bdl-mq').value = M().get('q', '1'); mfx(); } }, 0);
     $('bdl-mo').onchange = () => { M().set('on', $('bdl-mo').checked ? '1' : '0'); mfx(); };
@@ -155,7 +155,7 @@
         $('bdl-fg').onclick = async () => {
           const names = cbs().filter(c => c.checked).map(c => sc.factions[+c.dataset.k].name); if (!names.length) return;
           const q = $('bdl-mq').value, t0 = Date.now(); $('bdl-fg').disabled = true;
-          try { const r = await M().importFactions(sc, names, q === 'full' ? { full: true } : { scale: +q }, t => { $('bdl-ms').textContent = t; }); box.textContent = ''; mstat(); mfx(); say('Imported ' + r.ok + ' models' + (r.bad ? ' (' + r.bad + ' skipped)' : '') + ' in ' + Math.round((Date.now() - t0) / 1000) + ' s.'); }
+          try { const r = await M().importFactions(sc, names, q === 'full' ? { full: true } : { scale: +q }, t => { $('bdl-ms').textContent = t; }); box.textContent = ''; mstat(); mfx(); say('Imported ' + r.ok + ' models' + (r.bad ? ' (' + r.bad + ' skipped, e.g. ' + Object.values(r.why).flat().slice(0, 3).join('; ') + ')' : '') + ' in ' + Math.round((Date.now() - t0) / 1000) + ' s.'); }
           catch (e) { say('Import failed: ' + ((e && e.message) || e)); mstat(); $('bdl-fg').disabled = false; }
         };
       }; i.click();
