@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.15-1205';
+  const VERSION = '2026.11.15-1210';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -4368,6 +4368,8 @@ function autoMods(name, text) {
   amRule(/^each time this model ends a normal move, you can select one enemy unit it moved over during that move\. until the end of the turn, models in that unit cannot have the benefit of cover\.?$/, ['ts-flame']);
   amRule(/^while this model is leading a unit, weapons equipped by models in that unit have the \[lethal hits\] ability\. in addition, each time a model in that unit makes an attack, a critical hit is scored on an unmodified hit roll of 5\+/, ['mod lethal', 'mod crit5']);
   amRule(/^once per battle round, one unit from your army with this ability can use it when its unit is targeted with a stratagem\. if it does, reduce the cp cost of that use of that stratagem by 1cp\.?$/, ['strat-discount']);
+  amRule(/^each time this model ends a normal move, you can select one enemy unit it moved (?:over|across) during that move and roll six d6: for each (\d)\+, that unit suffers 1 mortal wound\.?$/, m => ['bomb-run ' + m[1]]);
+  amRule(/^each time this model ends a normal move, you can select one enemy unit \(excluding monster and vehicle units\) that it moved over during that move, then roll six d6: for each (\d)\+, that enemy unit suffers 1 mortal wound/, m => ['bomb-run ' + m[1] + ' nomv']);
 })();
 /* ---- Wahapedia 11th edition wargear and ability phrasings ---- */
 amRule(/^add 1 to charge rolls made for the bearer's unit\.?$/, ['charge+1']);
@@ -5147,10 +5149,11 @@ function asOmni(side) {
 function orbUse(u) { u.orbUsed = true; const n = d6(), h = healUnit(u, n); log(`Resurrection Orb: ${u.name} resurrects and heals ${plural(n, 'wound')}${h.back ? `, returning ${plural(h.back, 'model')}` : ''}.`, u.side); }
 function amAiOrb(side) { for (const u of aliveSide(side)) if (hasFx(u, 'resurrect-orb') && !u.orbUsed && u.placed && u.models > 0 && (u.models < (u.start || u.models) || u.cur < mW(u))) orbUse(u); }
 function slashingDive(u, ox, oy, kind) {
-  const air = hasFx(u, 'airborne-pred'); if (!G || !u.alive || kind === 'advance' || kind === 'retreat' || kind === 'desperate' || !(air || hasFx(u, 'slashing-dive') || hasFx(u, 'cluster-launch'))) return;
+  const air = hasFx(u, 'airborne-pred'); if (!G || !u.alive || kind === 'advance' || kind === 'retreat' || kind === 'desperate' || !(air || hasFx(u, 'slashing-dive') || hasFx(u, 'cluster-launch') || hasFx(u, 'bomb-run'))) return;
   const dx = u.x - ox, dy = u.y - oy, L2 = dx * dx + dy * dy;
   const near = e => { const t = L2 ? Math.max(0, Math.min(1, ((e.x - ox) * dx + (e.y - oy) * dy) / L2)) : 0; return Math.hypot(e.x - (ox + t * dx), e.y - (oy + t * dy)) <= e.r + u.r; };
   const es = aliveSide(other(u.side)).filter(e => e.placed && !e.reserve && !e.embarkedIn && near(e)); if (!es.length) return;
+  if (hasFx(u, 'bomb-run') && !air) { const br = fxGet(u, 'bomb-run')[0], th = +br.t[1] || 4, pool = br.t[2] === 'nomv' ? es.filter(e => !has(e, 'monster') && !has(e, 'vehicle')) : es; if (!pool.length) return; const e = pool.sort((a, b) => b.W * totalModels(b) - a.W * totalModels(a))[0]; let n = 0; for (let i = 0; i < 6; i++) if (d6() >= th) n++; log(`${br.a.name}: ${u.name} rolls 6D6 over ${e.name}: ${plural(n, 'mortal wound')}.`, u.side); if (n) { applyMortal(e, n); checkEnd(); } return; }
   const e = es.sort((a, b) => b.W * totalModels(b) - a.W * totalModels(a))[0]; let n = 0;
   if (hasFx(u, 'cluster-launch') && !air) { for (let i = 0; i < 6; i++) if (d6() >= 4) n++; log(`Blackstar Cluster Launcher: ${u.name} rolls 6D6 over ${e.name}: ${plural(n, 'mortal wound')}.`, u.side); if (n) { applyMortal(e, n); checkEnd(); } return; }
   if (air) { for (let i = 0; i < 2; i++) if (d6() + (has(e, 'fly') ? 1 : 0) >= 4) n += Math.ceil(d6() / 2); log(`Airborne Predator: ${u.name} swoops over ${e.name}: ${plural(n, 'mortal wound')}.`, u.side); if (n) { applyMortal(e, n); checkEnd(); } return; }
