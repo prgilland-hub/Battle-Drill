@@ -187,7 +187,17 @@ const BDModels = (function () {
     if (out && !out.length) out = null; poolCache.set(k, out); return out;
   }
   /* returns the model if it is ready; otherwise starts loading it and returns null (the board redraws when it arrives) */
-  function pick(ds, faction, key) { if (!index.length || get('on', '1') !== '1') return null; const p = pool(ds, faction); if (!p) return null; const m = p[hash(String(key)) % p.length]; return fetchFig(m) || cache.get(m.key) || null; }
+  /* squads of mixed models: the first model is the sergeant/champion if one exists, every fourth model after that carries a special or heavy weapon, the rest are the plain troopers */
+  const LEADERISH = /sergeant|sarge|champion|aspiring|aspirant|\bicon\b|banner|ancient|\bnob\b|\bboss\b|alpha|\bhost\b|\bsuperior\b|\bsister superior\b|exemplar|\bastartes sergeant\b/i;
+  const SPECIAL = /flamer|melta|plasma|launcher|cannon|lascannon|missile|\bgun\b|blaster|reaper|heavy|havoc|sniper|gatling|autocannon|grenade|spewer|\bbigshoota\b|rokkit|burna|\bmortar|\bheavy bolter|\bwarflam|\bsoulreaper|\bwarpflamer|\bfusion|\bvolkite|\bhellgun|\bflakk|\bgauntlet|\bscythe/i;
+  function roleFilter(p, idx, n) {
+    if (!(n > 1) || p.length < 2) return p;
+    const lead = p.filter(f => LEADERISH.test(f.name)), spec = p.filter(f => !LEADERISH.test(f.name) && SPECIAL.test(f.name)), plain = p.filter(f => !LEADERISH.test(f.name) && !SPECIAL.test(f.name));
+    if (idx === 0 && lead.length) return lead;
+    if (idx > 0 && idx % 4 === 3 && spec.length) return spec;
+    return plain.length ? plain : p;
+  }
+  function pick(ds, faction, key, idx, n) { if (!index.length || get('on', '1') !== '1') return null; let p = pool(ds, faction); if (!p) return null; p = roleFilter(p, idx | 0, n | 0); const m = p[hash(String(key)) % p.length]; return fetchFig(m) || cache.get(m.key) || null; }
   function add(mb, fig, x, y, z, yaw) {
     const cy = Math.cos(yaw), sy = Math.sin(yaw);
     for (const g of fig.parts) {
