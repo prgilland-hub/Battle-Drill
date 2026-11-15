@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.15-1659';
+  const VERSION = '2026.11.15-1700';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -1859,6 +1859,7 @@ html[data-look="cog"] .muted{color:var(--muted)}
 .sch-ab details>summary::before{content:"\25B8 ";color:var(--muted)}.sch-ab details[open]>summary::before{content:"\25BE "}
 .sch-ab details>div{margin:2px 0 4px 14px;font-size:.86rem;color:var(--muted)}
 .sch-sw{gap:4px 14px}.sch-sw li{margin:1px 0;font-size:.9rem}
+.sl-tag{display:inline-block;margin-left:6px;padding:0 6px;border:1px solid #b06ad8;border-radius:9px;color:#d9a8f5;font-size:.7rem;letter-spacing:.02em;white-space:nowrap}
 </style>
 </head>
 <body>
@@ -21071,6 +21072,8 @@ function trimToCaps() {
   for (const n in B.enh) if (drop.has(B.enh[n])) delete B.enh[n];
   renderBuilder();
 }
+const isSLUnit = u => !!u && ((u.facKw || u.kw || []).some(k => /scintillating legions/i.test(k)) || (u.faction === 'Thousand Sons' && /^(kairos fateweaver|lord of change|flamers|screamers|pink horrors|blue horrors)$/i.test(u.name)));
+const slTag = u => isSLUnit(u) ? ' <small class="sl-tag" title="Scintillating Legions unit: counts toward the Changehost of Deceit points cap, and can never be your Warlord">Scintillating Legions</small>' : '';
 function checks() {
   const out = [], size = curSize(), total = rosterPts();
   if (!B.roster.length) out.push({ e: true, t: 'Add some units first.' });
@@ -21079,7 +21082,7 @@ function checks() {
   if (!chars.length) out.push({ e: true, t: 'You need at least one Character to be your Warlord.' });
   else if (!B.warlord || !chars.some(c => c.key === B.warlord)) out.push({ e: true, t: 'Choose a Warlord on the Characters step.' });
   if (curDets().some(d => /changehost of deceit|infernal pacts/i.test((d.name || '') + ' ' + (d.rule || '')))) {   /* Infernal Pacts: Scintillating Legions units, capped by points and never the Warlord */
-    const isSL = u => (u.facKw || u.kw || []).some(k => /scintillating legions/i.test(k)) || (u.faction === 'Thousand Sons' && /^(kairos fateweaver|lord of change|flamers|screamers|pink horrors|blue horrors)$/i.test(u.name)), cap = { incursion: 500, strike: 1000, onslaught: 1500 }[size.key] || 1000;
+    const isSL = isSLUnit, cap = { incursion: 500, strike: 1000, onslaught: 1500 }[size.key] || 1000;
     const sl = B.roster.filter(e => isSL(libOf(e))), pts = sl.reduce((a, e) => a + (+e.pts || 0), 0);
     if (pts > cap) out.push({ e: true, t: `Changehost of Deceit (Infernal Pacts): Scintillating Legions units can total up to ${cap} pts at ${size.name}, but yours total ${pts} pts.` });
     const wl = B.roster.find(e => e.key === B.warlord); if (wl && isSL(libOf(wl))) out.push({ e: true, t: 'Changehost of Deceit (Infernal Pacts): Scintillating Legions models cannot be your Warlord. Choose another Character.' });
@@ -21228,7 +21231,7 @@ function catalogue(filterFn, openDefault) {
   const flat = B.sort && B.sort !== 'role';
   const row = u => {
     const n = B.roster.filter(e => e.id === u.id).length, cap = capFor(u, size, curDet()), full = n >= cap, why = reasons.get(u.id) || [];
-    return `<div class="item us-item"><span class="nm" data-libid="${u.id}">${escH(u.name)}${u.legends ? ' <small>[Legends]</small>' : ''} <small>${u.baseModels > 1 ? u.baseModels + ' models, ' : ''}${u.pts} pts${n ? ` · ${n}/${cap} in army` : ''}</small><br>${usChips(u)}${why.length ? `<br><span class="us-why">${why.slice(0, 4).map(escH).join(' · ')}${why.length > 4 ? ' …' : ''}</span>` : ''}</span><button class="btn" data-add="${u.id}" aria-label="Add ${escH(u.name)}"${full ? ` disabled title="At the limit: ${cap} of this datasheet at ${size.name}"` : ''}>+</button></div>`;
+    return `<div class="item us-item"><span class="nm" data-libid="${u.id}">${escH(u.name)}${slTag(u)}${u.legends ? ' <small>[Legends]</small>' : ''} <small>${u.baseModels > 1 ? u.baseModels + ' models, ' : ''}${u.pts} pts${n ? ` · ${n}/${cap} in army` : ''}</small><br>${usChips(u)}${why.length ? `<br><span class="us-why">${why.slice(0, 4).map(escH).join(' · ')}${why.length > 4 ? ' …' : ''}</span>` : ''}</span><button class="btn" data-add="${u.id}" aria-label="Add ${escH(u.name)}"${full ? ` disabled title="At the limit: ${cap} of this datasheet at ${size.name}"` : ''}>+</button></div>`;
   };
   let html;
   if (flat) html = usSortList(units, B.sort, B.dir).map(row).join('');
@@ -21326,7 +21329,7 @@ function rosterRows(filterFn, opts) {
   if (!list.length) return `<p class="muted">${opts.empty || 'Nothing here yet.'}</p>`;
   return list.map(e => {
     const u = libOf(e), est = e.models !== u.models;
-    return `<div class="bld-row"><span class="nm" data-libid="${u.id}" data-nm="${e.models}">${escH(u.name)} <small class="muted">#${e.key}</small></span>
+    return `<div class="bld-row"><span class="nm" data-libid="${u.id}" data-nm="${e.models}">${escH(u.name)}${slTag(u)} <small class="muted">#${e.key}</small></span>
       <input type="number" min="1" max="${maxModelsOf(u)}" value="${e.models}" data-models="${e.key}" aria-label="Models" title="Models"${u.models === 1 && !u.leader ? ' disabled' : ''}>
       <input type="number" min="0" step="5" value="${e.pts}" data-pts="${e.key}" aria-label="Points" title="Points">
       <button class="btn" data-rm="${e.key}" aria-label="Remove ${escH(u.name)}">✕</button>
@@ -21373,7 +21376,7 @@ function stepContent() {
         (leaders.length ? `<div class="bld-roster">${leaders.map(e => {
           const u = libOf(e), elig = eligibleBodyguards(e);
           const opts = [...elig, ...(e.leadTo ? [B.roster.find(o => o.key === e.leadTo)] : [])].filter((v, i, a) => v && a.indexOf(v) === i);
-          return `<div class="bld-row" style="grid-template-columns:minmax(0,1fr) minmax(0,1.3fr)"><span class="nm" data-libid="${u.id}" data-nm="${e.models}">${escH(u.name)} <small class="muted">#${e.key}</small></span>
+          return `<div class="bld-row" style="grid-template-columns:minmax(0,1fr) minmax(0,1.3fr)"><span class="nm" data-libid="${u.id}" data-nm="${e.models}">${escH(u.name)}${slTag(u)} <small class="muted">#${e.key}</small></span>
             <select data-lead="${e.key}"><option value="">Stays on its own</option>${opts.map(o => `<option value="${o.key}"${e.leadTo === o.key ? ' selected' : ''}>Leads ${escH(libOf(o).name)} #${o.key}</option>`).join('')}</select>
             <div class="sub">Can lead: ${escH(leadsOf(u).join(', '))}${!opts.length ? ' (none of these are in your army yet)' : ''}</div></div>`;
         }).join('')}</div>` : '<p class="muted">None of your characters can lead a unit. You can skip this step.</p>');
@@ -22002,7 +22005,7 @@ function renderComposer() {
   const roles = [...new Set(lib.map(u => u.role))].sort((a, b) => (ROLE_ORDER.indexOf(a) + 99) % 99 - (ROLE_ORDER.indexOf(b) + 99) % 99);
   const cat = roles.map(r => `<details data-role="${escH(r)}"${C.q || C.open.has(r) ? ' open' : ''}><summary>${escH(r)} <small class="muted">(${lib.filter(u => u.role === r).length})</small></summary>${lib.filter(u => u.role === r).map(u => {
     const n = cCount(u.name), cap = capFor(u, size, cDet()), full = n >= cap;
-    return `<div class="item"><span class="nm" data-libid="${u.id}">${escH(u.name)}${u.legends ? ' <small>[Legends]</small>' : ''} <small>${u.baseModels > 1 ? u.baseModels + ' models, ' : ''}${u.pts} pts${n ? ` · ${n}/${cap} in army` : ''}</small></span><button class="btn" data-cadd="${u.id}" aria-label="Add ${escH(u.name)}"${full ? ` disabled title="At the limit: ${cap} at ${size.name}"` : ''}>+</button></div>`;
+    return `<div class="item"><span class="nm" data-libid="${u.id}">${escH(u.name)}${slTag(u)}${u.legends ? ' <small>[Legends]</small>' : ''} <small>${u.baseModels > 1 ? u.baseModels + ' models, ' : ''}${u.pts} pts${n ? ` · ${n}/${cap} in army` : ''}</small></span><button class="btn" data-cadd="${u.id}" aria-label="Add ${escH(u.name)}"${full ? ` disabled title="At the limit: ${cap} at ${size.name}"` : ''}>+</button></div>`;
   }).join('')}</details>`).join('') || '<p class="muted">No datasheets match.</p>';
   const rows = cGroups().map(g => {
     const u = C.units[g[0]], n = g.length, lb = cLibOf(u), held = hasHeld(u), warlord = (u.abilities || []).some(a => /^warlord$/i.test(a.name));
