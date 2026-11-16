@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.16-0350';
+  const VERSION = '2026.11.16-0437';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -748,6 +748,8 @@ input[type=checkbox]{accent-color:var(--brass);width:17px;height:17px}
 #b-lognew{display:inline-block;min-width:18px;padding:0 5px;margin-left:6px;border-radius:9px;background:var(--brass);color:#000;font-size:.75rem;text-align:center}
 #b-logwrap{position:fixed;right:16px;bottom:62px;z-index:9100;width:min(440px,94vw);height:min(62vh,620px);flex-direction:column;padding:10px;background:var(--surface);border:1px solid var(--brass);border-radius:8px;box-shadow:0 8px 30px rgba(0,0,0,.6)}
 #b-logwrap:not([hidden]){display:flex}
+html.orders-open #b-logwrap{right:calc(min(440px,94vw) + 24px);width:min(440px,calc(100vw - min(440px,94vw) - 40px))}
+html.orders-open #b-logbtn{right:calc(min(440px,94vw) + 24px)}
 .b-loghd{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
 .b-loghd button{cursor:pointer;background:transparent;border:1px solid var(--line);color:var(--text);border-radius:4px;padding:3px 9px}
 #b-log li{padding:5px 8px;border-left:3px solid var(--line);margin-bottom:4px;background:var(--raised);border-radius:0 3px 3px 0}
@@ -852,7 +854,9 @@ html[data-look] .ds-stat b,#camp-root .ds-stat b{color:#1b1f22;font-weight:700}
 .tip-more{position:sticky;bottom:0;text-align:center;font:600 .74rem Barlow,system-ui,sans-serif;letter-spacing:.04em;text-transform:uppercase;padding:5px 0;color:#fff;background:linear-gradient(transparent,rgba(20,20,20,.82) 60%);border-radius:0 0 7px 7px}
 .modal{position:fixed;inset:0;z-index:70;background:rgba(0,0,0,.55);display:flex;align-items:flex-start;justify-content:center;padding:max(16px,env(safe-area-inset-top,0px)) 12px 16px;overflow-y:auto}
 .modal[hidden]{display:none}
-.modal-box{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px;width:min(700px,100%);display:grid;gap:12px}
+.modal-box{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px;width:min(700px,100%);display:grid;gap:12px;max-width:100%;max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px);overflow:auto;box-sizing:border-box;align-content:start;overscroll-behavior:contain}
+.modal-box>.row:first-child{position:sticky;top:-14px;background:var(--surface);z-index:2;padding:6px 0}
+.modal-box *{max-width:100%}.modal-box table{display:block;overflow-x:auto}
 .modal-box.small{width:min(440px,100%)}
 .calc-sheets{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px}
 @media (max-width:1000px){.calc-sheets{grid-template-columns:1fr}}
@@ -6362,7 +6366,12 @@ function toggleReserve(u) {
   if (!u.reserve && reservePtsUsed('player', u) > reservePtsCap('player') && unitPts(u) > 0) { flash(`Your Strategic Reserves can be worth at most ${reservePtsCap('player')} points (half your points limit). That would make ${reservePtsUsed('player', u)}.`); return; }
   u.reserve = !u.reserve; render();
 }
-function confirmFormations() {
+async function confirmFormations() {
+  if (dgFaction('player') && !G.plagueChosen) {
+    const k = await dgPickPlague("Choose your Plague for Nurgle's Gift. It applies to every Afflicted enemy (within your Contagion Range) for the whole battle.");
+    if (!k) return;
+    G.plague.player = k; G.plagueChosen = true; log(`You chose <b>${plagueName(k)}</b> as your Plague.`, 'player');
+  }
   fixDedicated('player');
   const aiRes0 = inArmy('ai').filter(u => dstrike(u) && !forcedReserve(u)).filter((u, i, arr) => arr.slice(0, i + 1).reduce((a, x) => a + unitPts(x), 0) + inArmy('ai').filter(x => forcedReserve(x)).reduce((a, x) => a + unitPts(x), 0) <= reservePtsCap('ai')); aiRes0.forEach(u => u.reserve = true);
   aiLoadTransports();
@@ -8135,7 +8144,7 @@ function renderSide() {
       if (inArmy('player').some(x => tcfg(x))) acts.push(btn('Load transports…', openLoadout));
       if (dgFaction('player')) {
         prompt += ` Choose your Plague for Nurgle's Gift: it applies to every Afflicted enemy for the whole battle${dgDetIs('player', 'Champions of Contagion') ? ' (Manifold Maladies lets you change it each round)' : ''}.`;
-        for (const p of PLAGUES) acts.push(btn(`${G.plague.player === p[0] ? '✓ ' : ''}Plague: ${p[1]}`, () => { G.plague.player = p[0]; render(); }, false, false, p[2]));
+        for (const p of PLAGUES) acts.push(btn(`${G.plague.player === p[0] && G.plagueChosen ? '✓ ' : ''}Plague: ${p[1]}`, () => { G.plague.player = p[0]; G.plagueChosen = true; render(); }, false, false, p[2]));
         if (dgDetIs('player', 'Flyblown Host')) for (const x of inArmy('player').filter(isPM)) acts.push(btn(`${x.hazed ? '✓ ' : ''}Infiltrators: ${x.name}${enhMark(x)}`, () => dgToggleHaze(x), false, false, 'Verminous Haze: up to two Plague Marines units have Infiltrators.'));
       }
       if (smDet('player', 'Orbital Assault Force')) for (const x of inArmy('player').filter(v => !has(v, 'titanic') && !isAircraft(v))) acts.push(btn(`${x.dropped ? '✓ ' : ''}Deep Strike: ${x.name}${enhMark(x)}`, () => smToggleDrop(x), false, false, 'Rapid-drop Deployment: up to 2 units (Incursion), 3 (Strike Force) or 4 (Onslaught) have Deep Strike.'));
@@ -8993,7 +9002,7 @@ function dgAttackMods(u, w, t, shooting) {
 }
 /* ---- setup ---- */
 function dgSetup() {
-  G.plague = { player: 'rattlejoint', ai: 'rattlejoint' }; G.plagueExtra = { player: [], ai: [] }; G.turnNo = 0; G.phaseNo = 0; G.surge = {}; G.hostUsed = {}; G.iconUsed = { player: false, ai: false }; G.bombard = {}; G.vbless = {}; G.pestsUsed = {}; G.blight = {}; G.signal = {}; G.dgQ = []; G.dgReturn = []; G.lotdg = { used: {} };
+  G.plague = { player: 'rattlejoint', ai: 'rattlejoint' }; G.plagueChosen = false; G.plagueExtra = { player: [], ai: [] }; G.turnNo = 0; G.phaseNo = 0; G.surge = {}; G.hostUsed = {}; G.iconUsed = { player: false, ai: false }; G.bombard = {}; G.vbless = {}; G.pestsUsed = {}; G.blight = {}; G.signal = {}; G.dgQ = []; G.dgReturn = []; G.lotdg = { used: {} };
   for (const side of ['player', 'ai']) {
     if (!dgFaction(side)) continue;
     for (const u of G.units.filter(x => x.side === side)) {
@@ -9067,7 +9076,7 @@ function dgDoCommand(side) {
     checkEnd();
   }
   if (!dgFaction(side)) return;
-  if (aliveSide(side).some(u => abIn(u, /^seven-?fold chant/i))) { const a = d6(), b = d6(); if (a + b >= 7) { G.cp[side]++; log(`Seven-fold Chant: ${a}+${b}=${a + b}. ${side === 'player' ? 'You gain' : 'The AI gains'} 1 CP.`, side); } else log(`Seven-fold Chant: ${a}+${b}=${a + b}. No CP this time.`, side); }
+  if (aliveSide(side).some(u => abIn(u, /^seven-?fold chant/i))) { const a = d6(), b = d6(); if (a + b >= 7) { G.cp[side]++; log(`Seven-fold Chant: ${a}+${b}=${a + b}. ${side === 'player' ? 'You gain' : 'The AI gains'} 1 CP.`, side); } else log(`Seven-fold Chant: ${a}+${b}=${a + b}. No CP this time.`, side); const sc = G.cpChant = G.cpChant || {}; dgBanner('Seven-fold Chant (Tallyman)', [`${side === 'player' ? 'You' : 'The AI'} rolled ${a}+${b}=${a + b}: ${a + b >= 7 ? '+1 CP' : 'no CP this time (needs 7+)'}. CP now ${G.cp[side]}.`]); }
   if (dgDetIs(side, 'Shamblerot Vectorium')) {
     const rounds = { Incursion: [2, 3], 'Strike Force': [2, 3, 4], Onslaught: [2, 3, 4, 5] }[sizeFor((side === 'player' ? G.pb : G.ab).limit).name] || [];
     if (rounds.includes(G.round)) {
@@ -10960,8 +10969,8 @@ async function subterraneanHunter() {
    A unit keeps its position (x, y) and a radius r that encloses all of its models, so the older circle-based code still works;
    each model is stored as an offset (dx, dy) from the unit and a base radius. Moving the unit moves its models, and distances,
    engagement, objectives, cover and visibility are measured model to model. */
-const MODELS = { on: true, snap: false, manualClose: true, aiModels: true, view: null, sprDone: {}, sprMeta: {} };
-try { MODELS.on = localStorage.getItem('battleDrill.models') !== 'off'; MODELS.snap = localStorage.getItem('battleDrill.snap') === 'snap'; MODELS.manualClose = localStorage.getItem('battleDrill.manualClose') !== 'auto'; MODELS.aiModels = localStorage.getItem('battleDrill.aiModels') !== 'off'; } catch (e) { }
+const MODELS = { on: true, snap: true, manualClose: true, aiModels: true, view: null, sprDone: {}, sprMeta: {} };
+try { MODELS.on = localStorage.getItem('battleDrill.models') !== 'off'; MODELS.snap = localStorage.getItem('battleDrill.snap') !== 'flag'; MODELS.manualClose = localStorage.getItem('battleDrill.manualClose') !== 'auto'; MODELS.aiModels = localStorage.getItem('battleDrill.aiModels') !== 'off'; } catch (e) { }
 const mmR = mm => mm / 25.4 / 2;
 const BASE_BY_NAME = [[/gargoyle/i, 25], [/tyranid warriors|zoanthrope|raveners|von ryan|genestealer|deathleaper|neurolictor|tyranid prime|node organism|parasite of mortrex|broodlord/i, 40], [/tyrant guard|hive guard|venomthrope|malanthrope|pyrovore|lictor/i, 50], [/poxwalker/i, 28], [/plague marine|plaguebearer|plague drone/i, 32], [/deathshroud|blightlord|terminator/i, 40], [/hormagaunt|termagant|gretchin|ripper|spore mine|mucolid|grot\b|runtherd|gaunt/i, 25], [/\bboyz\b|stormboy|kommando|burna|tankbusta|lootas|flash git/i, 32], [/\bnobz\b|meganob|breaka/i, 40], [/genestealer|raveners|lictor|von ryan|deathleaper/i, 40], [/biovore|zoanthrope|venomthrope|hive guard|haruspex/i, 50], [/battle sisters|retributor|dominion|novitiate|celestian|seraphim|zephyrim|sororitas/i, 32], [/intercessor|tactical|assault|devastator|hellblaster|infernus|sternguard|vanguard|reiver|incursor|infiltrator/i, 32]];
 const leaderObj = (u, leader) => (leader === false || leader == null) ? u : (leadersOf(u)[leader === true ? 0 : leader] || u.leader || null);
@@ -11769,6 +11778,12 @@ function mmPrompt() {
   return h;
 }
 function mmButtons() {
+  const a = mmButtons0(), S = G.mm; if (!S || S.fresh) return a;
+  let ids = new Set(); try { for (const v of mmCheck()) for (const i of (v.ids || [])) ids.add(i); } catch (e) { }
+  if (ids.size) a.splice(1, 0, btn(`Fix ${ids.size === 1 ? 'the flagged model' : 'the ' + ids.size + ' flagged models'}`, () => { mmSolve(new Set(ids)); mmPend(); render(); }, false, false, 'Moves only the flagged models to the nearest legal spot: back inside reach, off terrain edges and other bases, out of enemy engagement range and into coherency. Models that are fine stay where you put them.'));
+  return a;
+}
+function mmButtons0() {
   const S = mmEnsure(), u = mmUnit(); if (!S || !u) return [];
   const viol = (S.moved || S.fresh || G.mode.kind === 'pilein' || G.mode.kind === 'consolidate') ? mmCheck() : [{}];
   const turn = [btn('Turn left', () => { mmRotate(-15); render(); }, false, S.fresh), btn('Turn right', () => { mmRotate(15); render(); }, false, S.fresh)];
@@ -15467,10 +15482,13 @@ void main(){ vW=aP; vN=aN; vC=aC; vM=aM; vL=uLVP*vec4(aP,1.); gl_Position=uVP*ve
 const FS = `#version 300 es
 precision highp float; precision highp sampler2DShadow;
 in vec3 vW, vN, vC; in vec2 vM; in vec4 vL; out vec4 o;
+uniform float uFadeOn; uniform int uFN; uniform vec4 uFd[40];
 uniform sampler2DShadow uSh; uniform vec3 uSun, uSunC, uAmbT, uAmbB, uFog, uCam, uSky; uniform float uFogD, uShadow, uTexel, uDust; uniform vec2 uRes; uniform int uLN; uniform vec4 uLP[12]; uniform vec3 uLC[12];
 float h31(vec3 p){ p=fract(p*.3183099+.1); p*=17.; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }
 float vn(vec3 x){ vec3 i=floor(x), f=fract(x); f=f*f*(3.-2.*f); return mix(mix(mix(h31(i),h31(i+vec3(1,0,0)),f.x),mix(h31(i+vec3(0,1,0)),h31(i+vec3(1,1,0)),f.x),f.y),mix(mix(h31(i+vec3(0,0,1)),h31(i+vec3(1,0,1)),f.x),mix(h31(i+vec3(0,1,1)),h31(i+vec3(1,1,1)),f.x),f.y),f.z); }
 void main(){
+  if(uFadeOn>.5 && uFN>0 && vW.y>.3){ float fa=1.; for(int i=0;i<40;i++){ if(i>=uFN) break; float fd=length(vW.xz-uFd[i].xy)-uFd[i].z; fa=min(fa,mix(.1,1.,smoothstep(0.,1.2,fd))); }
+    if(fa<.999){ float fn=fract(52.9829189*fract(dot(gl_FragCoord.xy,vec2(.06711056,.00583715)))); if(fn>fa) discard; } }
   float gls=floor(vM.x*.5+.001), wx=vM.x-2.*gls;
   vec3 n=normalize(vN); vec3 c=vC;
   n=normalize(n+(vec3(vn(vW*9.),vn(vW*9.+7.),vn(vW*9.+13.))-.5)*.38*wx);
@@ -15615,7 +15633,9 @@ class Renderer {
     gl.uniform1f(U.uFogD, env.fogD); gl.uniform1f(U.uShadow, this.q.shadowOn ? 1 : 0); gl.uniform1f(U.uTexel, 1 / this.q.shadow); gl.uniform1f(U.uDust, env.dust || 0);
     { const Ls = (env.lights || []).slice(0, 12), lp = new Float32Array(48), lc = new Float32Array(36); Ls.forEach((l, i) => { lp.set([l.x, l.y, l.z, l.r], i * 4); lc.set(l.c, i * 3); }); gl.uniform1i(U.uLN, Ls.length); if (Ls.length) { gl.uniform4fv(U['uLP[0]'], lp); gl.uniform3fv(U['uLC[0]'], lc); } }
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.shTex); gl.uniform1i(U.uSh, 0);
-    for (const m of this.meshes) if (m.kind === 'solid' && !m.hidden) { gl.bindVertexArray(m.vao); gl.drawElements(gl.TRIANGLES, m.count, gl.UNSIGNED_INT, 0); }
+    { const fd = this.fades || [], n = Math.min(40, fd.length / 4 | 0), arr = new Float32Array(160); arr.set(fd.slice(0, n * 4)); gl.uniform1i(U.uFN, n); if (U['uFd[0]']) gl.uniform4fv(U['uFd[0]'], arr); }
+    for (const m of this.meshes) if (m.kind === 'solid' && !m.hidden) { gl.uniform1f(U.uFadeOn, m.fade ? 1 : 0); gl.bindVertexArray(m.vao); gl.drawElements(gl.TRIANGLES, m.count, gl.UNSIGNED_INT, 0); }
+    gl.uniform1f(U.uFadeOn, 0);
     const fp = this.flat; gl.useProgram(fp.p); gl.uniformMatrix4fv(fp.U.uVP, false, VP); gl.uniformMatrix4fv(fp.U.uLVP, false, LVP);
     gl.enable(gl.BLEND); gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ZERO, gl.ONE); gl.depthMask(false);
     for (const m of this.meshes) if (m.kind === 'decal' && m.on !== false) { gl.bindVertexArray(m.vao); gl.drawElements(gl.TRIANGLES, m.count, gl.UNSIGNED_INT, 0); }
@@ -16288,7 +16308,7 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
     if (force || sig !== BF3D.tsig) {
       BF3D.tsig = sig; R.clear(); BF3D.dyn = null;
       try { BF3D.map = BFX.buildMap(specNow()); } catch (e) { console.error(e); BF3D.map = null; return; }
-      R.upload(BF3D.map.solid, 'solid'); R.upload(BF3D.map.decal, 'decal'); BF3D.zm = R.upload(BF3D.map.zdec, 'decal'); BF3D.om = R.upload(BF3D.map.odec, 'decal'); applyOpts(); BF3D.trays = null; BF3D.diceMesh = null; buildTrays(); if (DICE.list.length) { clearDice(); }
+      BF3D.mapMesh = R.upload(BF3D.map.solid, 'solid'); BF3D.mapMesh.fade = true; R.upload(BF3D.map.decal, 'decal'); BF3D.zm = R.upload(BF3D.map.zdec, 'decal'); BF3D.om = R.upload(BF3D.map.odec, 'decal'); applyOpts(); BF3D.trays = null; BF3D.diceMesh = null; buildTrays(); if (DICE.list.length) { clearDice(); }
     }
     if (!BF3D.map) return;
     if (BF3D.pend) return; BF3D.pend = requestAnimationFrame(() => {
@@ -16413,7 +16433,20 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
     for (const l of labels) pill(l[0], l[1], l[2], l[3], l[4]);
     const sb = document.getElementById('b-3dsight'); if (sb) sb.setAttribute('aria-pressed', String(!!sightOn));
   }
-  function kick() { if (BF3D.raf || !BF3D.on) return; BF3D.raf = requestAnimationFrame(() => { BF3D.raf = 0; if (!BF3D.on || !BF3D.map || !BF3D.dirty) return; BF3D.dirty = false; place(); BF3D.R.draw(BF3D.cam, BF3D.map.th.env); try { overlay(); } catch (e) { console.error(e); } }); }
+  /* walls and ruin pieces fade out around any model that stands in or beside terrain, so figures never look sunk into masonry */
+  function bfFades() {
+    const out = [], S = (typeof mmOn === 'function' && G.mm && mmOn()) ? G.mm : null, mu = S ? mmUnit() : null;
+    const solid = TERRAIN.filter(t => t.cat !== 'exposed' && !(t.open));
+    for (const u of alive().concat(mu && !mu.placed ? [mu] : [])) {
+      if (!u.mods || (u.elev || 0) > 0) continue;
+      for (const m of u.mods) {
+        const sp = S && mu === u && S.pos.get(m.id), x = sp ? sp.x : (u.x || 0) + m.dx, y = sp ? sp.y : (u.y || 0) + m.dy, r = (m.rho || m.r || .6) + (m.hw || m.hh ? Math.max(m.hw || 0, m.hh || 0) : 0) + .45;
+        if (solid.some(t => x > t.x - r - 1 && x < t.x + t.w + r + 1 && y > t.y - r - 1 && y < t.y + t.h + r + 1)) { out.push(x, y, r, 0); if (out.length >= 160) return out; }
+      }
+    }
+    return out;
+  }
+  function kick() { if (BF3D.raf || !BF3D.on) return; BF3D.raf = requestAnimationFrame(() => { BF3D.raf = 0; if (!BF3D.on || !BF3D.map || !BF3D.dirty) return; BF3D.dirty = false; place(); try { BF3D.R.fades = bfFades(); } catch (e) { BF3D.R.fades = []; } BF3D.R.draw(BF3D.cam, BF3D.map.th.env); try { overlay(); } catch (e) { console.error(e); } }); }
   /* ---- dice trays and rolling: the game decides every result, the table only shows it ---- */
   const TRAY = { player: { x: 30, z: BH + 7, w: 26, d: 9 }, ai: { x: 30, z: -7, w: 26, d: 9 } };
   const FELT = [.03, .1, .05], WOOD = [.14, .08, .04];
@@ -16620,7 +16653,7 @@ function actTip(a) {
   const sb = mk('b-sidebtn', 'Orders', 'Show or hide the orders, army and battle log panel'), tb = mk('b-strbtn', 'Stratagems', 'Show or hide the stratagems');
   const cl = document.createElement('button'); cl.type = 'button'; cl.id = 'b-sideclose'; cl.className = 'btn'; cl.textContent = 'Close ✕'; side.insertBefore(cl, side.firstChild);
   const desk = () => !document.documentElement.classList.contains('fs-on') && document.documentElement.dataset.device !== 'tablet' && window.innerWidth >= 921 && !grid.classList.contains('formonly');
-  const setSide = on => { grid.classList.toggle('side-open', !!on); sb.setAttribute('aria-expanded', String(!!on)); if (on) setStr(false); };
+  const setSide = on => { document.documentElement.classList.toggle('orders-open', !!on && desk()); grid.classList.toggle('side-open', !!on); sb.setAttribute('aria-expanded', String(!!on)); if (on) setStr(false); };
   const setStr = on => { grid.classList.toggle('str-open', !!on); tb.setAttribute('aria-expanded', String(!!on)); if (on) setSide(false); };
   window.bdPanels = { side: setSide, str: setStr };
   sb.addEventListener('click', () => setSide(!grid.classList.contains('side-open')));
@@ -16628,7 +16661,7 @@ function actTip(a) {
   cl.addEventListener('click', () => setSide(false));
   document.addEventListener('keydown', e => { if (e.key === 'Escape') { setSide(false); setStr(false); } });
   /* clicking the map closes either popup, so the board is never left covered */
-  map.addEventListener('pointerdown', e => { if (!desk() || e.target.closest('.fs-btn')) return; setSide(false); setStr(false); });
+  map.addEventListener('pointerdown', e => { if (!desk() || e.target.closest('.fs-btn')) return; if (e.button === 2) return; try { const pt = (typeof BF3D !== 'undefined' && BF3D.on) ? boardPt(e) : toSvg(e); if (pt && typeof unitAt === 'function' && unitAt(pt)) return; } catch (x) { } setSide(false); setStr(false); });
   /* a stratagem used from the popup closes it */
   const st = document.getElementById('b-strats'); if (st) st.addEventListener('click', e => { if (e.target.closest && e.target.closest('.scard[data-sact],.scard[data-sdet]')) setTimeout(() => setStr(false), 60); });
   /* new phase, step or game over: open the orders panel by itself */
@@ -16639,7 +16672,7 @@ function actTip(a) {
     try {
       if (typeof G === 'undefined' || !G) return; const sig = [G.stage, G.step, G.round, G.phaseNo, G.active].join('|');
       if (sig !== last) { last = sig; if (desk()) setSide(true); }
-      if (!desk()) { grid.classList.remove('side-open', 'str-open'); }
+      if (!desk()) { grid.classList.remove('side-open', 'str-open'); document.documentElement.classList.remove('orders-open'); }
     } catch (e) { }
   };
 })();
