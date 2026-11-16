@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.15-1700';
+  const VERSION = '2026.11.16-0350';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -690,6 +690,9 @@ input[type=checkbox]{accent-color:var(--brass);width:17px;height:17px}
 .grid{stroke:var(--ink);stroke-width:.04;opacity:.12}
 .dz-you{fill:var(--dz-you)}.dz-them{fill:var(--dz-them)}
 .terrain{fill:var(--ruin);stroke:var(--ruin-edge);stroke-width:.15}
+.terrain.light{opacity:.7;stroke-dasharray:.6 .3}
+.terrain.exposed{opacity:.4;stroke-dasharray:.3 .5}
+.terr-lab{font-size:.9px;fill:var(--ruin-edge);opacity:.8;pointer-events:none}
 .wall{stroke:var(--ruin-edge);stroke-width:.55;stroke-linecap:round}
 .obj-ring{fill:none;stroke:var(--muted);stroke-width:.14;stroke-dasharray:.55 .35}
 .obj-ring.player{stroke:var(--you);stroke-width:.22}.obj-ring.ai{stroke:var(--them);stroke-width:.22}
@@ -882,6 +885,18 @@ button[data-tip],label[data-tip] input,label[data-tip] select{cursor:pointer}
 .bld-row .sub{grid-column:1/-1;display:flex;gap:8px;align-items:center;font-size:.85rem;color:var(--muted)}
 .bld-row .sub select{max-width:280px}
 .bld-row.led{margin-left:22px;border-left:3px solid var(--brass)}
+.ld-cols{align-items:start}
+.ld-cols>div{min-width:0}
+.ld-ttl{margin:4px 0 6px;position:sticky;top:0;background:var(--surface);z-index:1;padding:2px 0}
+.ld-scroll{max-height:68vh;overflow:auto;padding-right:2px;align-content:start}
+.ld-card{gap:6px}
+.ld-card.on{border-left:4px solid var(--brass)}
+.ld-card.muted-row{opacity:.6}
+.ld-h{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.ld-tag{font-size:.75rem;border:1px solid var(--brass);color:var(--brass);border-radius:10px;padding:1px 8px;white-space:nowrap}
+.ld-led{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:.9rem}
+.ld-chip{display:inline-flex;gap:6px;align-items:center;border:1px solid var(--line);border-radius:12px;padding:2px 4px 2px 10px;background:var(--surface)}
+.ld-note{font-size:.85rem;margin:4px 0 8px}
 .bld-total{position:sticky;top:0;background:var(--surface);padding:6px 0 8px;z-index:2}
 .bld-bar{height:8px;border-radius:4px;background:var(--line);overflow:hidden;margin-top:4px}
 .bld-bar i{display:block;height:100%;background:var(--brass)}
@@ -2346,23 +2361,30 @@ function resolve(p, def, rec) {
   }
   st.wounds = normal + st.dev;
   const body = { Sv: def.Sv !== undefined ? def.Sv : p.Sv, inv: def.inv !== undefined ? def.inv : p.inv, invR: def.invR || 0, fnp: def.fnp !== undefined ? def.fnp : p.fnp, dm: def.dm || 0, fnpPsy: def.fnpPsy || 0, half: !!def.half, svR: !!def.svR, mantle: !!def.mantle };
-  const L = def.leader || null;
-  const who = () => p.precision && L && L.alive ? L : (def.models > 0 ? body : (L && L.alive ? L : null));
+  const Ls = def.leaders || (def.leader ? [def.leader] : []), front = () => Ls.find(x => x.alive) || null;
+  let precL = null;
+  const precPick = () => { if (precL && precL.alive) return precL; const live = Ls.filter(x => x.alive); return (precL = live.sort((a, b) => (a.cur - b.cur) || (b.W - a.W))[0] || null); };
+  const who = () => {
+    if (p.precision) { const L = precPick(); if (L) return L; }
+    if (def.models > 0) { if (def.bodies && def.cls) { const c = def.bodies[def.cls[Math.max(0, Math.min(def.cls.length - 1, (def.start || def.cls.length) - def.models))]]; if (c) { body.Sv = c.Sv; body.inv = c.inv; } } return body; }
+    return front();
+  };
   const hurt = (P, dmg) => {
     let d = dmg;
     const fnpE = (p.psy && P.fnpPsy && (!P.fnp || P.fnpPsy < P.fnp)) ? P.fnpPsy : P.fnp;
     if (fnpE) { d = 0; for (let k = 0; k < dmg; k++) if (d6() < fnpE) d++; }
     if (P === body) { const inf = Math.min(d, def.cur); def.cur -= inf; if (def.cur <= 0) { def.models--; def.cur = mW(def); } return inf; }
-    const inf = Math.min(d, P.cur); P.cur -= inf; if (P.cur <= 0) { P.alive = false; st.leaderKilled = true; } return inf;
+    const inf = Math.min(d, P.cur); P.cur -= inf; if (P.cur <= 0) { P.alive = false; st.leaderKilled = (st.leaderKilled || 0) + 1; } return inf;
   };
   let fails = 0;
   const afD = def.afU ? asPlanDef(p, def, normal) : null;
+  const saveDice = Array.from({ length: normal }, () => d6()).sort((a, b) => a - b);   // one D6 per wounding attack, resolved from lowest to highest
   for (let i = 0; i < normal; i++) {
     const P = who(); if (!P) break;
     if (def.wall && def.wall.models > 0) { const dd = rollDmg(p), n = Math.min(dd, def.wall.models); def.wall.models -= n; st.wallKilled = (st.wallKilled || 0) + n; if (rec) rec.save.push({ r: '—', ok: true }); continue; }
     const pinv = (p.shooting && P.invR && (!P.inv || P.invR < P.inv)) ? P.invR : P.inv;
     const armour = P.Sv - ((p.shooting && P.svR && P.Sv > 2) ? 1 : 0) + p.AP, need = pinv && pinv < armour ? pinv : armour;
-    let r = (afD && !afD.done && asCan(def.afU)) ? (afD.done = true, afD.used = true, asUse(def.afU, afD.V, 'a saving throw', st)) : d6(), saved = need <= 6 && r !== 1 && r >= need;
+    let r = (afD && !afD.done && asCan(def.afU)) ? (afD.done = true, afD.used = true, asUse(def.afU, afD.V, 'a saving throw', st)) : saveDice[i], saved = need <= 6 && r !== 1 && r >= need;
     if (!saved && def.cmd && def.cmd.kind === 'save' && !def.cmd.used) { def.cmd.used = true; r = d6(); saved = need <= 6 && r !== 1 && r >= need; }
     if (afD && afD.used && !afD.tripDone) { afD.tripDone = true; if (enhHolder(def.afU, /triptych of the macharian/i)) saved = true; }
     if (!saved && def.forgedU && def.forgedU.forgedTurn !== (G.turnNo || 0)) { def.forgedU.forgedTurn = G.turnNo || 0; r = 6; saved = need <= 6; }
@@ -2390,7 +2412,7 @@ function resolve(p, def, rec) {
     const inf = hurt(P, dmg); st.dmg += inf;
     if (rec) rec.dmg.push({ d: dmg, inf, mw: true });
   }
-  st.killed = st.start - def.models + (st.leaderKilled ? 1 : 0);
+  st.killed = st.start - def.models + (st.leaderKilled || 0);
   return st;
 }
 
@@ -3069,6 +3091,9 @@ function genTerrain(dep) {
     const bad = r => out.some(o => rectsNear(o, r, 2)) || dep.obj.some(([ox, oy]) => distPointRect(ox, oy, r) < 2.5);
     if (bad(a) || bad(b)) continue;
     const walls = [['top', 'bottom'][Math.floor(Math.random() * 2)], ['left', 'right'][Math.floor(Math.random() * 2)]];
+    const rc = Math.random(), cat = rc < .55 ? 'dense' : rc < .8 ? 'light' : 'exposed', ht = cat === 'dense' ? [2, 3, 4, 5, 6][Math.floor(Math.random() * 5)] : 1;
+    const fl = cat === 'dense' && ht >= 3 && Math.random() < .65 ? (ht >= 6 ? [3, 6] : [3]) : [];
+    a.cat = b.cat = cat; a.ht = b.ht = ht; a.floors = fl.slice(); b.floors = fl.slice();
     a.walls = walls; b.walls = walls.map(x => ({ top: 'bottom', bottom: 'top', left: 'right', right: 'left' })[x]);
     out.push(a, b);
   }
@@ -3090,19 +3115,25 @@ let guideOn = true;
 try { guideOn = localStorage.getItem('battleDrill.guide') !== 'off'; } catch (e) { }
 
 const has = (u, k) => !!(u.kw && u.kw.includes(k));
-const leaderUp = u => !!(u.leader && u.leader.alive);
+/* attached characters: u.leaders holds every one (a Leader, a Support, or two Leaders), each with its own wounds, saves, weapons and abilities.
+   u.leader is always the front one (the first still standing, which takes the wounds first); units with a single character have no u.leaders. */
+const leadersOf = u => (u.leaders && u.leaders.length) ? u.leaders : (u.leader ? [u.leader] : []);
+const liveLeaders = u => leadersOf(u).filter(l => l.alive);
+const leaderUp = u => { if (!u.leader) return false; if (!u.leader.alive && u.leaders && u.leaders.length > 1) { const n = u.leaders.find(l => l.alive); if (n) u.leader = n; } return !!u.leader.alive; };
+const wLeadUp = (u, w) => { if (!w.leader) return false; const L = u.leaders && u.leaders.length ? u.leaders[w.lid || 0] : u.leader; return !!(L && L.alive); };
+const wUsable = (u, w) => w.leader ? wLeadUp(u, w) : u.models > 0;
 function fxAll(u) {
   const out = [];
   for (const a of (u.abilities || [])) for (const f of (a.fx || [])) out.push({ t: f.trim().toLowerCase().split(/\s+/), a, src: 'unit' });
-  if (leaderUp(u)) for (const a of (u.leader.abilities || [])) for (const f of (a.fx || [])) out.push({ t: f.trim().toLowerCase().split(/\s+/), a, src: 'leader' });
+  if (leaderUp(u)) for (const L of liveLeaders(u)) for (const a of (L.abilities || [])) for (const f of (a.fx || [])) out.push({ t: f.trim().toLowerCase().split(/\s+/), a, src: 'leader', lid: L.lid || 0 });
   if (u.dg && u.dg.mods) for (const m of u.dg.mods) out.push({ t: m.fx.trim().toLowerCase().split(/\s+/), a: { name: m.name }, src: 'unit' });
   return out;
 }
 const fxGet = (u, k) => fxAll(u).filter(x => x.t[0] === k);
 const hasFx = (u, k) => fxGet(u, k).length > 0;
 const armyRule = (side, r) => !!(G && G.rules && (G.rules[side] || []).includes(r));
-const totalModels = u => u.models + (leaderUp(u) ? 1 : 0);
-const startModels = u => u.start + (u.leader ? 1 : 0);
+const totalModels = u => u.models + (leaderUp(u) ? liveLeaders(u).length : 0);
+const startModels = u => u.start + leadersOf(u).length;
 const docOn = (side, d) => !!(G && G.doctrine && G.doctrine[side] === d);
 const alive = () => G.units.filter(u => u.alive && u.placed);
 const aliveSide = s => alive().filter(u => u.side === s);
@@ -3123,11 +3154,22 @@ const objIn = (u, o) => { const ms = (MODELS.on && isUnitObj(u)) ? modelsOf(u) :
 const inRect = (p, t) => t.poly ? ptInPoly(p.x, p.y, t.poly) : p.x >= t.x && p.x <= t.x + t.w && p.y >= t.y && p.y <= t.y + t.h;
 const cvKw = u => has(u, 'infantry') || has(u, 'beast') || has(u, 'beasts') || has(u, 'swarm');
 const terrCat = t => t.cat || 'dense';
-const inTerrArea = u => (MODELS.on && isUnitObj(u)) ? modelsInCover(u) : TERRAIN.some(t => inRect(u, t));
+/* 11th edition terrain (13.02, 13.06): dense features block sight and, when taller than 2", block vehicles and monsters; light and exposed features block neither; only light and dense features give cover */
+const terrHt = t => t.ht != null ? t.ht : (terrCat(t) === 'dense' ? 4 : 1);
+const blocksMove = t => !t.open && terrCat(t) === 'dense' && terrHt(t) > 2;
+const terrFloors = t => t.floors || (terrCat(t) === 'dense' && terrHt(t) >= 3 ? [3] : []);   /* heights of the floors you can stand on inside a dense feature (the first floor is at 3") */
+const hardBlock = t => blocksMove(t) && terrFloors(t).length > 0;                  /* ceilings and floors cannot be passed through: go around */
+const blocksSight = t => terrCat(t) !== 'exposed';                                  /* obscuring (13.10): areas holding light or dense features */
+const coversT = t => terrCat(t) !== 'exposed';
+const canElev = u => has(u, 'infantry') || has(u, 'beast') || has(u, 'beasts') || has(u, 'swarm') || has(u, 'fly') || has(u, 'monster');
+const floorAt = (x, y) => TERRAIN.find(t => terrFloors(t).length && inRect({ x, y }, t)) || null;
+const elevOf = u => (u && u.elev && floorAt(u.x, u.y)) ? u.elev : 0;
+const inTerrAreaOf = (u, f) => { if (MODELS.on && isUnitObj(u)) { const ms = modelsOf(u); if (ms && ms.length) return ms.every(m => TERRAIN.some(t => f(t) && inRect({ x: u.x + m.dx, y: u.y + m.dy }, t))); } return TERRAIN.some(t => f(t) && inRect(u, t)); };
+const inTerrArea = u => inTerrAreaOf(u, coversT);
 /* Benefit of cover (13.08): only Infantry/Beasts/Swarm get it for standing in a terrain area */
 const inCover = u => cvKw(u) && inTerrArea(u);
 /* Hidden (13.09): Infantry/Beasts/Swarm wholly in a terrain area with a dense feature, that did not make ranged attacks this turn or last turn */
-const isHidden = u => !!G && u.alive && u.placed && !u.reserve && cvKw(u) && TERRAIN.some(t => terrCat(t) === 'dense') && inTerrArea(u) && !(u.rngTurn !== undefined && u.rngTurn >= (G.turnNo || 0) - 1);
+const isHidden = u => !!G && u.alive && u.placed && !u.reserve && cvKw(u) && inTerrAreaOf(u, blocksSight) && !(u.rngTurn !== undefined && u.rngTurn >= (G.turnNo || 0) - 1);
 const hiddenFrom = (a, b) => a.side !== b.side && isHidden(b) && edge(a, b) > 15;
 const distPtSeg = (px, py, ax, ay, bx, by) => { const dx = bx - ax, dy = by - ay, L = dx * dx + dy * dy; let k = L ? ((px - ax) * dx + (py - ay) * dy) / L : 0; k = Math.max(0, Math.min(1, k)); return { d: Math.hypot(ax + k * dx - px, ay + k * dy - py), k }; };
 /* a model that is not fully visible because of intervening terrain, or because of a smoke screen, also has cover (13.08, 15.10) */
@@ -3136,7 +3178,7 @@ function sightCover(a, t) {
   if (aliveSide(t.side).some(s => s !== t && s.smoked && s.placed && !s.reserve && (() => { const r = distPtSeg(s.x, s.y, a.x, a.y, t.x, t.y); return r.k > 0 && r.k < 1 && r.d <= s.r; })())) return true;
   if (!TERRAIN.length) return false;
   const pa = (MODELS.on && isUnitObj(a) && isUnitObj(t)) ? repPoints(a, t)[0] : { x: a.x, y: a.y }, qs = (MODELS.on && isUnitObj(a) && isUnitObj(t)) ? repPoints(t, a) : [{ x: t.x, y: t.y }];
-  return qs.every(q => (cvKw(t) && TERRAIN.some(r => inRect(q, r))) || !ptVisible(pa, q));
+  return qs.every(q => (cvKw(t) && TERRAIN.some(r => coversT(r) && inRect(q, r))) || !ptVisible(pa, q));
 }
 const coverFor = (t, a) => !(t.dg && t.dg.noCover) && !(typeof G !== 'undefined' && G && t.tsNoCover === G.turnNo) && (inCover(t) || (!!a && sightCover(a, t)) || tsGlamour(t) || has(t, 'stealth') || ledFx(t, 'grant-stealth').length > 0 || !!t.smoked || (hasFx(t, 'cadia-cover') && OBJ.some(o => objIn(t, o) && controller(o) === t.side)));
 const sideName = s => s === 'player' ? 'You' : 'The AI';
@@ -3162,7 +3204,7 @@ function rawControl(o) {
     if (oc > 0 && u.staggerT && G && u.staggerT > G.turnNo) oc = Math.max(1, oc - 1);
     if (oc > 0 && engagedWith(u).some(e => hasFx(e, 'halve-oc'))) oc = Math.floor(oc / 2);
     const ocb = (orderOf(u) === 'duty' ? 1 : 0) + (fxAll(u).some(x => x.t[0] === 'oc+1' || (x.t[0] === 'oc+1-led' && x.src === 'leader')) ? 1 : 0) + ((hasFx(u, 'oc+2-full') && !u.shocked && !belowStart(u)) ? 2 : 0) + (hasFx(u, 'rsv-oc') && !u.shocked && typeof G !== 'undefined' && G ? Math.floor(cargoOf(u).reduce((a, c) => a + totalModels(c), 0) / 3) : 0) + ((G && G.pb && asIs(u) && asDetIs(u.side, 'Champions of Faith') && ntIs(u, 'celestian sacresants') && !u.shocked) ? 1 : 0);
-    { const oc0 = objCounts(u, o); s[u.side] += (oc > 0 || ocb ? oc + ocb : 0) * oc0.body + (oc0.lead && leaderUp(u) ? ocOf(u, u.leader.OC, true) + ocb : 0); }
+    { const oc0 = objCounts(u, o); s[u.side] += (oc > 0 || ocb ? oc + ocb : 0) * oc0.body + (oc0.leads && leaderUp(u) ? oc0.leads.reduce((a, li) => { const Lx = leadersOf(u)[li]; return a + (Lx && Lx.alive ? ocOf(u, Lx.OC, true) + ocb : 0); }, 0) : 0); }
   }
   return s.player > s.ai ? 'player' : s.ai > s.player ? 'ai' : null;
 }
@@ -3176,7 +3218,7 @@ function segHitsRect(x1, y1, x2, y2, t) {
   }
   return true;
 }
-const visibleLegacy = (a, b) => !TERRAIN.some(t => !inRect(a, t) && !inRect(b, t) && segHitsRect(a.x, a.y, b.x, b.y, t));
+const visibleLegacy = (a, b) => !TERRAIN.some(t => blocksSight(t) && !inRect(a, t) && !inRect(b, t) && segHitsRect(a.x, a.y, b.x, b.y, t));
 const visible = (a, b) => (G && hiddenFrom(a, b)) ? false : (MODELS.on && isUnitObj(a) && isUnitObj(b)) ? visibleModels(a, b) : visibleLegacy(a, b);
 
 function posOk(u, x, y, allowEngage) {
@@ -3211,13 +3253,19 @@ function segClear(u, x1, y1, x2, y2, o) {
   if (abIn(u, /^scuttling walker/i)) return true;
   o = o || {};
   if (!o.skies && !o.models) for (const e of aliveSide(other(u.side))) { if (e === o.exclude || isAircraft(e) || (hasFx(u, 'walker-over') && !has(e, 'titanic'))) continue; if (segCircleDist(x1, y1, x2, y2, e.x, e.y) < e.r + u.r - 0.05) return false; }
-  if (!o.skies && !passesRuins(u)) for (const t of TERRAIN) { if (t.open || inRect({ x: x1, y: y1 }, t)) continue; if (segHitsRect(x1, y1, x2, y2, t)) return false; }
+  if (!o.skies && !passesRuins(u)) for (const t of TERRAIN) { if (!blocksMove(t) || inRect({ x: x1, y: y1 }, t)) continue; if (segHitsRect(x1, y1, x2, y2, t) && (hardBlock(t) || inRect({ x: x2, y: y2 }, t))) return false; }
   return true;
+}
+/* climbing over a tall dense feature that has no floors or ceilings costs its height up and again down (13.06) */
+function climbEx(u, x1, y1, x2, y2, o) {
+  if ((o && o.skies) || passesRuins(u) || !moveBlock) return 0;
+  let c = 0; for (const t of TERRAIN) { if (!blocksMove(t) || hardBlock(t) || inRect({ x: x1, y: y1 }, t)) continue; if (segHitsRect(x1, y1, x2, y2, t)) c += 2 * terrHt(t); }
+  return c;
 }
 /* shortest route: straight, or around the obstacles through their corners; null when there is none */
 function pathTo(u, x, y, o) {
   const x0 = u.x, y0 = u.y, d = Math.hypot(x - x0, y - y0);
-  if (segClear(u, x0, y0, x, y, o)) return { len: d, pts: [[x0, y0], [x, y]], bent: false };
+  if (segClear(u, x0, y0, x, y, o)) return { len: d + climbEx(u, x0, y0, x, y, o), pts: [[x0, y0], [x, y]], bent: false };
   const nodes = [[x0, y0]], inB = (a, b) => a >= u.r && a <= BW - u.r && b >= u.r && b <= BH - u.r;
   const near = (cx, cy, rad) => segCircleDist(x0, y0, x, y, cx, cy) < rad + 10;
   const skipM = o && (o.skies || o.models);
@@ -3227,7 +3275,7 @@ function pathTo(u, x, y, o) {
     for (const f of [1.2, 1.7]) for (let k = 0; k < 16; k++) { const a = k * Math.PI / 8, rr = (e.r + u.r) * f + 0.5, wx = e.x + Math.cos(a) * rr, wy = e.y + Math.sin(a) * rr; if (inB(wx, wy)) nodes.push([wx, wy]); }
   }
   if (!(o && o.skies) && !passesRuins(u)) for (const t of TERRAIN) {
-    if (t.open) continue;
+    if (!blocksMove(t)) continue;
     if (!near(t.x + t.w / 2, t.y + t.h / 2, Math.hypot(t.w, t.h) / 2)) continue;
     for (const mg of [u.r + 0.5, u.r + 1.5]) for (const c of [[t.x - mg, t.y - mg], [t.x + t.w + mg, t.y - mg], [t.x - mg, t.y + t.h + mg], [t.x + t.w + mg, t.y + t.h + mg]]) if (inB(c[0], c[1])) nodes.push(c);
   }
@@ -3244,9 +3292,11 @@ function pathTo(u, x, y, o) {
     done[c] = true;
     for (let j = 0; j < N; j++) {
       if (done[j] || j === c) continue;
-      const nd = g[c] + Math.hypot(nodes[j][0] - nodes[c][0], nodes[j][1] - nodes[c][1]);
+      let nd = g[c] + Math.hypot(nodes[j][0] - nodes[c][0], nodes[j][1] - nodes[c][1]);
       if (nd >= g[j]) continue;
       if (!ok(c, j)) continue;
+      nd += climbEx(u, nodes[c][0], nodes[c][1], nodes[j][0], nodes[j][1], o);
+      if (nd >= g[j]) continue;
       g[j] = nd; prev[j] = c;
     }
   }
@@ -3338,7 +3388,7 @@ function applyMortal(u, n) {
     else break;
   }
   if (n > 0) { const lost = m0 - u.models, left = u.models + (leaderUp(u) ? 1 : 0); log(`${u.name} suffers ${plural(n, 'mortal wound')}: ${lost > 0 ? plural(lost, 'model') + ' slain' : 'no models slain'}${u.models > 0 ? `, ${plural(u.models, 'model')} left` : ''}.`, u.side); }
-  if (u.models <= 0 && !leaderUp(u)) destroyed(u);
+  if (u.models <= 0 && !leaderUp(u)) destroyed(u); else { carrierSync(u); splitLeaders(u); }
 }
 function destroyed(u) {
   if (!u.alive) return;
@@ -3359,7 +3409,7 @@ function healUnit(u, n) {
   const r = { wounds: 0, back: 0, leader: 0 };
   for (let i = 0; i < n; i++) {
     if (u.models > 0 && u.cur < mW(u)) { u.cur++; r.wounds++; continue; }
-    if (leaderUp(u) && u.leader.cur < u.leader.W) { u.leader.cur++; r.leader++; continue; }
+    { const hl = leaderUp(u) ? liveLeaders(u).find(l => l.cur < l.W) : null; if (hl) { hl.cur++; r.leader++; continue; } }
     if (u.models < u.start) { u.models++; u.cur = 1; r.back++; continue; }
     break;
   }
@@ -3368,7 +3418,7 @@ function healUnit(u, n) {
 function doReanimation(side) {
   for (const u of aliveSide(side)) {
     const rp = fxGet(u, 'reanimation'); if (!rp.length) continue;
-    const hurtNow = u.models < u.start || (u.models > 0 && u.cur < mW(u)) || (leaderUp(u) && u.leader.cur < u.leader.W);
+    const hurtNow = u.models < u.start || (u.models > 0 && u.cur < mW(u)) || (leaderUp(u) && liveLeaders(u).some(l => l.cur < l.W));
     if (!hurtNow) continue;
     let label = (rp[0].t[1] || 'D3').toUpperCase();
     if (hasFx(u, 'reanimation-legion')) label = OBJ.some(o => objIn(u, o) && controller(o) === side) ? 'D3+3' : 'D6';
@@ -3385,7 +3435,7 @@ function doReanimation(side) {
 function pickOath(side) {
   const foes = aliveSide(other(side)), mine = aliveSide(side);
   if (!foes.length) return null;
-  const score = e => e.W * e.models + (leaderUp(e) ? e.leader.W : 0) - 0.4 * Math.min(60, ...mine.map(m => edge(m, e)));
+  const score = e => e.W * e.models + (leaderUp(e) ? liveLeaders(e).reduce((a, l) => a + l.W, 0) : 0) - 0.4 * Math.min(60, ...mine.map(m => edge(m, e)));
   return foes.slice().sort((a, b) => score(b) - score(a))[0];
 }
 const DOCTRINES = {
@@ -3417,7 +3467,7 @@ const advBonus = u => -(isShaken(u) ? 2 : 0) + fxGet(u, 'advance+1').length + le
 const addFlat = (e, n) => e && n ? Object.assign({}, e, { flat: e.flat + n }) : e;
 const ledFx = (u, k) => fxGet(u, k).filter(x => x.src === 'leader');
 const permHas = (u, k) => fxGet(u, 'perm').some(x => x.t.includes(k)) || (k === 'charge-adv' && ((typeof isRiled === 'function' && isRiled(u)) || (G && u.advChargeTurn === G.turnNo)));
-const cqEligible = u => isMV(u) || !!(u.dg && u.dg.cq) || u.ranged.some(w => wIsCQ(w) && (!w.leader || leaderUp(u)));
+const cqEligible = u => isMV(u) || !!(u.dg && u.dg.cq) || u.ranged.some(w => wIsCQ(w) && (!w.leader || wLeadUp(u, w)));
 const cqExcl = u => !isMV(u) && !isEngaged(u);
 function rollDmg(p) { let d = rollExpr(p.Dexpr); if (p.rrDmg && p.Dexpr && d < avgDice(p.Dexpr)) d = rollExpr(p.Dexpr); return d + (p.melta && (p.meltaP === undefined || Math.random() < p.meltaP) ? p.melta : 0); }
 function isClosest(u, t, shooting) {
@@ -3437,7 +3487,7 @@ function modCond(c, ctx, x) {
     case 'melee': return !shooting; case 'ranged': return !!shooting;
     case 'half-range': return !!w && +w.range > 0 && edge(u, t) <= w.range / 2;
     case 'led': return x.src === 'leader';
-    case 'self': return x.src !== 'leader' || !!w.leader;
+    case 'self': return x.src !== 'leader' || (!!w.leader && (x.lid || 0) === (w.lid || 0));
     case 'heavy': return !!w.heavy;
     case 'if-charged': return !!(u.charged || u.heroic);
     case 'exemplar': return (u.exemplarA || 0) > 0;
@@ -3477,7 +3527,7 @@ function modCond(c, ctx, x) {
     case 'not-monster': return !has(u, 'monster'); case 'not-character': return !has(u, 'character');
     case 'if-riled': return isRiled(u); case 'vs-not-mv': return !isMV(t);
     case 'within-12': return edge(u, t) <= 12; case 'beyond-12': return edge(u, t) > 12; case 'vs-cmv': return has(t, 'character') || has(t, 'monster') || has(t, 'vehicle'); case 'tgt-below-start': return belowStart(t); case 'vs-character': return has(t, 'character'); case 'w-assault': return !!w.assault || (w.xkw || []).some(k => /^assault/i.test(k));
-    case 'within-6': return edge(u, t) <= 6; case 'torrent': return !!w.torrent; case 'self': return x && x.src === 'leader' ? !!w.leader : !w.leader; case 'if-priest': return leaderUp(u) && /ministorum priest/i.test(u.leader.name || ''); case 'near-flyinf': return aliveSide(u.side).some(v => v !== u && ntIs(v, 'infantry') && has(v, 'fly') && edge(v, t) <= 9); case 'tgt-obj': return OBJ.some(o => objIn(t, o)); case 'vs-fly': return has(t, 'fly');
+    case 'within-6': return edge(u, t) <= 6; case 'torrent': return !!w.torrent; case 'self': return x && x.src === 'leader' ? (!!w.leader && (x.lid || 0) === (w.lid || 0)) : !w.leader; case 'if-priest': return leaderUp(u) && /ministorum priest/i.test(u.leader.name || ''); case 'near-flyinf': return aliveSide(u.side).some(v => v !== u && ntIs(v, 'infantry') && has(v, 'fly') && edge(v, t) <= 9); case 'tgt-obj': return OBJ.some(o => objIn(t, o)); case 'vs-fly': return has(t, 'fly');
     case 'near-obj': return OBJ.some(o => objIn(u, o) || objIn(t, o)); case 'within-9': return edge(u, t) <= 9;
     case 'vs-psyker': return has(t, 'psyker'); case 'vs-swarm-inf': return has(t, 'infantry') || has(t, 'swarm');
     case 'if-arrived': return !!u.arrived; case 'if-15': return u.models >= 15;
@@ -3762,7 +3812,7 @@ const tsPsyker = u => has(u, 'psyker') || tsLeadPsy(u);
 const tsIsSL = u => tsIs(u) && /horrors|flamers|screamers|herald|charioteer|lord of change|kairos|tzaangor|brayherd/i.test(u.name);
 const tsPsyW = w => (w.xkw || []).some(k => /^psychic/i.test(String(k).replace(/^[^A-Za-z]+/, '')));
 /* an ability the unit itself has, or that its attached leader has (leader abilities then only count for the leader's own weapons unless noted) */
-const tsOwn = (u, k, w) => fxGet(u, k).find(x => x.src === 'unit' ? !(w && w.leader) : !!(w && w.leader));
+const tsOwn = (u, k, w) => fxGet(u, k).find(x => x.src === 'unit' ? !(w && w.leader) : (!!(w && w.leader) && (x.lid || 0) === (w.lid || 0)));
 const tsAnyFx = (u, k) => fxGet(u, k)[0];
 const tsCabal = u => {
   if (!tsIs(u) || !u.alive || !u.placed || u.reserve || !tsPsyker(u)) return false;
@@ -5366,9 +5416,9 @@ function attackersFor(u, w, t, shooting) {
   const UM = modelsOf(u), TM = modelsOf(t); if (!UM || !TM || !UM.length || !TM.length) return null;
   const key = `${u.id}|${t.id}|${w.name}|${w.leader ? 1 : 0}|${shooting ? 1 : 0}|${u.x.toFixed(2)},${u.y.toFixed(2)}|${t.x.toFixed(2)},${t.y.toFixed(2)}|${UM.length}|${TM.length}|${u.models}`;
   const hit = attCache.get(key); if (hit) return hit;
-  const per = w.per || 1, N0 = w.leader ? (leaderUp(u) ? (w.count || 1) * per : 0) : (w.count ? (u.models > 1 ? Math.min(w.count, u.models * per) : w.count * per) : u.models * per);
+  const per = w.per || 1, N0 = w.leader ? (wLeadUp(u, w) ? (w.count || 1) * per : 0) : (w.count ? (u.models > 1 ? Math.min(w.count, u.models * per) : w.count * per) : u.models * per);
   if (!N0) return { n: 0, nHalf: 0 };
-  const carriers = UM.filter(m => !!m.leader === !!w.leader), range = shooting ? (w.range || 0) : ENG;
+  const carriers = UM.filter(m => !!m.leader === !!w.leader && (!w.leader || (m.lid || 0) === (w.lid || 0))), range = shooting ? (w.range || 0) : ENG;
   const indirect = shooting && typeof wIsIndirect === 'function' && wIsIndirect(w), tpts = (shooting && !indirect && TERRAIN.length) ? repPoints(t, { x: u.x, y: u.y }) : null, el = [];
   const TS = TM.map(n => shAbs(t, n));
   for (const m of carriers) {
@@ -5385,7 +5435,7 @@ function attackersFor(u, w, t, shooting) {
 }
 function profile(u, w, t, shooting, cover) {
   let half = shooting && w.range && (edge(u, t) <= w.range / 2 || (isMV(t) && fxGet(u, 'close-titan').some(x => x.t[1] === normName(w.name).replace(/ /g, '-'))));
-  let nModels = w.leader ? (leaderUp(u) ? (w.count || 1) * (w.per || 1) : 0) : (w.count ? (u.models > 1 ? Math.min(w.count, u.models * (w.per || 1)) : w.count * (w.per || 1)) : u.models * (w.per || 1));
+  let nModels = w.leader ? (wLeadUp(u, w) ? (w.count || 1) * (w.per || 1) : 0) : (w.count ? (u.models > 1 ? Math.min(w.count, u.models * (w.per || 1)) : w.count * (w.per || 1)) : u.models * (w.per || 1));
   const wkey = normName(w.name).replace(/ /g, '-');
   let rrHit = 'none', rrWound = 'none', lethal = !!w.lethal, dev = !!w.dev, grantSus = 0;
   const inG = typeof G !== 'undefined' && G && G.units;
@@ -5425,6 +5475,7 @@ function profile(u, w, t, shooting, cover) {
   if (G && u.ritualTurn === G.turnNo) { hitMod += 1; woundMod += 1; notes.push('Dark Ritual'); }
   if (u.spoor && isDC(u)) { if (belowStart(t)) { hitMod += 1; notes.push('Spoor of Frailty'); } if (belowHalf(t)) woundMod += 1; }
   if (t.masked) { hitMod -= 1; notes.push('Masks of Death'); }
+  if (shooting && (elevOf(u) >= 3 || (has(u, 'towering') && edge(u, t) <= 12)) && elevOf(t) === 0 && !(typeof wIsIndirect === 'function' && wIsIndirect(w))) { hitMod += 1; notes.push('Plunging Fire'); }
   const hv = !!(u.hungry && !shooting); if (hv) notes.push('Hungry Void');
   if (G && u.paroxPh && u.paroxPh === G.phaseNo) { aAdd -= 1; note('Paroxysm'); }
   if (G && !shooting && u.finestPh === G.phaseNo) { aAdd += 3; dev = true; note('Finest Hour'); }
@@ -5520,7 +5571,7 @@ function profile(u, w, t, shooting, cover) {
   if (typeof G !== 'undefined' && G && u.forgeTurn !== undefined && G.turnNo - u.forgeTurn <= 1) ignoreMods = true;
   if (ignoreMods || ignoreHit) hitMod = Math.max(hitMod, 0);
   const dgOn = inG && typeof t.alive === 'boolean';
-  const tT = Math.max(1, ((t.models > 0 || !t.leader) ? t.T : t.leader.T) + (dgOn ? dgToughMod(t) : 0) + (t.relicT || 0) - ((t.dg && t.dg.tm) || 0));
+  const tT = Math.max(1, ((t.models > 0 || !t.leader) ? unitT(t) : t.leader.T) + (dgOn ? dgToughMod(t) : 0) + (t.relicT || 0) - ((t.dg && t.dg.tm) || 0));
   let btPrec = false, btBudget = null;
   if (inG && typeof btProfile === 'function') {
     const bm = btProfile(u, w, t, shooting, w.S + (hv ? 1 : 0) + sAdd, tT);
@@ -5567,19 +5618,27 @@ function flash(msg) { G.msg = msg; renderSide(); }
 
 const invBoost = (t, v) => (G && ((t.barrierPh && t.barrierPh === G.phaseNo) || t.omniInv) && (!v || v > 4)) ? 4 : v;
 function defOf(t) {
-  const dmOf = src => fxAll(t).filter(x => x.src === src && x.t[0] === 'damage-minus').reduce((m, x) => Math.max(m, +x.t[1] || 1), 0);
+  const dmOf = (src, lid) => fxAll(t).filter(x => x.src === src && (lid === undefined || x.src !== 'leader' || x.lid === lid) && x.t[0] === 'damage-minus').reduce((m, x) => Math.max(m, +x.t[1] || 1), 0);
   const grant = fxAll(t).filter(x => x.src === 'leader' && x.t[0] === 'grant-inv').reduce((m, x) => Math.min(m, +x.t[1] || 7), 7);
   const invMerge = a => { const b = a || 0; return grant < 7 && (!b || grant < b) ? grant : b; };
   const onObj = OBJ.some(o => objIn(t, o)) || Math.hypot(t.x - BW / 2, t.y - BH / 2) <= 6;
-  const fnpCond = src => onObj ? fxAll(t).filter(x => x.src === src && x.t[0] === 'fnp-cond').reduce((m, x) => Math.min(m, +x.t[1] || 7), 7) : 7;
+  const fnpCond = (src, lid) => onObj ? fxAll(t).filter(x => x.src === src && (lid === undefined || x.src !== 'leader' || x.lid === lid) && x.t[0] === 'fnp-cond').reduce((m, x) => Math.min(m, +x.t[1] || 7), 7) : 7;
   const fnpBest = (a, c) => { const b = a || 0; return c < 7 && (!b || c < b) ? c : b; };
-  const L = leaderUp(t) ? { alive: true, cur: t.leader.cur, W: t.leader.W, Sv: t.leader.Sv + dgSvWorse(t), inv: (t.dg && t.dg.inv2L) ? 2 : invMerge(t.leader.inv), invR: t.leader.invR || 0, fnp: fnpBest(fnpBest(fnpBest(t.leader.fnp, fnpCond('leader')), t.ablative || 7), (t.abilities || []).some(a => /^silent bodyguard/i.test(a.name)) ? 4 : 7), dm: Math.max(dmOf('leader'), t.dg && t.dg.resil ? 1 : 0, enhHolder(t, /adamantine mantle/i) === 'leader' ? 1 : 0, enhHolder(t, /mantle of ophelia/i) === 'leader' ? 99 : 0), mantle: enhHolder(t, /adamantine mantle/i) === 'leader' } : null;
-  if (L) L.half = fxAll(t).some(x => x.src === 'leader' && x.t[0] === 'half-dmg');
+  const mkL = LD => ({ alive: true, cur: LD.cur, W: LD.W, Sv: LD.Sv + dgSvWorse(t), inv: (t.dg && t.dg.inv2L) ? 2 : invMerge(LD.inv), invR: LD.invR || 0, fnp: fnpBest(fnpBest(fnpBest(LD.fnp, fnpCond('leader', LD.lid || 0)), t.ablative || 7), (t.abilities || []).some(a => /^silent bodyguard/i.test(a.name)) ? 4 : 7), dm: Math.max(dmOf('leader', LD.lid || 0), t.dg && t.dg.resil ? 1 : 0, enhLeadIs(LD, /adamantine mantle/i) ? 1 : 0, enhLeadIs(LD, /mantle of ophelia/i) ? 99 : 0), mantle: enhLeadIs(LD, /adamantine mantle/i) });
+  const lo = id => { const i = (t.lorder || []).indexOf(id); return i < 0 ? 99 : i; };
+  const Ls = (leaderUp(t) ? liveLeaders(t).map(LD => Object.assign(mkL(LD), { lid: LD.lid || 0, ref: LD })) : []).sort((a, b) => lo(a.lid) - lo(b.lid)), L = Ls[0] || null;
+  for (const Lx of Ls) Lx.half = fxAll(t).some(x => x.src === 'leader' && (x.lid === undefined || x.lid === Lx.lid) && x.t[0] === 'half-dmg');
   const psyF = (leaderOnly) => fxAll(t).filter(x => x.t[0] === 'fnp-psy' && (!leaderOnly || x.src === 'leader')).reduce((m, x) => Math.min(m, +x.t[1] || 7), 7);
-  if (L && psyF(true) < 7) L.fnpPsy = psyF(true);
+  if (psyF(true) < 7) for (const Lx of Ls) Lx.fnpPsy = psyF(true);
   const svRobj = fxAll(t).some(x => x.src !== 'leader' && x.t[0] === 'sv-ranged-obj') && onObj;
-  if (L && svRobj) L.svR = true;
-  return { afU: (G && t.placed && asIs(t)) ? t : null, half: fxAll(t).some(x => x.src !== 'leader' && x.t[0] === 'half-dmg'), dmg0: ((t.dmg0Cnt || 0) < (fxAll(t).some(x => x.t[0] === 'dmg0-twice') ? 2 : 1) && fxAll(t).some(x => x.src !== 'leader' && (x.t[0] === 'dmg0-once' || x.t[0] === 'dmg0-twice'))) || (G && t.dmg0Turn !== G.turnNo && fxAll(t).some(x => x.t[0] === 'dmg0-turn')) ? t : null, svR: svRobj, fnpPsy: psyF(false) < 7 ? psyF(false) : 0, dmR: fxAll(t).filter(x => x.t[0] === 'damage-minus-r').reduce((m, x) => Math.max(m, +x.t[1] || 1), 0), models: t.models, cur: t.cur, W: t.W, wl: t.wl, start: t.start, Sv: t.Sv + dgSvWorse(t) - ((orderOf(t) === 'cover' && t.Sv > 3) ? 1 : 0) - ((hasFx(t, 'sv-ctrl') && t.Sv > 2 && OBJ.some(o => objIn(t, o) && controller(o) === t.side)) ? 1 : 0), inv: invBoost(t, tsInvAll(t, invMerge(ntInv(t, t.inv)))), invR: tsInvR(t, t.invR || 0), fnp: fnpBest(fnpBest(fnpBest(t.fnp, fnpCond('unit')), Math.min(t.ablative || 7, btSingFnp(t))), smStoic(t)), dm: Math.max(tsImpDm(t), dmOf('unit'), t.dg && t.dg.resil ? 1 : 0, enhHolder(t, /adamantine mantle/i) === 'unit' ? 1 : 0, enhHolder(t, /mantle of ophelia/i) === 'unit' ? 99 : 0), mantle: enhHolder(t, /adamantine mantle/i) === 'unit', wall: (t.dg && t.dg.wall && t.dg.wall.alive && t.dg.wall.models > 0) ? t.dg.wall : null, forgedU: (tsGlimpseDef(t) ? t : (typeof G !== 'undefined' && G && G.units && enhHolder(t, /forged in battle/i) === 'leader' && leaderUp(t) && t.forgedTurn !== (G.turnNo || 0)) ? t : null), omniB: (typeof G !== 'undefined' && G && G.units && has(t, 'vehicle')) ? (aliveSide(t.side).find(b => b !== t && enhHolder(b, /adept of the omnissiah/i) && edge(t, b) <= 6 && b.omniRound !== (G.round || 0)) || null) : null, invio: (typeof G !== 'undefined' && G && G.units && abIn(t, /^inviolable transport/i) && t.invRound !== (G.round || 0)) ? t : null, leader: L };
+  if (svRobj) for (const Lx of Ls) Lx.svR = true;
+  const R = { afU: (G && t.placed && asIs(t)) ? t : null, half: fxAll(t).some(x => x.src !== 'leader' && x.t[0] === 'half-dmg'), dmg0: ((t.dmg0Cnt || 0) < (fxAll(t).some(x => x.t[0] === 'dmg0-twice') ? 2 : 1) && fxAll(t).some(x => x.src !== 'leader' && (x.t[0] === 'dmg0-once' || x.t[0] === 'dmg0-twice'))) || (G && t.dmg0Turn !== G.turnNo && fxAll(t).some(x => x.t[0] === 'dmg0-turn')) ? t : null, svR: svRobj, fnpPsy: psyF(false) < 7 ? psyF(false) : 0, dmR: fxAll(t).filter(x => x.t[0] === 'damage-minus-r').reduce((m, x) => Math.max(m, +x.t[1] || 1), 0), models: t.models, cur: t.cur, W: t.W, wl: t.wl, start: t.start, Sv: t.Sv + dgSvWorse(t) - ((orderOf(t) === 'cover' && t.Sv > 3) ? 1 : 0) - ((hasFx(t, 'sv-ctrl') && t.Sv > 2 && OBJ.some(o => objIn(t, o) && controller(o) === t.side)) ? 1 : 0), inv: invBoost(t, tsInvAll(t, invMerge(ntInv(t, t.inv)))), invR: tsInvR(t, t.invR || 0), fnp: fnpBest(fnpBest(fnpBest(t.fnp, fnpCond('unit')), Math.min(t.ablative || 7, btSingFnp(t))), smStoic(t)), dm: Math.max(tsImpDm(t), dmOf('unit'), t.dg && t.dg.resil ? 1 : 0, enhHolder(t, /adamantine mantle/i) === 'unit' ? 1 : 0, enhHolder(t, /mantle of ophelia/i) === 'unit' ? 99 : 0), mantle: enhHolder(t, /adamantine mantle/i) === 'unit', wall: (t.dg && t.dg.wall && t.dg.wall.alive && t.dg.wall.models > 0) ? t.dg.wall : null, forgedU: (tsGlimpseDef(t) ? t : (typeof G !== 'undefined' && G && G.units && enhHolder(t, /forged in battle/i) === 'leader' && leaderUp(t) && t.forgedTurn !== (G.turnNo || 0)) ? t : null), omniB: (typeof G !== 'undefined' && G && G.units && has(t, 'vehicle')) ? (aliveSide(t.side).find(b => b !== t && enhHolder(b, /adept of the omnissiah/i) && edge(t, b) <= 6 && b.omniRound !== (G.round || 0)) || null) : null, invio: (typeof G !== 'undefined' && G && G.units && abIn(t, /^inviolable transport/i) && t.invRound !== (G.round || 0)) ? t : null, leader: L, leaders: Ls };
+  if (t.cdefs && t.cls) {
+    const c0 = t.cdefs[0], ctrl = hasFx(t, 'sv-ctrl') && OBJ.some(o => objIn(t, o) && controller(o) === t.side), cov = orderOf(t) === 'cover', tInvChg = t.inv !== c0.inv;
+    R.cls = t.cls;
+    R.bodies = t.cdefs.map((cd, i) => { const s = cd.Sv + (t.Sv - c0.Sv), base = i === 0 ? t.inv : (tInvChg ? (cd.inv ? Math.min(cd.inv, t.inv || 9) : t.inv) : cd.inv); return { Sv: s + dgSvWorse(t) - ((cov && s > 3) ? 1 : 0) - ((ctrl && s > 2) ? 1 : 0), inv: invBoost(t, tsInvAll(t, invMerge(ntInv(t, base)))), W: cd.W }; });
+  }
+  return R;
 }
 function crStanceOf(side) {
   if (!G) return null;
@@ -5595,6 +5654,7 @@ async function attack(u, w, t, shooting, cover, snap) {
   if (!p.models) { if (MODELS.on && u.placed && t.placed) log(`${u.name}: no model with ${w.name} ${shooting ? 'is in range of and can see' : 'is engaged with'} ${t.name}, so it makes no attacks.`, u.side); return; }
   if (snap) { p.snap = true; p.rrHit = 'none'; p.snapAt = hasFx(u, 'snap-at') ? +fxGet(u, 'snap-at')[0].t[1] : 6; }
   const before = totalModels(t);
+  await declareAlloc(u, w, t, shooting);
   const def = defOf(t);
   const rec = { hit: [], wound: [], save: [], dmg: [] };
   const cmdFor = (side, kinds) => { const k = crStanceOf(side); if (!kinds.includes(k) || !canStrat(side, 'reroll', 1, null)) return null; return { kind: k, side, used: false }; };
@@ -5605,18 +5665,19 @@ async function attack(u, w, t, shooting, cover, snap) {
   if (def.wall && def.wall.alive) { if (st.wallKilled) log(`${def.wall.name} soaks up ${plural(st.wallKilled, 'wound')}: ${plural(st.wallKilled, 'Poxwalker')} fall.`, def.wall.side); if (def.wall.models <= 0) destroyed(def.wall); }
   if (shooting && (st.hits || 0) > 0) dgAfterShoot(u, t);
   const show = diceMode !== 'off' && (u.side === 'player' || aiDice || (diceMode === 'manual' && t.side === 'player')) && st.A > 0;
-  if (show) await playTray({ u, w, t, p, st, rec, snap, before, after: def.models + (def.leader && def.leader.alive ? 1 : 0), interactive: u.side === 'player' && diceMode === 'step', manual: diceMode === 'manual' });
+  if (show) await playTray({ u, w, t, p, st, rec, snap, before, after: def.models + (def.leaders || []).filter(x => x.alive).length, interactive: u.side === 'player' && diceMode === 'step', manual: diceMode === 'manual' });
   if (!shooting) tyrAfterMaw(u, w, t, st);
   if (!t.alive) return;
   { const lostM = t.models - def.models; const k = (!shooting && lostM > 0) ? fightOnGhosts(u, t, lostM) : 0; if (k) { def.models += k; if (def.models === k) def.cur = mW(def); } }
-  t.models = def.models; t.cur = def.cur;
-  let leaderDied = false;
-  if (def.leader && t.leader) { t.leader.cur = def.leader.cur; if (!def.leader.alive && t.leader.alive) { t.leader.alive = false; leaderDied = true; asOnLeaderDied(t); } }
+  { const m0 = t.models; t.models = def.models; t.cur = def.cur; kitApply(t, m0 - t.models); carrierSync(t); }
+  let leaderDied = false; const diedL = [];
+  for (const dl of (def.leaders || [])) { const rf = dl.ref; if (!rf) continue; rf.cur = dl.cur; if (!dl.alive && rf.alive) { rf.alive = false; leaderDied = true; diedL.push(rf); } }
+  for (const rf of diedL) { t.leader = rf; asOnLeaderDied(t); }
   const h = hitNeedOf(p), svBody = t.Sv + p.AP;
   const svTxt = t.models > 0 || !t.leader ? (t.inv && t.inv < svBody ? `${t.inv}+ invuln` : svBody > 6 ? 'no save' : `${svBody}+`) : 'leader saves';
   const hitTxt = p.torrent ? 'auto' : snap ? '6 (snap shots)' : (h.need >= 7 ? '6' : h.need + '+');
   const rr = x => x === 'all' ? 're-rolling misses' : x === '1s' ? 're-rolling 1s' : '';
-  const hitBits = [p.cover && !snap && 'cover', p.hitMod > 0 && !snap && (p.notes.some(n => /protocol/i.test(n)) ? '+1 ' + p.notes.find(n => /protocol/i.test(n)) : '+1 heavy'), rr(p.rrHit)].filter(Boolean);
+  const hitBits = [p.cover && !snap && 'cover', p.hitMod > 0 && !snap && (p.notes.includes('Plunging Fire') ? '+1 plunging fire' : p.notes.some(n => /protocol/i.test(n)) ? '+1 ' + p.notes.find(n => /protocol/i.test(n)) : '+1 heavy'), rr(p.rrHit)].filter(Boolean);
   const woundBits = [p.woundMod > 0 && (p.notes.includes('Oath of Moment') ? '+1 Oath' : '+1 lance'), rr(p.twin ? 'all' : p.rrWound)].filter(Boolean);
   const parts = [plural(st.A, 'attack'),
     `${st.hits + st.extra} ${st.hits + st.extra === 1 ? 'hit' : 'hits'} on ${hitTxt}${hitBits.length ? ' (' + hitBits.join(', ') + ')' : ''}${st.extra ? `, ${st.extra} from sustained` : ''}`,
@@ -5629,13 +5690,13 @@ async function attack(u, w, t, shooting, cover, snap) {
   else res = st.dmg ? `${st.dmg} ${st.dmg === 1 ? 'wound' : 'wounds'} dealt, no models slain`.replace(/^./, c => c.toUpperCase()) : 'No damage';
   const extras = p.notes.filter(n => n !== 'Oath of Moment' && n !== 'damaged');
   log(`<b>${u.name}</b> ${shooting ? (snap ? 'fires Overwatch at' : 'shoots') : 'fights'} <b>${t.name}</b> with ${w.name}${extras.length ? ` [${extras.join(', ')}]` : ''}${p.notes.includes('damaged') ? ' (damaged: -1 to hit)' : ''}: ${parts.join('; ')}. ${res}.`, u.side);
-  if (leaderDied) { log(`${t.leader.name} is slain.`, t.side); queueRevenant(t, 'leader'); dgLeaderSlain(t); }
+  for (const rf of diedL) { t.leader = rf; log(`${rf.name} is slain.`, t.side); queueRevenant(t, 'leader'); dgLeaderSlain(t); }
   dgAfterAttack(u, w, t, shooting, st, killed, before);
   dgAfterAttack2(u, w, t, shooting, st, killed, before, leaderDied);
   smAfterAttack(u, w, t, shooting, st);
   btAfterAttack(u, w, t, shooting, st);
   tsAfterAttack(u, w, t, shooting, st, killed, before);
-  if (t.models <= 0 && !leaderUp(t)) destroyed(t);
+  if (t.models <= 0 && !leaderUp(t)) destroyed(t); else splitLeaders(t);
   await dgFlush();
 }
 
@@ -6153,36 +6214,39 @@ function newGame() {
   for (const b of [pb, ab]) normDets(b);
   const mk = (side, tpl) => {
     const u = JSON.parse(JSON.stringify(tpl));
+    if (u.leaders && u.leaders.length > 1) u.leader = u.leaders[0]; else delete u.leaders;
+    leadersOf(u).forEach((l, i) => { l.lid = i; });
     { let w = +u.W || 1; for (const a of (u.abilities || [])) { const fx = autoMods(a.name, a.text || ''); if (fx.includes('wound+1')) w += 1; const m = fx.find(x => /^wound-set /.test(x)); if (m) w = +m.split(' ')[1]; } if (w !== u.W) { u.W = w; } }
     for (const a of (u.abilities || [])) for (const f of autoMods(a.name, a.text || '')) { let m; if ((m = /^kw-add (.+)$/.exec(f))) { u.kw = u.kw || []; if (!u.kw.includes(m[1])) u.kw.push(m[1]); } if ((m = /^inv-set (\d)$/.exec(f))) u.inv = u.inv && u.inv < +m[1] ? u.inv : +m[1]; if (f === 't+1') u.T = (+u.T || 0) + 1; if ((m = /^sv-set (\d)$/.exec(f))) u.Sv = Math.min(u.Sv, +m[1]); if ((m = /^fnp-set (\d)$/.exec(f))) u.fnp = u.fnp && u.fnp < +m[1] ? u.fnp : +m[1]; }
     Object.assign(u, { id: id++, side, start: u.models, cur: u.W, alive: true, shocked: false, tag: unitTag(u.name), placed: false, reserve: false, x: -50, y: -50 });
     mixInit(u); u.kw = u.kw || []; u.scouts = u.scouts || 0; u.abilities = u.abilities || [];
     if (u.faction === 'Adepta Sororitas' && !u.kw.includes('adepta sororitas')) u.kw.push('adepta sororitas');
     for (const a of u.abilities) if (!(a.fx && a.fx.length)) a.fx = autoFxFor(a, u);
-    if (u.leader) for (const a of (u.leader.abilities || [])) if (!(a.fx && a.fx.length)) a.fx = autoFxFor(a, u);
-    invFromAbilities(u); if (u.leader) invFromAbilities(u.leader);
+    for (const LD of leadersOf(u)) for (const a of (LD.abilities || [])) if (!(a.fx && a.fx.length)) a.fx = autoFxFor(a, u);
+    invFromAbilities(u); for (const LD of leadersOf(u)) invFromAbilities(LD);
+    profInit(u);
     btSetup(u, side, side === 'player' ? pb : ab);
     ntEnhSetup(u);
     orkEnhSetup(u);
     asEnhSetup(u);
-    if (u.leader) for (const a of u.abilities) for (const f of (a.fx || [])) { const m = /^leader-fnp (\d)/.exec(f); if (m) u.leader.fnp = u.leader.fnp && u.leader.fnp < +m[1] ? u.leader.fnp : +m[1]; }
+    for (const LD of leadersOf(u)) for (const a of u.abilities) for (const f of (a.fx || [])) { const m = /^leader-fnp (\d)/.exec(f); if (m) LD.fnp = LD.fnp && LD.fnp < +m[1] ? LD.fnp : +m[1]; }
     if (fxAll(u).some(x => x.t[0] === 'starts-reserve') || has(u, 'aircraft')) u.reserve = true;
     u.faction = side === 'player' ? pb.faction : ab.faction; u.scheme = (side === 'player' ? pb : ab).scheme || null;
     if (u.abilities.some(a => /^lord of the death guard/i.test(a.name))) for (const [mn, mt] of MORT_ABILITIES) if (!u.abilities.some(a => a.name.toLowerCase().startsWith(mn.toLowerCase()))) u.abilities.push({ name: mn, text: mt, fx: [] });
-    u.warlord = u.kw.includes('warlord') || u.abilities.some(a => /^warlord$/i.test(a.name)) || !!(u.leader && ((u.leader.kw || []).includes('warlord') || (u.leader.abilities || []).some(a => /^warlord$/i.test(a.name))));
+    u.warlord = u.kw.includes('warlord') || u.abilities.some(a => /^warlord$/i.test(a.name)) || leadersOf(u).some(LD => (LD.kw || []).includes('warlord') || (LD.abilities || []).some(a => /^warlord$/i.test(a.name)));
     const detM = side === 'player' ? pb.detachment : ab.detachment;
     for (const det of (detM && detM.list) || [detM]) for (const ef of (det && det.effects) || []) {
-      const has1 = k => (u.kw || []).includes(k) || ntName(u, k) || (u.leader && ((u.leader.kw || []).includes(k) || (u.leader.name || '').toLowerCase().includes(k)));
+      const has1 = k => (u.kw || []).includes(k) || ntName(u, k) || leadersOf(u).some(LD => (LD.kw || []).includes(k) || (LD.name || '').toLowerCase().includes(k));
       const who = ef.who === 'all' ? true : (ef.who || []).some(k => k.split('+').every(has1));
       if (who) {
         if (ef.fx) { const ex = (u.abilities = u.abilities || []).find(a => a.name === det.rule && a.detFx); if (ex) ex.fx.push(ef.fx); else u.abilities.push({ name: det.rule, text: det.ruleText, fx: [ef.fx], detFx: true }); }
         if (ef.kw && !u.kw.includes(ef.kw)) u.kw.push(ef.kw);
-        if (ef.inv) { u.inv = u.inv && u.inv < ef.inv ? u.inv : ef.inv; if (u.leader) u.leader.inv = u.leader.inv && u.leader.inv < ef.inv ? u.leader.inv : ef.inv; }
+        if (ef.inv) { u.inv = u.inv && u.inv < ef.inv ? u.inv : ef.inv; for (const LD of leadersOf(u)) LD.inv = LD.inv && LD.inv < ef.inv ? LD.inv : ef.inv; }
         if (ef.move) u.M += ef.move;
       }
     }
-    if (u.leader) { u.leader.alive = true; u.leader.cur = u.leader.W; u.leader.abilities = u.leader.abilities || []; if (!u.kw.includes('character')) u.kw.push('character'); }
-    u.r = u.size === 'large' ? 2.8 : u.size === 'medium' ? 2.2 : clamp(1.1 + Math.sqrt(u.models + (u.leader ? 1 : 0)) * 0.47, 1.6, 3.3);
+    for (const LD of leadersOf(u)) { LD.alive = true; LD.cur = LD.W; LD.abilities = LD.abilities || []; if (!u.kw.includes('character')) u.kw.push('character'); }
+    u.r = u.size === 'large' ? 2.8 : u.size === 'medium' ? 2.2 : clamp(1.1 + Math.sqrt(u.models + leadersOf(u).length) * 0.47, 1.6, 3.3);
     resetFlags(u);
     u.r0 = u.r; if (MODELS.on) layoutModels(u);
     return u;
@@ -6217,7 +6281,7 @@ function newGame() {
   G.mkUnit = mk; dgSetup(); smSetup();
   { const fp = fdP, fa = fdA; G.fd = { player: fp, ai: fa }; G.pri = { player: PRI_MATRIX[FD_ORDER.indexOf(fp)][FD_ORDER.indexOf(fa)], ai: PRI_MATRIX[FD_ORDER.indexOf(fa)][FD_ORDER.indexOf(fp)] };
     log(`Force Dispositions: you play <b>${fdName(fp)}</b>, the AI plays <b>${fdName(fa)}</b>. Your Primary Mission is <b>${G.pri.player}</b>; the AI's is <b>${G.pri.ai}</b>.`, 'sys'); }
-  log(`New game: your ${pb.name} (${pb.faction}) against the AI's ${ab.name} (${ab.faction}). Battlefield: ${dep.name}, with ${TERRAIN.length} terrain ${dep.layout ? 'areas' : 'ruins'}.`, 'sys');
+  log(`New game: your ${pb.name} (${pb.faction}) against the AI's ${ab.name} (${ab.faction}). Battlefield: ${dep.name}, with ${TERRAIN.length} terrain ${dep.layout ? 'areas' : 'features'}${TERRAIN.some(t => t.cat && t.cat !== 'dense') ? ` (${['dense', 'light', 'exposed'].map(c => TERRAIN.filter(t => terrCat(t) === c).length + ' ' + c).join(', ')})` : ''}.`, 'sys');
   if (pb.units.length > 12 || ab.units.length > 12) log('Only the first 12 units of each army take part.', 'sys');
   render();
 }
@@ -6530,7 +6594,7 @@ function restoreCoherency() {
       let cx = 0, cy = 0; for (const m of u.mods) { cx += m.dx; cy += m.dy; } cx /= u.mods.length; cy /= u.mods.length;
       const worst = u.mods.slice().sort((a, b) => Math.hypot(b.dx - cx, b.dy - cy) - Math.hypot(a.dx - cx, a.dy - cy)).find(m => !m.leader) || u.mods[0];
       u.mods = u.mods.filter(m => m !== worst);
-      if (worst.leader) { u.leader.alive = false; } else { u.models = Math.max(0, u.models - 1); if (u.wid === worst.id) { u.wid = null; u.cur = mW(u); } }
+      if (worst.leader) { const Lk = leadersOf(u)[worst.lid || 0] || u.leader; if (Lk) Lk.alive = false; } else { u.models = Math.max(0, u.models - 1); if (u.wid === worst.id) { u.wid = null; u.cur = mW(u); } }
       removed++;
     }
     if (removed) { log(`${u.name}: out of coherency at the end of the turn, so ${plural(removed, 'model')} ${removed === 1 ? 'is' : 'are'} removed (they are destroyed, but trigger nothing).`, u.side); if (u.models <= 0 && !(u.leader && leaderUp(u))) { u.alive = false; log(`${u.name} is destroyed.`, u.side); } }
@@ -6625,7 +6689,7 @@ function finish() {
 const usableRanged = u => {
   const eng = isEngaged(u), ga = ledFx(u, 'grant-assault').length > 0 || hasFx(u, 'unit-assault') || isRiled(u) || (G && u.assaultTurn === G.turnNo) || smAssault(u) || auraFor(u).some(x => x.t[3] === 'ranged-assault-lethal');
   let l = (u.advanced && !u.sudden && !permHas(u, 'shoot-adv') && !(G && u.advShootTurn === G.turnNo) && !docU(u, 'devastator') && !smAdvShoot(u) ? u.ranged.filter(w => w.assault || ga) : u.ranged)
-    .filter(w => !w.leader || leaderUp(u)).filter(w => w.leader || u.models > 0).filter(w => !(u.spent && u.spent[w.name]));
+    .filter(w => wUsable(u, w)).filter(w => !(u.spent && u.spent[w.name]));
   if (eng && !(u.dg && u.dg.allRot)) l = l.filter(w => !wIsIndirect(w) && (isMV(u) || wIsCQ(w) || (u.dg && u.dg.cq)));
   return l;
 };
@@ -6658,7 +6722,7 @@ function fdX(u) {
   return 0;
 }
 const fdPass = t => G.units.filter(e => e !== t && e.alive && e.side === t.side && e.embarkedIn === t.id && !e.shot && e.ranged && e.ranged.length);
-const fdAvail = (e, w) => w.leader ? (leaderUp(e) ? (w.count || 1) : 0) : (w.count ? Math.min(w.count, Math.max(1, e.models)) : Math.max(1, e.models));
+const fdAvail = (e, w) => w.leader ? (wLeadUp(e, w) ? (w.count || 1) : 0) : (w.count ? Math.min(w.count, Math.max(1, e.models)) : Math.max(1, e.models));
 function fdOptions(t) {
   const out = [];
   for (const e of fdPass(t)) e.ranged.forEach((w, wi) => { if (w.fd || wIsOneShot(w) || (e.spent && e.spent[w.name])) return; const max = fdAvail(e, w); if (max > 0) out.push({ e, wi, w, max }); });
@@ -6722,7 +6786,7 @@ function renderWeapons() {
   if (G.stage === 'battle' && G.active === 'player' && G.phase === 'shooting' && u && !G.mode && !G.busy) {
     const S = shootState(u);
     const rows = u.ranged.map((w, i) => {
-      if (w.leader && !leaderUp(u)) return '';
+      if (w.leader && !wLeadUp(u, w)) return '';
       if (!w.leader && u.models <= 0) return '';
       const usable = usableRanged(u).includes(w), fired = S.fired.includes(i);
       const n = w.leader ? (w.count || 1) * (w.per || 1) : w.count ? (u.models > 1 ? Math.min(w.count, u.models * (w.per || 1)) : w.count * (w.per || 1)) : u.models * (w.per || 1);
@@ -6735,8 +6799,12 @@ function renderWeapons() {
   } else if (G.stage === 'battle' && G.mode && G.mode.type === 'fightSetup' && u) {
     const g = meleeGroups(u);
     const radios = (list, key, title) => list.length ? `<div class="wl-h">${escH(title)}</div>` + list.map((w, i) => `<label class="wl-row"><input type="radio" name="fw-${key}" data-fk="${key}" data-fi="${u.melee.indexOf(w)}" ${G.mode[key] === w ? 'checked' : ''}><span><b>${escH(w.name)}</b><span class="st">${escH(wStats(w, false))}</span></span></label>`).join('') : '';
+    const leadRadios = (u, g) => [...new Set(g.lead.map(w => w.lid || 0))].map(li => {
+      const gl = g.lead.filter(w => (w.lid || 0) === li), L = leadersOf(u)[li] || u.leader, key = 'L' + li, sel = (G.mode.lw || {})[li];
+      return `<div class="wl-h">${escH(L ? L.name : 'Leader')} fights with</div>` + gl.map(w => `<label class="wl-row"><input type="radio" name="fw-${key}" data-fl="${li}" data-fi="${u.melee.indexOf(w)}" ${sel === w ? 'checked' : ''}><span><b>${escH(w.name)}</b><span class="st">${escH(wStats(w, false))}</span></span></label>`).join('');
+    }).join('');
     const extraRows = g.extra.length ? `<div class="wl-h">Also attacks with (Extra Attacks)</div>` + g.extra.map(w => `<div class="wl-row"><span><b>${escH(w.name)}</b><span class="st">${escH(wStats(w, false))}</span></span></div>`).join('') : '';
-    html = `<div class="wlist">${extraRows}${g.split ? `<div class="wl-h">Each model group uses its own weapon</div>` + g.body.map(w => `<div class="wl-row"><span><b>${escH(w.name)}</b> ×${w.count}<span class="st">${escH(wStats(w, false))}</span></span></div>`).join('') : radios(g.body, 'body', g.body.length > 1 ? 'Models fight with (pick one)' : 'Models fight with')}${radios(g.lead, 'leader', `${u.leader ? u.leader.name : 'Leader'} fights with`)}</div>`;
+    html = `<div class="wlist">${extraRows}${g.split ? `<div class="wl-h">Each model group uses its own weapon</div>` + g.body.map(w => `<div class="wl-row"><span><b>${escH(w.name)}</b> ×${w.count}<span class="st">${escH(wStats(w, false))}</span></span></div>`).join('') : radios(g.body, 'body', g.body.length > 1 ? 'Models fight with (pick one)' : 'Models fight with')}${leadRadios(u, g)}</div>`;
   }
   box.innerHTML = html;
   box.querySelectorAll('[data-wi]').forEach(el => el.addEventListener('change', () => {
@@ -6747,6 +6815,7 @@ function renderWeapons() {
     render();
   }));
   box.querySelectorAll('[data-fk]').forEach(el => el.addEventListener('change', () => { G.mode[el.dataset.fk] = u.melee[+el.dataset.fi]; }));
+  box.querySelectorAll('[data-fl]').forEach(el => el.addEventListener('change', () => { G.mode.lw = G.mode.lw || {}; G.mode.lw[+el.dataset.fl] = u.melee[+el.dataset.fi]; }));
   const fdg = $('#fd-go'); if (fdg) fdg.addEventListener('click', () => {
     const picks = [...box.querySelectorAll('[data-fd]')].map(el => { const [eid, wi] = el.dataset.fd.split('|'); return { eid: +eid, wi: +wi, n: +el.value || 0 }; }).filter(x => x.n > 0), X = fdX(G.sel), tot = picks.reduce((a, x) => a + x.n, 0);
     if (tot > X) { flash(`Firing Deck ${X} allows only ${X} models. You chose ${tot}.`); return; }
@@ -6795,7 +6864,7 @@ function tryMove(x, y) {
   const u = G.sel, m = G.mode;
   const mo = { skies: !!m.skies, models: m.kind === 'desperate' }, pth = pathTo(u, x, y, mo);
   if (!pth) { flash(blockedWhy(u, mo)); return; }
-  const d = pth.len;
+  const d = pth.len + elevOf(u);
   if (d > m.allow + 1e-6) { flash(pth.bent ? `Going around the obstacles is ${d.toFixed(1)}". ${u.name} can move ${m.allow}".` : `Too far: that's ${d.toFixed(1)}". ${u.name} can move ${m.allow}".`); return; }
   if (!posOk(u, x, y, false)) { flash('Can\'t end there: it overlaps a unit, leaves the board, or is within 2" of an enemy.'); return; }
   if (m.kind === 'advance' && minefieldNear(u, x, y)) { flash('Bio-minefield: a unit can\'t end an Advance within 6" of enemy Spore Mines.'); return; }
@@ -6809,8 +6878,16 @@ function finishMoveTail(u, m, d, ox0, oy0) {
   const verb = m.kind === 'advance' ? 'advances' : (m.kind === 'retreat' || m.kind === 'desperate') ? 'falls back' : 'moves';
   log(`${u.name} ${verb} ${d.toFixed(1)}"${m.skies && canFly(u) && !isHover(u) ? ' by taking to the skies' : ''}.${u.ranged.some(w => w.heavy) && d <= 3 ? ' Heavy weapons keep +1 to hit.' : ''}`, 'player');
   G.sel = null; G.mode = null; G.msg = '';
+  u.elev = 0;
   render();
-  offerEmbark(u);
+  (async () => { await offerAscend(u, m, d); offerEmbark(u); })();
+}
+/* a unit that ends a move inside a dense feature with floors can climb to one of them: the climb counts against its move */
+async function offerAscend(u, m, d) {
+  const T = floorAt(u.x, u.y); if (!T || !canElev(u) || !(passesRuins(u) || canFly(u)) || !u.alive) return;
+  const left = (m.allow || 0) - d, fl = terrFloors(T).filter(f => f <= left + 1e-6); if (!fl.length) return;
+  const v = await askPlayer({ kind: 'choice', text: `${u.name} is inside a dense terrain feature with floors. Climb to a floor? The climb uses that much of its move (${left.toFixed(1)}" left). From a floor of 3" or more its ranged attacks get Plunging Fire (+1 to hit against units on the ground).`, options: [{ label: 'Stay at ground level', value: 0, primary: true }].concat(fl.map(f => ({ label: `Climb to the ${f}" floor`, value: f }))) });
+  if (v) { u.elev = v; u.movedDist += v; log(`${u.name} climbs to the ${v}" floor.`, u.side); render(); }
 }
 function dgNear(u, x, y) {
   if (!G || !dgFaction(u.side) && !abIn(u, /^death approaches/i)) return null;
@@ -6863,7 +6940,7 @@ async function doShoot(u, t, weapons) {
 }
 async function doOverwatch(u, t) {
   const cover = coverFor(t, u);
-  for (const w of firstAlt(u.ranged)) { if (!t.alive) break; if (w.leader && !leaderUp(u)) continue; if (edge(u, t) > owRange(w)) continue; await attack(u, w, t, true, cover, true); }
+  for (const w of firstAlt(u.ranged)) { if (!t.alive) break; if (w.leader && !wLeadUp(u, w)) continue; if (edge(u, t) > owRange(w)) continue; await attack(u, w, t, true, cover, true); }
   await flushHazards();
 }
 async function doExplosives(u, t) {
@@ -7007,11 +7084,12 @@ async function advanceFight() {
 const firstAlt = list => list.filter((w, i) => !w.alt || list.findIndex(x => x.alt === w.alt) === i);
 function meleeGroups(u) {
   const body = u.models > 0 ? u.melee.filter(w => !w.leader && !w.extra) : [];
-  const lead = leaderUp(u) ? u.melee.filter(w => w.leader && !w.extra) : [];
-  const extra = u.melee.filter(w => w.extra && (w.leader ? leaderUp(u) : u.models > 0));
+  const lead = u.melee.filter(w => w.leader && !w.extra && wLeadUp(u, w));
+  const extra = u.melee.filter(w => w.extra && wUsable(u, w));
   const split = body.length > 1 && body.every(w => w.count) && body.reduce((a, w) => a + w.count, 0) <= u.start + 1;
   return { body, lead, split, extra };
 }
+function leadDefaults(u, g, t) { const o = {}; for (const li of new Set(g.lead.map(w => w.lid || 0))) { const gl = g.lead.filter(w => (w.lid || 0) === li); o[li] = t ? bestMelee(u, gl, t) : gl[0]; } return o; }
 function bestMelee(u, list, t) { return list.slice().sort((a, b) => expDmg(u, [b], t, false, false) - expDmg(u, [a], t, false, false))[0]; }
 async function resolveFight(u, t, choice) {
   if (u.side === 'ai' && !u.fought) { dgAiStrats(u, 'fight'); aiEpicChallenge(u); }
@@ -7033,7 +7111,7 @@ async function resolveFight(u, t, choice) {
   if (byAI) await foPlayerOffer(u, t); else foAiUse(u, t);
   const g = meleeGroups(u);
   const use = g.split ? g.body.slice() : [choice && choice.body && g.body.includes(choice.body) ? choice.body : bestMelee(u, g.body, t)];
-  use.push(choice && choice.leader && g.lead.includes(choice.leader) ? choice.leader : bestMelee(u, g.lead, t));
+  { const lids = [...new Set(g.lead.map(w => w.lid || 0))]; for (const li of lids) { const gl = g.lead.filter(w => (w.lid || 0) === li); const pk = choice && ((choice.lw && choice.lw[li]) || choice.leader); use.push(pk && gl.includes(pk) ? pk : bestMelee(u, gl, t)); } }
   use.push(...g.extra);
   const usedM = [];
   for (const w of use.filter(Boolean)) { if (!t.alive) break; await attack(u, w, t, false, false); usedM.push(w); }
@@ -7194,9 +7272,9 @@ function aiMove(u) {
   u.movedDist = 0; u.moved = true;
   if (u.lessonAi === 'still' || u.lessonAi === 'hold') { u.stayed = true; return; }
   if (isAircraft(u)) { u.stayed = true; return; }
-  if (isEngaged(u)) { u.stayed = true; log(`${u.name} stays in combat.`, 'ai'); return; }
+  if (isEngaged(u)) { if (aiFallBack(u)) return; u.stayed = true; log(`${u.name} stays in combat.`, 'ai'); return; }
   const foes = aliveSide('player').filter(e => !isAircraft(e) || canFly(u)); if (!foes.length) return;
-  let gx, gy, stop, label, allow = moveOf(u), gu = null, goalObj = null;
+  let gx, gy, stop, label, allow = Math.max(0, moveOf(u) - elevOf(u)), gu = null, goalObj = null;
   const byModels = aiCan(u);
   if (u.role === 'assault') {
     const t = foes.slice().sort((a, b) => edge(u, a) - edge(u, b))[0];
@@ -7226,6 +7304,35 @@ function aiMove(u) {
   if (moved > 0.1) { dgAfterMove(u, ax0, ay0, u.advanced ? 'advance' : 'normal'); floatingDeath(u); bombSquigs(u, u.advanced ? 'advance' : 'normal'); slashingDive(u, ax0, ay0, u.advanced ? 'advance' : 'normal'); }
   const fl = pick.o.skies && canFly(u) && moved > 0.1 && !isHover(u);
   log(moved > 0.1 ? `${u.name} ${u.advanced ? 'runs' : 'moves'} ${moved.toFixed(1)}"${fl ? ' by taking to the skies' : ''} ${label}.` : `${u.name} stays put.`, 'ai');
+  u.elev = 0;
+  { const T = floorAt(u.x, u.y), left = allow - moved; if (T && canElev(u) && (passesRuins(u) || canFly(u)) && !u.advanced && u.ranged.length) { const f = terrFloors(T).filter(x => x <= left + 1e-6).pop(); if (f) { u.elev = f; u.movedDist += f; log(`${u.name} climbs to the ${f}" floor.`, 'ai'); } } }
+}
+/* The AI makes an Ordered Retreat when its engaged unit is losing the fight, or is a shooting unit that would do more good free to shoot next turn. */
+function aiFallBack(u) {
+  if (u.shocked || !u.placed || isAircraft(u) || has(u, 'titanic') || u.lessonAi === 'hold') return false;
+  const foes = engagedWith(u); if (!foes.length) return false;
+  const ldCur = leaderUp(u) ? liveLeaders(u).reduce((a, l) => a + l.cur, 0) : 0;
+  const left = Math.max(1, (u.models > 0 ? (u.models - 1) * (+u.W || 1) + u.cur : 0) + ldCur);
+  const inEV = foes.reduce((a, e) => a + expDmg(e, e.melee, u, false, false), 0);
+  const outEV = foes.reduce((a, e) => a + expDmg(u, u.melee, e, false, false), 0);
+  const rngEV = u.ranged.length ? expDmg(u, u.ranged, foes[0], true, false) : 0;
+  const holding = OBJ.some(o => objIn(u, o) && controller(o) === 'ai');
+  const losing = inEV >= left * 0.6 && outEV < inEV * 0.6, shooter = rngEV > Math.max(1.5, outEV * 2) && inEV >= left * 0.25;
+  if (!(losing || shooter) || (holding && outEV >= inEV * 0.7) || Math.random() > .8) return false;
+  const mv = moveOf(u), cx = foes.reduce((a, e) => a + e.x, 0) / foes.length, cy = foes.reduce((a, e) => a + e.y, 0) / foes.length;
+  let gx = Math.max(2, Math.min(BW - 2, u.x + (u.x - cx) * 4)), gy = Math.max(2, Math.min(BH - 2, u.y + (u.y - cy) * 4));
+  const safe = OBJ.filter(o => controller(o) !== 'player' && Math.hypot(o.x - u.x, o.y - u.y) <= mv + 6 && foes.every(e => Math.hypot(o.x - e.x, o.y - e.y) - e.r > 6)).sort((a, b) => Math.hypot(a.x - u.x, a.y - u.y) - Math.hypot(b.x - u.x, b.y - u.y))[0];
+  if (safe) { gx = safe.x; gy = safe.y; }
+  const plan = planToward(u, gx, gy, mv, 0.2, false, null, {});
+  if (!plan || plan.len < 1) return false;
+  const ids = foes.map(e => e.id), ax0 = u.x, ay0 = u.y; G.fbEng = ids;
+  const r = aiModelPlace(u, plan, { allow: mv, kind: 'retreat', skies: false, obj: null });
+  let moved; if (r !== null) moved = Math.max(r, 0.01); else { u.x = plan.x; u.y = plan.y; moved = plan.len; }
+  u.movedDist = moved; u.fellBack = true; u.moved = true;
+  log(`${u.name} Falls Back ${moved.toFixed(1)}" out of combat (${losing ? 'it is losing the fight' : 'it can shoot better from range'}).`, 'ai');
+  dgAfterMove(u, ax0, ay0, 'retreat'); fallBackAfter(u);
+  u.aiFB = foes.filter(e => e.side === 'player').map(e => e.id);
+  return true;
 }
 function aiArrive(u) {
   let best = null;
@@ -7298,7 +7405,7 @@ async function aiHeroic() {
   if (!charged.length) return;
   const cands = aliveSide('ai').filter(u => u.placed && !u.reserve && !isEngaged(u) && !isAircraft(u) && u.melee.length && canStrat('ai', 'heroic', 1, u) && charged.some(e => edge(u, e) <= 12));
   if (!cands.length) return;
-  const crude = u => u.melee.filter(w => !w.leader || leaderUp(u)).reduce((t, w) => t + avgDice(parseDice(String(w.A))) * (w.count || u.models || 1) * Math.max(1 / 6, (7 - (w.skill || 4)) / 6) * .5 * .5 * avgDice(parseDice(String(w.D || 1))), 0);
+  const crude = u => u.melee.filter(w => !w.leader || wLeadUp(u, w)).reduce((t, w) => t + avgDice(parseDice(String(w.A))) * (w.count || u.models || 1) * Math.max(1 / 6, (7 - (w.skill || 4)) / 6) * .5 * .5 * avgDice(parseDice(String(w.D || 1))), 0);
   const best = cands.map(u => ({ u, v: crude(u) })).sort((a, b) => b.v - a.v)[0];
   if (best.v < 1.5 || Math.random() > .75 || !useStrat('ai', 'heroic', 1, best.u)) return;
   const u = best.u, a = d6(), b = d6(), roll = a + b;
@@ -7433,7 +7540,7 @@ async function runAI() {
   G.busy = true;
   setPhase('command'); await dgStorm('ai'); doCommand('ai'); aiCommandDecisions(); doReanimation('ai'); await feedTheSwarm('ai'); await neuroloids('ai'); aiShadow(); render(); await offerShadow(); dgEndCommand('ai'); smEndCommand('ai'); aliveSide('ai').forEach(u => dgAiStrats(u, 'command')); scorePrimary('ai'); render(); await sleep(800); if (stop()) return;
   setPhase('movement'); G.claims = new Set(); aiDisembark(); render();
-  for (const u of aliveSide('ai')) { aiMove(u); render(); await sleep(380); if (stop()) return; if (u.movedDist > 0.1 && !isAircraft(u)) { await dgInfluencePlayer(u); if (stop()) return; await reactMoves('oppmove', u); if (stop()) return; } }
+  for (const u of aliveSide('ai')) { aiMove(u); render(); await sleep(380); if (stop()) return; if (u.aiFB) { const fb = u.aiFB.map(id => G.units.find(x => x.id === id)).filter(Boolean); u.aiFB = null; await aiFellBack(u, fb); if (stop()) return; } if (u.movedDist > 0.1 && !isAircraft(u)) { await dgInfluencePlayer(u); if (stop()) return; await reactMoves('oppmove', u); if (stop()) return; } }
   for (const u of reserves('ai')) { if (!canArriveNow(u)) continue; if (aiArrive(u)) { render(); await sleep(450); } }
   dgEndMovement('ai'); tsEndMovement('ai'); aliveSide('ai').forEach(u => dgAiStrats(u, 'movement'));
   await playerEndOfMovementReactions(); if (stop()) return;
@@ -7660,7 +7767,7 @@ $('#board').addEventListener('click', e => {
       if (hit && hit.side === 'player' && fightPool('player').includes(hit)) {
         const ts = engagedWith(hit), g = meleeGroups(hit), t0 = ts[0] || null;
         G.sel = hit;
-        G.mode = { type: 'fightSetup', target: ts.length === 1 ? ts[0].id : null, body: t0 && !g.split ? bestMelee(hit, g.body, t0) : g.body[0] || null, leader: t0 ? bestMelee(hit, g.lead, t0) : g.lead[0] || null };
+        G.mode = { type: 'fightSetup', target: ts.length === 1 ? ts[0].id : null, body: t0 && !g.split ? bestMelee(hit, g.body, t0) : g.body[0] || null, lw: leadDefaults(hit, g, t0) };
         render(); return;
       }
       if (hit && hit.side === 'player') G.msg = `${hit.name} can't be picked now.`;
@@ -7822,8 +7929,10 @@ function renderBoard() {
   else s.push(`<text class="zone-t" x="${za.x + 1}" y="${za.y + 1.8}" font-size="1.2">AI deployment zone</text><text class="zone-t" x="${zp.x + 1}" y="${zp.y + zp.h - 1}" font-size="1.2">Your deployment zone</text>`);
   for (const t of TERRAIN) {
     if (t.poly) { const pts = t.poly.map(p => p[0] + ',' + p[1]).join(' '); s.push(`<polygon class="terrain" points="${pts}" stroke-linejoin="round"/><polygon points="${pts}" fill="url(#hatch)" opacity=".5"/>`); continue; }
-    s.push(`<rect class="terrain" x="${t.x}" y="${t.y}" width="${t.w}" height="${t.h}" rx=".3"/><rect x="${t.x}" y="${t.y}" width="${t.w}" height="${t.h}" fill="url(#hatch)" opacity=".5" rx=".3"/>`);
-    for (const e of (t.walls || [])) {
+    s.push(`<rect class="terrain ${terrCat(t)}" x="${t.x}" y="${t.y}" width="${t.w}" height="${t.h}" rx=".3"/><rect x="${t.x}" y="${t.y}" width="${t.w}" height="${t.h}" fill="url(#hatch)" opacity="${terrCat(t) === 'dense' ? .5 : .22}" rx=".3"/>`);
+    if (terrCat(t) !== 'dense') s.push(`<text class="terr-lab" x="${t.x + t.w / 2}" y="${t.y + t.h / 2 + .4}" text-anchor="middle">${terrCat(t) === 'light' ? 'Light' : 'Exposed'} ${terrHt(t)}"</text>`);
+    else s.push(`<text class="terr-lab" x="${t.x + t.w / 2}" y="${t.y + t.h / 2 + .4}" text-anchor="middle">Dense ${terrHt(t)}"</text>`);
+    for (const e of (terrCat(t) === 'dense' ? (t.walls || []) : [])) {
       const [x1, y1, x2, y2] = e === 'top' ? [t.x, t.y, t.x + t.w * .75, t.y] : e === 'bottom' ? [t.x + t.w * .25, t.y + t.h, t.x + t.w, t.y + t.h] : e === 'left' ? [t.x, t.y, t.x, t.y + t.h * .7] : [t.x + t.w, t.y + t.h * .3, t.x + t.w, t.y + t.h];
       s.push(`<line class="wall" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/>`);
     }
@@ -7887,6 +7996,7 @@ function renderBoard() {
       s.push(`<circle class="affl-ring" cx="${cx}" cy="${cy}" r="${(u.r + .55).toFixed(2)}"/><circle class="affl-dot" cx="${ax.toFixed(2)}" cy="${ay.toFixed(2)}" r="1.15"/><text class="affl-t" x="${ax.toFixed(2)}" y="${(ay + .42).toFixed(2)}" font-size="1.15" text-anchor="middle">☣</text><text class="affl-t" x="${ax.toFixed(2)}" y="${(ay + 2.3).toFixed(2)}" font-size=".85" text-anchor="middle">${pl}</text>`);
     }
     { const es = enhStar(u, u.x - u.r * .86, u.y + u.r * .86); if (es) s.push(es); }
+    if (elevOf(u)) s.push(`<text class="tok-t" x="${(u.x - u.r * .7).toFixed(2)}" y="${(u.y - u.r * .55).toFixed(2)}" font-size="1.1" text-anchor="middle">▲${elevOf(u)}"</text>`);
     if (u.shocked) s.push(`<text class="shock" x="${(u.x + u.r * .75).toFixed(2)}" y="${(u.y - u.r * .6).toFixed(2)}" font-size="1.6" text-anchor="middle">!</text>`);
     if (u.smoked) s.push(`<circle cx="${cx}" cy="${cy}" r="${u.r + .9}" fill="none" stroke="var(--muted)" stroke-width=".5" stroke-dasharray=".2 .4" opacity=".8"/>`);
   }
@@ -8056,7 +8166,7 @@ function renderSide() {
       if (G.mode && G.mode.type === 'fightSetup') {
         const tg = G.units.find(x => x.id === G.mode.target), eng = engagedWith(u);
         prompt = eng.length ? (tg ? `${u.name} will attack ${tg.name}.${eng.length > 1 ? ' Click another engaged enemy to switch target.' : ''} Choose weapons, then fight.` : `Click the enemy ${u.name} should attack.`) : `${u.name} isn't engaged: it will make an Overrun Fight against the nearest enemy within reach.`;
-        acts.push(btn('Fight!', () => { const m = G.mode; playerFight(u, G.units.find(x => x.id === m.target) || null, { body: m.body, leader: m.leader }); }, true, eng.length > 0 && !tg));
+        acts.push(btn('Fight!', () => { const m = G.mode; playerFight(u, G.units.find(x => x.id === m.target) || null, { body: m.body, lw: m.lw }); }, true, eng.length > 0 && !tg));
         acts.push(btn('Pick another unit', () => { G.sel = null; G.mode = null; render(); }));
       } else prompt = 'Your pick: click one of your highlighted units to fight.';
     } else if (ph === 'command') {
@@ -8344,15 +8454,15 @@ const enhOf = (u, re) => (u.abilities || []).concat(leaderUp(u) ? (u.leader.abil
 const instinctive = u => !!(u && u.faction === 'Tyranids' && enhOf(u, /instinctive defence/i) && aliveSide(u.side).some(h => harvest(h) && edge(u, h) <= 6));
 const regenUsed = u => (G.regen && G.regen[u.id]) || 0;
 const regenCap = u => enhOf(u, /regenerating monstrosity/i) ? 2 : 1;
-const woundsLost = u => Math.max(u.models > 0 && u.cur < mW(u) ? mW(u) - u.cur : 0, leaderUp(u) ? u.leader.W - u.leader.cur : 0);
+const woundsLost = u => Math.max(u.models > 0 && u.cur < mW(u) ? mW(u) - u.cur : 0, leaderUp(u) ? liveLeaders(u).reduce((m, l) => Math.max(m, l.W - l.cur), 0) : 0);
 const modelsBack = u => (!has(u, 'infantry') || u.models >= u.start) ? 0 : has(u, 'endless multitude') ? Math.min(3, u.start - u.models) : 1;
 const canRegen = t => !!(t.alive && t.placed && t.faction === 'Tyranids' && regenUsed(t) < regenCap(t) && (woundsLost(t) > 0 || modelsBack(t) > 0));
 const regenRange = h => aliveSide(h.side).some(b => enhOf(b, /biophagic flow/i) && edge(h, b) <= 12) ? 9 : 6;
 function healOne(u, n) {
-  const bl = u.models > 0 && u.cur < mW(u) ? mW(u) - u.cur : 0, ll = leaderUp(u) ? u.leader.W - u.leader.cur : 0;
+  const bl = u.models > 0 && u.cur < mW(u) ? mW(u) - u.cur : 0, hl = leaderUp(u) ? liveLeaders(u).filter(l => l.cur < l.W).sort((a, b) => (b.W - b.cur) - (a.W - a.cur))[0] : null, ll = hl ? hl.W - hl.cur : 0;
   if (!bl && !ll) return 0;
   if (bl >= ll) { const g = Math.min(n, bl); u.cur += g; return g; }
-  const g = Math.min(n, ll); u.leader.cur += g; return g;
+  const g = Math.min(n, ll); hl.cur += g; return g;
 }
 /* regenerate a unit: heal one model, or bring destroyed Infantry back (3 for an Endless Multitude unit) */
 async function doRegenerate(T, H, byPlayer, opts) {
@@ -8625,7 +8735,7 @@ async function reactAfterAttack(att, t, before, phase) {
 }
 async function vengefulStars(s, att, dead) {
   if (!canStrat('player', s.slug, s.cost)) return;
-  const wsOf = c => (leaderUp(c) && c.ranged.some(w => w.leader) ? c.ranged.filter(w => w.leader) : c.ranged).filter(w => !w.leader || leaderUp(c));
+  const wsOf = c => (leaderUp(c) && c.ranged.some(w => w.leader) ? c.ranged.filter(w => w.leader) : c.ranged).filter(w => !w.leader || wLeadUp(c, w));
   const cands = aliveSide('player').filter(c => has(c, 'character') && (!c.leader || leaderUp(c)) && Math.hypot(c.x - dead.x, c.y - dead.y) - c.r - dead.r <= 6 && !isEngaged(c) && canStrat('player', s.slug, s.cost, c) && visible(c, att) && wsOf(c).some(w => edge(c, att) <= w.range));
   if (!cands.length) return;
   if (!await askStrat(s, `Your ${dead.name} was destroyed by the AI's ${att.name}. Use Protocol of the Vengeful Stars (${s.cost} CP)? A Character within 6" can shoot back.`, false)) return;
@@ -8643,7 +8753,7 @@ async function insanitysIre(s, t) {
   if (spot) { const d = Math.hypot(spot.x - t.x, spot.y - t.y); t.x = spot.x; t.y = spot.y; log(`${t.name} surges ${d.toFixed(1)}".`, 'player'); }
   else log(`${t.name} stays put.`, 'player');
 }
-/* Blood-fuelled Cruelty needs an enemy that Falls Back. The AI never does, so nothing calls this yet. */
+/* Blood-fuelled Cruelty: called when an AI unit Falls Back from your units. */
 async function aiFellBack(fled, engaged) {
   const s = detFind('blood-fuelled-cruelty'); if (!s || G.stage !== 'battle' || !fled.alive) return;
   const cands = engaged.filter(c => c.alive && c.side === 'player' && isDC(c) && canStrat('player', s.slug, s.cost, c));
@@ -8687,7 +8797,7 @@ function queueRevenant(unit, kind) {
   if (!model || model.revived) return;
   const kw = model.kw || [];
   if (!(kw.includes('infantry') && kw.includes('character'))) return;
-  G.offers.push({ unit, kind, x: unit.x, y: unit.y, name: model.name });
+  G.offers.push({ unit, kind, lead: kind === 'leader' ? unit.leader : null, x: unit.x, y: unit.y, name: model.name });
 }
 async function flushOffers() {
   await btFlush();
@@ -8703,11 +8813,11 @@ function materializeRevenants() {
   btRevive();
   const list = ((G && G.revenants) || []).splice(0);
   for (const o of list) {
-    const src = o.kind === 'leader' ? o.unit.leader : o.unit;
+    const src = o.kind === 'leader' ? (o.lead || o.unit.leader) : o.unit;
     let nu;
     if (o.kind === 'leader') {
       const strip = w => { const c = Object.assign({}, w); delete c.leader; delete c.count; delete c.per; return c; };
-      nu = { name: src.name, M: src.M, T: src.T, Sv: src.Sv, inv: src.inv || 0, W: src.W, Ld: src.Ld, OC: src.OC, fnp: src.fnp || 0, kw: [...(src.kw || [])], scouts: 0, abilities: JSON.parse(JSON.stringify(src.abilities || [])), ranged: o.unit.ranged.filter(w => w.leader).map(strip), melee: o.unit.melee.filter(w => w.leader).map(strip) };
+      nu = { name: src.name, M: src.M, T: src.T, Sv: src.Sv, inv: src.inv || 0, W: src.W, Ld: src.Ld, OC: src.OC, fnp: src.fnp || 0, kw: [...(src.kw || [])], scouts: 0, abilities: JSON.parse(JSON.stringify(src.abilities || [])), ranged: o.unit.ranged.filter(w => w.leader && (w.lid || 0) === (src.lid || 0)).map(strip), melee: o.unit.melee.filter(w => w.leader && (w.lid || 0) === (src.lid || 0)).map(strip) };
     } else nu = JSON.parse(JSON.stringify(o.unit));
     const nid = Math.max(...G.units.map(v => v.id)) + 1;
     Object.assign(nu, { id: nid, side: 'player', alive: true, placed: true, models: 1, start: 1, cur: Math.max(1, Math.ceil(nu.W / 2)), revived: true, shocked: false, reserve: false, faction: o.unit.faction, tag: unitTag(nu.name), r: 1.6, x: o.x, y: o.y });
@@ -8735,13 +8845,14 @@ const isPL = u => has(u, 'plague legions') || has(u, 'summoned');
 const isDGU = u => !!(u && u.faction === 'Death Guard' && !isPL(u));
 const isPox = u => /poxwalker/i.test(u.name);
 const isPM = u => /plague marines/i.test(u.name);
-const abIn = (u, re) => (u.abilities || []).concat(leaderUp(u) ? (u.leader.abilities || []) : []).some(a => re.test(a.name));
+const abIn = (u, re) => (u.abilities || []).concat(leaderUp(u) ? liveLeaders(u).flatMap(L => L.abilities || []) : []).some(a => re.test(a.name));
 const enhHolder = (u, re) => {
   if ((u.abilities || []).some(a => /^enhancement:/i.test(a.name) && re.test(a.name))) return 'unit';
-  if (leaderUp(u) && (u.leader.abilities || []).some(a => /^enhancement:/i.test(a.name) && re.test(a.name))) return 'leader';
+  if (leaderUp(u) && liveLeaders(u).some(L => (L.abilities || []).some(a => /^enhancement:/i.test(a.name) && re.test(a.name)))) return 'leader';
   return '';
 };
-const bearsFor = (u, w, re) => { const h = enhHolder(u, re); return h === 'unit' || (h === 'leader' && !!w.leader); };
+const enhLeadIs = (L, re) => !!L && (L.abilities || []).some(a => /^enhancement:/i.test(a.name) && re.test(a.name));
+const bearsFor = (u, w, re) => { const h = enhHolder(u, re); return h === 'unit' || (h === 'leader' && !!w.leader && enhLeadIs(leadersOf(u)[w.lid || 0], re)); };
 const PLAGUES = [['skullsquirm', 'Skullsquirm Blight', 'Afflicted units: the enemy has the benefit of cover against their ranged attacks, and their melee attacks have -1 to hit.'],
   ['rattlejoint', 'Rattlejoint Ague', 'Afflicted units: their Save characteristic is worsened by 1.'],
   ['scabrous', 'Scabrous Soulrot', 'Afflicted units: their Move, Leadership and Objective Control are worsened by 1 (OC no lower than 1).']];
@@ -9040,7 +9151,7 @@ const dgCharModels = u => { const base = (LIB || []).find(l => l.faction === 'De
 Object.assign(DET_UNIT, {
   'rabid-infusion': dgDef('ff', { ctx: dgCtx.fight, pred: u => isDGU(u) && !u.fought && dgFightNotStarted() && dgCharModels(u) >= 2, advice: 'Use it at the start of the Fight phase on a Death Guard unit that includes two Character models (a Character leading a Character unit, or a unit of several Characters).', log: u => `${u.name} has Fights First this phase.` })
 });
-const woundsLostDG = u => Math.max(0, (u.models > 0 ? mW(u) - u.cur : 0), (leaderUp(u) ? u.leader.W - u.leader.cur : 0));   // the one model that has lost the most wounds
+const woundsLostDG = u => Math.max(0, (u.models > 0 ? mW(u) - u.cur : 0), (leaderUp(u) ? liveLeaders(u).reduce((m, l) => Math.max(m, l.W - l.cur), 0) : 0));   // the one model that has lost the most wounds
 function dgLeechspore(u) {
   const e = aliveSide(other(u.side)).filter(x => edge(u, x) <= 3).sort((a, b) => edge(u, a) - edge(u, b))[0]; if (!e) return;
   const lost = woundsLostDG(u); let mw = 0, heal = 0;
@@ -9197,6 +9308,7 @@ async function dgFallbackReactions(u) {
 }
 /* ---- leaders, models and warriors that move between units ---- */
 function dgAttachLeader(host, ld) {
+  delete host.leaders;
   host.leader = { name: ld.name, ds: ld.ds || ld.name, M: ld.M, T: ld.T, Sv: ld.Sv, inv: ld.inv, W: ld.W, Ld: ld.Ld, OC: ld.OC, fnp: ld.fnp, kw: ld.kw, abilities: (ld.abilities || []).filter(a => !/^(leader|support)$/i.test(a.name)), alive: true, cur: ld.cur || ld.W };
   for (const w of ld.ranged) host.ranged.push(Object.assign({}, w, { leader: true }));
   for (const w of ld.melee) host.melee.push(Object.assign({}, w, { leader: true }));
@@ -9282,8 +9394,26 @@ function dgAfterAttack2(u, w, t, shooting, st, killed, before, leaderDied) {
 const freeAdvReroll = u => !!((u.sudden && leaderUp(u)) || (dgFaction(u.side) && (enhHolder(u, /vile vigour/i) || (abIn(u, /^sickening vitality/i) && leaderUp(u)))) || (isSM(u) && ((enhHolder(u, /portents of wisdom/i) === 'leader' && leaderUp(u)) || (enhHolder(u, /fire discipline/i) === 'leader' && leaderUp(u) && docU(u, 'devastator')))));
 
 /* the AI spends Command Points on a few of these */
+/* The AI uses simple unit-targeted detachment stratagems of its own army (the ones that set a flag on one unit for the phase). */
+function aiGenericStrats(u, phase) {
+  if (!G || G.stage !== 'battle' || !u.alive || u.side !== 'ai' || G.cp.ai < 3) return;
+  const inFight = phase === 'fight' || phase === 'fightstart';
+  for (const x of ((G.ab.detachment && G.ab.detachment.strats) || [])) {
+    const s = Object.assign({}, x, { slug: slugOf(x.name), cost: parseInt(x.cp, 10) || 1 }), d = DET_UNIT[s.slug];
+    if (!d || d.dg || !DET_SIM.includes(s.slug) || G.cp.ai < s.cost + 2 || !d.pred || Math.random() > .5) continue;
+    const sl = s.slug, ctx = d.ctx ? d.ctx(true, inFight) : sl === 'protocol-of-the-sudden-storm' ? G.phase === 'movement' : sl === 'protocol-of-the-conquering-tyrant' ? G.phase === 'shooting' : (sl === 'protocol-of-the-hungry-void' || sl === 'secure-biomass') ? inFight : (inFight || G.phase === 'shooting');
+    if (!ctx || G.phase === 'command' || !canStrat('ai', sl, s.cost, u) || !d.pred(u, inFight)) continue;
+    if (inFight && !isEngaged(u) && !u.charged) continue;
+    if (G.phase === 'shooting' && !aliveSide('player').some(e => e.placed && visible(u, e) && u.ranged.some(w => edge(u, e) <= w.range))) continue;
+    if (G.phase === 'movement' && isEngaged(u)) continue;
+    SNAME[sl] = s.name; if (!useStrat('ai', sl, s.cost, u)) continue;
+    if (d.apply) d.apply(u); u[d.flag] = true;
+    log(`The AI uses ${s.name}: ${d.log ? d.log(u) : u.name}`, 'ai'); return;
+  }
+}
 function dgAiStrats(u, phase) {
-  if (!dgFaction('ai') || G.stage !== 'battle' || !u.alive) return;
+  if (!dgFaction('ai')) { aiGenericStrats(u, phase); return; }
+  if (G.stage !== 'battle' || !u.alive) return;
   if (phase === 'shooting' && abIn(u, /^eater plague/i) && !(u.dg && u.dg.eater)) dgEaterPlague(u);
   const list = ((G.ab.detachment && G.ab.detachment.strats) || []).map(x => Object.assign({}, x, { slug: slugOf(x.name), cost: parseInt(x.cp, 10) || 1 }));
   const want = phase === 'movement' ? ['blighted-land'] : phase === 'shooting' ? ['overwhelming-generosity', 'bloodrust-deluge', 'eye-of-the-swarm', 'all-is-rot', 'creeping-blight', 'droning-horror', 'drawn-to-despair', 'font-of-filth', 'mortarions-teachings', 'blessings-of-filth', 'malignance-magnified', 'fresh-vectors', 'avatars-of-decay', 'deaths-heads'] : phase === 'command' ? ['signal-pox', 'plaguesurge', 'territorial-infection', 'gnawing-hunger', 'leechspore-eruption', 'blooming-pestilence'] : phase === 'fight' ? ['grim-reapers', 'clutching-corruption', 'blessings-of-filth', 'malignance-magnified', 'fresh-vectors'] : phase === 'fightstart' ? ['rabid-infusion', 'nauseating-paroxysms'] : phase === 'charge' ? ['sickening-impact', 'shock-and-horror'] : [];
@@ -9517,7 +9647,7 @@ async function dgReprisalAfter(att, T) {
   const p = G && G.reprisalPending; if (!p || p.att !== att || p.t !== T) return;
   G.reprisalPending = null;
   if (!T.alive || !att.alive || G.stage !== 'battle') return;
-  const ws = firstAlt(usableRanged(T)).filter(w => !(w.leader && !leaderUp(T)) && edge(T, att) <= w.range);
+  const ws = firstAlt(usableRanged(T)).filter(w => !(w.leader && !wLeadUp(T, w)) && edge(T, att) <= w.range);
   if (!ws.length || !(visible(T, att) || ws.some(wIsIndirect)) || (isEngaged(T) && !isMV(T))) { log(`Inflamed Reprisal: ${T.name} has no shot at ${att.name}.`, T.side); return; }
   log(`Mortarion's Inflamed Reprisal: ${T.name} shoots back at ${att.name}.`, T.side);
   (T.dg = T.dg || {}).reprisal = true;
@@ -9543,7 +9673,7 @@ function dgLeaderSlain(unit) {
   const ind = !ur && isSM(unit) && !unit.leader.indUsed && (unit.leader.kw || []).includes('gravis') && (unit.leader.abilities || []).some(a => /^enhancement: (indomitable fury|honour indefatigable)/i.test(a.name));
   if (!ur && !ind) return;
   if (ur) unit.leader.urUsed = true; else unit.leader.indUsed = true;
-  (G.dgReturn = G.dgReturn || []).push({ kind: 'leader', unit, side: unit.side, full: ind });
+  (G.dgReturn = G.dgReturn || []).push({ kind: 'leader', unit, lead: unit.leader, side: unit.side, full: ind });
   log(`${unit.leader.name} may rise again at the end of the phase (${ur ? 'Unholy Resilience' : 'Indomitable Fury'}).`, unit.side);
 }
 const dgPending = side => ((G && G.dgReturn) || []).some(o => o.side === side && o.kind !== 'leader');
@@ -9552,9 +9682,10 @@ function dgReturns() {
   for (const o of list) {
     const u = o.unit, r = d6();
     if (o.kind === 'leader') {
-      if (!u.alive || u.leader.alive) continue;
-      if (r >= 2) { u.leader.alive = true; u.leader.cur = o.full ? u.leader.W : Math.min(3, u.leader.W); log(`${o.full ? 'Indomitable Fury' : 'Unholy Resilience'}: rolled ${r}, ${u.leader.name} rises again with ${u.leader.cur} wounds.`, o.side); }
-      else log(`${o.full ? 'Indomitable Fury' : 'Unholy Resilience'}: rolled ${r}, ${u.leader.name} does not return.`, o.side);
+      const LR = o.lead || u.leader;
+      if (!u.alive || LR.alive) continue;
+      if (r >= 2) { LR.alive = true; LR.cur = o.full ? LR.W : Math.min(3, LR.W); u.leader = LR; log(`${o.full ? 'Indomitable Fury' : 'Unholy Resilience'}: rolled ${r}, ${LR.name} rises again with ${LR.cur} wounds.`, o.side); }
+      else log(`${o.full ? 'Indomitable Fury' : 'Unholy Resilience'}: rolled ${r}, ${LR.name} does not return.`, o.side);
       continue;
     }
     u.pending = false;
@@ -9869,7 +10000,7 @@ function btYieldQueue(unit, kind) {
   const model = kind === 'leader' ? unit.leader : unit; if (!model || model.yielded) return;
   const isAnc = kind === 'leader' ? (/ancient/i.test(model.name || '') || (model.kw || []).includes('ancient')) : btAncient(unit);
   if (!isAnc) return;
-  G.btQ.push({ kind: 'yield', unit, k: kind, x: unit.x, y: unit.y, name: model.name || unit.name });
+  G.btQ.push({ kind: 'yield', unit, k: kind, lead: kind === 'leader' ? unit.leader : null, x: unit.x, y: unit.y, name: model.name || unit.name });
 }
 async function btFlush() {
   const list = (G.btQ || []).splice(0);
@@ -9888,9 +10019,9 @@ async function btFlush() {
 function btRevive() {
   const list = ((G && G.btRevive) || []).splice(0);
   for (const o of list) {
-    const u = o.unit, model = o.k === 'leader' ? u.leader : u; if (!model) continue;
+    const u = o.unit, model = o.k === 'leader' ? (o.lead || u.leader) : u; if (!model) continue;
     model.yielded = true;
-    if (o.k === 'leader') { u.leader.alive = true; u.leader.cur = u.leader.W; if (!u.alive) { u.alive = true; u.models = 0; } }
+    if (o.k === 'leader') { model.alive = true; model.cur = model.W; u.leader = model; if (!u.alive) { u.alive = true; u.models = 0; } }
     else { u.alive = true; u.models = 1; u.cur = mW(u); u.leader && (u.leader.alive = false); }
     let placed = !isEngaged(u);
     for (const r of [0, 2, 3, 4, 6, 8]) { if (placed) break; for (let a = 0; a < 360 && !placed; a += 30) { const x = o.x + Math.cos(a * Math.PI / 180) * r, y = o.y + Math.sin(a * Math.PI / 180) * r; if (posOk(u, x, y, false) && !nearEnemy(u, x, y, ENG + 0.2)) { u.x = x; u.y = y; placed = true; } } }
@@ -10289,7 +10420,7 @@ function orkCommandAbilities(side) {
     if (!u.placed || u.reserve) continue;
     for (const x of fxGet(u, 'cmd-heal-self')) {
       const once = x.t.includes('once'); if (once && u.healUsed) continue;
-      const hurt = u.models < u.start || (u.models > 0 && u.cur < mW(u)) || (leaderUp(u) && u.leader.cur < u.leader.W); if (!hurt) continue;
+      const hurt = u.models < u.start || (u.models > 0 && u.cur < mW(u)) || (leaderUp(u) && liveLeaders(u).some(l => l.cur < l.W)); if (!hurt) continue;
       let n = healN(x, 3); if (hasFx(u, 'painboy-extra') && !u.catchUsed) { u.catchUsed = true; n += rollExpr(parseDice('D3')); }
       const r = healUnit(u, n); if (once) u.healUsed = true; log(`${x.a.name.replace(/ \(.*$/, '')}: ${u.name} heals ${plural(r.wounds + r.leader + r.back, 'wound')}.`, side);
     }
@@ -10833,8 +10964,9 @@ const MODELS = { on: true, snap: false, manualClose: true, aiModels: true, view:
 try { MODELS.on = localStorage.getItem('battleDrill.models') !== 'off'; MODELS.snap = localStorage.getItem('battleDrill.snap') === 'snap'; MODELS.manualClose = localStorage.getItem('battleDrill.manualClose') !== 'auto'; MODELS.aiModels = localStorage.getItem('battleDrill.aiModels') !== 'off'; } catch (e) { }
 const mmR = mm => mm / 25.4 / 2;
 const BASE_BY_NAME = [[/gargoyle/i, 25], [/tyranid warriors|zoanthrope|raveners|von ryan|genestealer|deathleaper|neurolictor|tyranid prime|node organism|parasite of mortrex|broodlord/i, 40], [/tyrant guard|hive guard|venomthrope|malanthrope|pyrovore|lictor/i, 50], [/poxwalker/i, 28], [/plague marine|plaguebearer|plague drone/i, 32], [/deathshroud|blightlord|terminator/i, 40], [/hormagaunt|termagant|gretchin|ripper|spore mine|mucolid|grot\b|runtherd|gaunt/i, 25], [/\bboyz\b|stormboy|kommando|burna|tankbusta|lootas|flash git/i, 32], [/\bnobz\b|meganob|breaka/i, 40], [/genestealer|raveners|lictor|von ryan|deathleaper/i, 40], [/biovore|zoanthrope|venomthrope|hive guard|haruspex/i, 50], [/battle sisters|retributor|dominion|novitiate|celestian|seraphim|zephyrim|sororitas/i, 32], [/intercessor|tactical|assault|devastator|hellblaster|infernus|sternguard|vanguard|reiver|incursor|infiltrator/i, 32]];
+const leaderObj = (u, leader) => (leader === false || leader == null) ? u : (leadersOf(u)[leader === true ? 0 : leader] || u.leader || null);
 function baseMM(u, leader) {
-  const o = leader ? u.leader : u; if (!o) return 32;
+  const o = leaderObj(u, leader); if (!o) return 32;
   if (o.baseMM) return o.baseMM;
   const kw = ((o.kw && o.kw.length) ? o.kw : u.kw) || [], has1 = k => kw.includes(k), W = +(o.W || u.W || 1), nm = String(o.ds || o.name || '');
   for (const [re, mm] of BASE_BY_NAME) if (re.test(nm)) return mm;
@@ -10875,7 +11007,7 @@ const circleDims = mm => { const r = mmR(mm); return { kind: 'circle', hw: 0, hh
 const OVAL_BY_NAME = [[/tomb blade/i, 75, 42], [/attack bike|invader atv/i, 120, 75], [/outrider|warbike|wartrakk|bike squad|on bike|\bbikers?\b|veterans on bikes|scout bike/i, 90, 52]];
 const HULL_BY_NAME = [[/land speeder|storm speeder|javelin/i, 115, 75], [/impulsor/i, 120, 75], [/repulsor|terminus/i, 160, 90], [/gladiator/i, 140, 80], [/stormhawk|stormtalon|caestus|stormraven/i, 170, 120], [/plagueburst crawler/i, 130, 90], [/myphitic/i, 105, 70], [/sicaran/i, 140, 80], [/rapier/i, 105, 60], [/thunderhawk|stormbird|sokar/i, 260, 200], [/storm eagle|fire raptor|hell talon|hellblade|xiphon/i, 170, 120], [/falchion|fellblade/i, 210, 110], [/spartan|mastodon/i, 200, 110], [/typhon|cerberus|kratos/i, 180, 100], [/termite/i, 150, 80], [/rhino|razorback|trukk/i, 115, 70], [/predator|vindicator|whirlwind|hunter|stalker/i, 105, 75], [/land raider|redeemer|crusader\b/i, 150, 90], [/battlewagon|kill rig|big trakk/i, 190, 100], [/ghost ark|doomsday ark/i, 190, 90], [/catacomb|annihilation barge/i, 150, 85]];
 function shapeSpec(u, leader) {
-  const o = leader ? u.leader : u; if (!o) return circleDims(32);
+  const o = leaderObj(u, leader); if (!o) return circleDims(32);
   const ov = o.baseShape; if (ov && ov.l) return ov.kind === 'circle' ? circleDims(ov.l) : shapeDims(ov.kind === 'hull' ? 'hull' : 'oval', ov.l, ov.w || Math.round(ov.l * .6));
   const nm = String(o.ds || o.name || ''), kw = ((o.kw && o.kw.length) ? o.kw : u.kw) || [], has1 = k => kw.includes(k), W = +(o.W || u.W || 1);
   if (/bloat-drone|blight drone/i.test(nm)) return circleDims(100);
@@ -10954,30 +11086,30 @@ function recenterModels(u) {
   u.r = Math.max(r, .5);
 }
 function layoutModels(u) {
-  const body = Math.max(0, u.models | 0), lead = (u.leader && typeof leaderUp === 'function' && leaderUp(u)) ? 1 : 0, n = body + lead;
+  const body = Math.max(0, u.models | 0), LL = (u.leader && typeof leaderUp === 'function' && leaderUp(u)) ? liveLeaders(u) : [], lead = LL.length, n = body + lead;
   if (!n) { u.mods = []; return; }
-  const sb = shapeSpec(u, false), sl = lead ? shapeSpec(u, true) : null, round = sb.kind === 'circle' && (!sl || sl.kind === 'circle');
+  const sb = shapeSpec(u, false), sls = LL.map(L => shapeSpec(u, L.lid || 0)), round = sb.kind === 'circle' && sls.every(s => s.kind === 'circle');
   u.mods = []; let nid = 0;
   if (round) {
-    const rb = sb.r, rl = lead ? sl.r : 0, sp = 2 * Math.max(rb, rl) + .3, pts = hexSpiral(n, sp); let i = 0;
-    if (lead) u.mods.push(modelFields(sl, { id: nid++, dx: pts[i][0], dy: pts[i][1], leader: true, alive: true, pose: 0 })), i++;
+    const rb = sb.r, rl = sls.reduce((m, s) => Math.max(m, s.r), 0), sp = 2 * Math.max(rb, rl) + .3, pts = hexSpiral(n, sp); let i = 0;
+    LL.forEach((L, k) => { u.mods.push(modelFields(sls[k], { id: nid++, dx: pts[i][0], dy: pts[i][1], leader: true, lid: L.lid || 0, alive: true, pose: 0 })); i++; });
     for (let k = 0; k < body; k++, i++) u.mods.push(modelFields(sb, { id: nid++, dx: pts[i][0], dy: pts[i][1], leader: false, alive: true, pose: k }));
   } else {
-    const ext = sp2 => ({ ex: sp2.hh + sp2.rho, ey: sp2.hw + sp2.rho }), eb = ext(sb), el = sl ? ext(sl) : { ex: 0, ey: 0 };
+    const ext = sp2 => ({ ex: sp2.hh + sp2.rho, ey: sp2.hw + sp2.rho }), eb = ext(sb), el = sls.reduce((m, s) => { const e = ext(s); return { ex: Math.max(m.ex, e.ex), ey: Math.max(m.ey, e.ey) }; }, { ex: 0, ey: 0 });
     const stepX = 2 * Math.max(eb.ex, el.ex) + .3, stepY = 2 * Math.max(eb.ey, el.ey) + .3, cols = Math.max(1, Math.ceil(Math.sqrt(n * stepY / stepX))), rows = Math.ceil(n / cols);
     const slot = k => ({ dx: ((k % cols) - (cols - 1) / 2) * stepX, dy: (Math.floor(k / cols) - (rows - 1) / 2) * stepY }); let k = 0;
-    if (lead) { const q = slot(k++); u.mods.push(modelFields(sl, { id: nid++, dx: q.dx, dy: q.dy, leader: true, alive: true, pose: 0 })); }
+    LL.forEach((L, li) => { const q = slot(k++); u.mods.push(modelFields(sls[li], { id: nid++, dx: q.dx, dy: q.dy, leader: true, lid: L.lid || 0, alive: true, pose: 0 })); });
     for (let b = 0; b < body; b++) { const q = slot(k++); u.mods.push(modelFields(sb, { id: nid++, dx: q.dx, dy: q.dy, leader: false, alive: true, pose: b })); }
   }
   u.nextMid = nid; recenterModels(u);
 }
 const nearestFoePoint = u => { const f = aliveSide(other(u.side)).filter(e => e.placed).sort((a, b) => Math.hypot(a.x - u.x, a.y - u.y) - Math.hypot(b.x - u.x, b.y - u.y))[0]; return f ? { x: f.x, y: f.y } : { x: u.x, y: u.y - 10 }; };
-function addModelAt(u, leader) {
-  const spec = shapeSpec(u, leader), r = spec.r, occupied = (x, y) => u.mods.some(m => Math.hypot(m.dx - x, m.dy - y) < m.r + r + 0.02);
+function addModelAt(u, leader, lid) {
+  const spec = shapeSpec(u, leader ? (lid || 0) : false), r = spec.r, occupied = (x, y) => u.mods.some(m => Math.hypot(m.dx - x, m.dy - y) < m.r + r + 0.02);
   let best = null;
   for (let ring = 0; ring < 40 && !best; ring++) for (let k = 0; k < Math.max(1, ring * 8); k++) { const a = k / Math.max(1, ring * 8) * 6.2832, x = Math.cos(a) * ring * (r + .35), y = Math.sin(a) * ring * (r + .35); if (!occupied(x, y)) { best = [x, y]; break; } }
   const b = best || [0, 0];
-  u.mods.push(modelFields(spec, { id: u.nextMid++, dx: b[0], dy: b[1], leader: !!leader, alive: true, pose: leader ? 0 : u.mods.filter(m => !m.leader).length }));
+  u.mods.push(modelFields(spec, { id: u.nextMid++, dx: b[0], dy: b[1], leader: !!leader, lid: leader ? (lid || 0) : undefined, alive: true, pose: leader ? 0 : u.mods.filter(m => !m.leader).length }));
 }
 const modelsCoherent = (u, list) => {
   if (list.length < 2) return true;
@@ -10999,10 +11131,9 @@ function pickModelsToRemove(u, body, k, th, wid) {
 function syncModels(u) {
   if (!MODELS.on || !isUnitObj(u)) return;
   if (!u.mods) { layoutModels(u); return; }
-  const lead = (u.leader && typeof leaderUp === 'function' && leaderUp(u)) ? 1 : 0, want = Math.max(0, u.models | 0);
+  const LLs = (u.leader && typeof leaderUp === 'function' && leaderUp(u)) ? liveLeaders(u) : [], want = Math.max(0, u.models | 0);
   const ld = u.mods.filter(m => m.leader); let body = u.mods.filter(m => !m.leader);
-  if (ld.length > lead) { u.mods = u.mods.filter(m => !m.leader); }
-  else if (ld.length < lead) addModelAt(u, true);
+  { const liveIds = new Set(LLs.map(l => l.lid || 0)), gone = ld.filter(m => !liveIds.has(m.lid || 0)); if (gone.length) u.mods = u.mods.filter(m => !gone.includes(m)); for (const L of LLs) if (!u.mods.some(m => m.leader && (m.lid || 0) === (L.lid || 0))) addModelAt(u, true, L.lid || 0); }
   const th = u.hitFrom || nearestFoePoint(u);
   if (body.length > want) {
     const gone = new Set(pickModelsToRemove(u, body, body.length - want, th, u.wid).map(m => m.id)); u.mods = u.mods.filter(m => !gone.has(m.id));
@@ -11048,18 +11179,18 @@ function posOkModels(u, x, y, allowEngage) {
 }
 function objCounts(u, o) {
   const ms = modelsOf(u);
-  if (!ms || !ms.length) return { body: u.models, lead: (u.leader && leaderUp(u)) ? 1 : 0 };
-  let body = 0, lead = 0;
-  for (const m of ms) if (objD(shAbs(u, m), o) <= OBJ_R) { if (m.leader) lead++; else body++; }
-  return { body, lead };
+  if (!ms || !ms.length) { const lv = leaderUp(u) ? liveLeaders(u).map(l => l.lid || 0) : []; return { body: u.models, lead: lv.length, leads: lv }; }
+  let body = 0, lead = 0; const leads = [];
+  for (const m of ms) if (objD(shAbs(u, m), o) <= OBJ_R) { if (m.leader) { lead++; leads.push(m.lid || 0); } else body++; }
+  return { body, lead, leads };
 }
-function modelsInCover(u) { const ms = modelsOf(u); return !ms || !ms.length ? TERRAIN.some(t => inRect(u, t)) : ms.every(m => TERRAIN.some(t => inRect({ x: u.x + m.dx, y: u.y + m.dy }, t))); }
+function modelsInCover(u) { const ms = modelsOf(u); return !ms || !ms.length ? TERRAIN.some(t => coversT(t) && inRect(u, t)) : ms.every(m => TERRAIN.some(t => coversT(t) && inRect({ x: u.x + m.dx, y: u.y + m.dy }, t))); }
 function repPoints(u, toward) {
   const ms = modelsOf(u); if (!ms || !ms.length) return [{ x: u.x, y: u.y }];
   const ord = ms.slice().sort((a, b) => Math.hypot(u.x + a.dx - toward.x, u.y + a.dy - toward.y) - Math.hypot(u.x + b.dx - toward.x, u.y + b.dy - toward.y)), pick = new Set([0, ord.length - 1, Math.floor(ord.length / 3), Math.floor(ord.length * 2 / 3)]);
   const pts = [...pick].map(i => ({ x: u.x + ord[i].dx, y: u.y + ord[i].dy })); pts.push({ x: u.x, y: u.y }); return pts;
 }
-const ptVisible = (p, q) => !TERRAIN.some(t => !inRect(p, t) && !inRect(q, t) && segHitsRect(p.x, p.y, q.x, q.y, t));
+const ptVisible = (p, q) => !TERRAIN.some(t => blocksSight(t) && !inRect(p, t) && !inRect(q, t) && segHitsRect(p.x, p.y, q.x, q.y, t));
 function visibleModels(a, b) { for (const p of repPoints(a, b)) for (const q of repPoints(b, a)) if (ptVisible(p, q)) return true; return false; }
 function unitAt(pt) {
   const us = alive().slice().reverse();
@@ -11100,7 +11231,7 @@ function modelsGroupSvg(u, pos, opacity, rots) {
   for (const m of ms) {
     const p = P(m), x = p.x.toFixed(2), y = p.y.toFixed(2), sh = shAt(m, p, rots && rots.has(m.id) ? rots.get(m.id) : undefined); let key = null;
     const lk = (!m.leader && u.looks && arch === 'plague_marine') ? pmxKey(u.looks[m.pose]) : null;
-    const aKey = m.leader ? larch : arch, fk = lk || (aKey ? (aKey === 'blightlord' || POSE_FAMILIES[aKey] ? poses[m.pose % poses.length] : aKey) : null), hullArch = fk && MINI_ARCH[fk] && MINI_ARCH[fk].hull, hsp = hullArch ? ensureSprite(fk, side, pal) : null, hmeta = hsp ? MODELS.sprMeta[hsp] : null;
+    const aKey = m.leader ? lArchOf(u, m, larch) : arch, fk = lk || (aKey ? (aKey === 'blightlord' || POSE_FAMILIES[aKey] ? poses[m.pose % poses.length] : aKey) : null), hullArch = fk && MINI_ARCH[fk] && MINI_ARCH[fk].hull, hsp = hullArch ? ensureSprite(fk, side, pal) : null, hmeta = hsp ? MODELS.sprMeta[hsp] : null;
     if (sh.hw || sh.hh) {   // an oval or a hull
       out.push(shapeEl(sh, `mb ${side} plain shape`));
       if (hmeta) { const Lw = (sh.hw + sh.rho) * 2, k = Lw / 2.6, iw = (hmeta.W / hmeta.pxPerUnit) * k; out.push(`<use href="#${hsp}" transform="translate(${sh.x.toFixed(2)} ${sh.y.toFixed(2)}) rotate(${(sh.rot * 180 / Math.PI).toFixed(1)}) scale(${iw.toFixed(3)}) translate(-.5 -.5)"/>`); }
@@ -11108,7 +11239,7 @@ function modelsGroupSvg(u, pos, opacity, rots) {
       const f = Math.cos(sh.rot) * (sh.hw + sh.rho * .6), g = Math.sin(sh.rot) * (sh.hw + sh.rho * .6);
       out.push(`<path class="mfront ${side}" d="M ${(p.x + f).toFixed(2)} ${(p.y + g).toFixed(2)} l ${(-Math.cos(sh.rot) * .55 + Math.sin(sh.rot) * .4).toFixed(2)} ${(-Math.sin(sh.rot) * .55 - Math.cos(sh.rot) * .4).toFixed(2)} l ${(-Math.sin(sh.rot) * .8).toFixed(2)} ${(Math.cos(sh.rot) * .8).toFixed(2)} z"/>`);
     } else {
-      const a = m.leader ? larch : arch; if (a) { const k = lk || ((a === 'blightlord' || POSE_FAMILIES[a]) ? poses[m.pose % poses.length] : a); key = ensureSprite(k, side, pal); }
+      const a = m.leader ? lArchOf(u, m, larch) : arch; if (a) { const k = lk || ((a === 'blightlord' || POSE_FAMILIES[a]) ? poses[m.pose % poses.length] : a); key = ensureSprite(k, side, pal); }
       if (key) out.push(`<circle class="mb ${side}" cx="${x}" cy="${y}" r="${m.r.toFixed(2)}"/><use href="#${key}" transform="translate(${(p.x - m.r).toFixed(2)} ${(p.y - m.r).toFixed(2)}) scale(${(2 * m.r).toFixed(3)})"/><circle class="mring ${side}" cx="${x}" cy="${y}" r="${m.r.toFixed(2)}"/>`);
       else if (upl && ms.length === 1) out.push(`<clipPath id="mc${u.id}"><circle cx="${x}" cy="${y}" r="${m.r.toFixed(2)}"/></clipPath><image href="${upl}" x="${(p.x - m.r).toFixed(2)}" y="${(p.y - m.r).toFixed(2)}" width="${(2 * m.r).toFixed(2)}" height="${(2 * m.r).toFixed(2)}" preserveAspectRatio="xMidYMid slice" clip-path="url(#mc${u.id})"/><circle class="mring ${side}" cx="${x}" cy="${y}" r="${m.r.toFixed(2)}"/>`);
       else out.push(`<circle class="mb ${side} plain" cx="${x}" cy="${y}" r="${m.r.toFixed(2)}"/>`);
@@ -11120,7 +11251,7 @@ function modelsGroupSvg(u, pos, opacity, rots) {
 }
 function woundRing(u, m, p, sh) {
   let rem, tot;
-  if (m.leader) { if (!u.leader || u.leader.cur >= u.leader.W) return ''; rem = u.leader.cur; tot = u.leader.W; }
+  if (m.leader) { const Lm = leadersOf(u)[m.lid || 0] || u.leader; if (!Lm || Lm.cur >= Lm.W) return ''; rem = Lm.cur; tot = Lm.W; }
   else { if (u.wid !== m.id || u.cur >= mW(u)) return ''; rem = u.cur; tot = mW(u); }
   sh = sh || shAt(m, p); const f = Math.max(0, Math.min(1, rem / tot)), x = p.x.toFixed(2), box = shapeBox(sh);
   const txt = (box.ex >= .62 || box.ey >= .62) ? `<text class="mwt" x="${x}" y="${(p.y + box.ey + .95).toFixed(2)}" font-size=".8" text-anchor="middle">${rem}/${tot}</text>` : '';
@@ -11221,7 +11352,8 @@ function mmEnsure() {
   return G.mm;
 }
 const mmUnit = () => G.units.find(x => x.id === (G.mm && G.mm.uid));
-const mmLabel = (u, md) => md.leader && u.leader ? u.leader.name : `Model ${u.mods.filter(x => !x.leader).indexOf(md) + 1}`;
+const lArchOf = (u, m, dflt) => (m.lid && MINI.on && leadersOf(u)[m.lid]) ? miniArchOf(leadersOf(u)[m.lid].ds || leadersOf(u)[m.lid].name, miniFactionOf(u)) : dflt;
+const mmLabel = (u, md) => md.leader && u.leader ? (leadersOf(u)[md.lid || 0] || u.leader).name : `Model ${u.mods.filter(x => !x.leader).indexOf(md) + 1}`;
 function mmRoute(u, md, a, b, mode) {
   const ps = Object.create(u); ps.x = a.x; ps.y = a.y; ps.r = md.r;
   const p = pathTo(ps, b.x, b.y, { skies: !!mode.skies, models: mode.kind === 'desperate', exclude: mmTarget() || undefined });
@@ -11259,7 +11391,7 @@ function mmCheck() {
       else if (len > allow + 1e-6) out.push({ t: `${lab} moved ${len.toFixed(1)}" but this move allows ${allow}".`, ids: [md.id] });
     }
     if (p.x < bx.ex - 1e-6 || p.x > BW - bx.ex + 1e-6 || p.y < bx.ey - 1e-6 || p.y > BH - bx.ey + 1e-6) out.push({ t: `${lab} is off the battlefield.`, ids: [md.id] });
-    if (!passesRuins(u) && !m.skies && !TELEPORT.includes(kind)) for (const t of TERRAIN) if (!t.open && inRect(p, t)) { out.push({ t: `${lab} ends inside a ruin, which ${u.name} cannot enter.`, ids: [md.id] }); break; }
+    if (!passesRuins(u) && !m.skies && !TELEPORT.includes(kind)) for (const t of TERRAIN) if (blocksMove(t) && inRect(p, t)) { out.push({ t: `${lab} ends inside a ruin, which ${u.name} cannot enter.`, ids: [md.id] }); break; }
     for (const q of others) {
       if (Math.hypot(p.x - q.sh.x, p.y - q.sh.y) - sm.r - q.sh.r > 9) continue;
       const dd = gapS(sm, q.sh);
@@ -11380,7 +11512,7 @@ function mmSolveCore(movable, maxIt) {
     }
     for (const id of ids) if (free(id)) {
       const p = P.get(id), b = shapeBox(shP(id));
-      if (noRuin) for (const t of TERRAIN) if (!t.open && inRect(p, t)) { const dl = p.x - t.x, dr = t.x + t.w - p.x, dt = p.y - t.y, db = t.y + t.h - p.y, mn = Math.min(dl, dr, dt, db); if (mn === dl) mv(id, -(dl + b.ex + .1), 0); else if (mn === dr) mv(id, dr + b.ex + .1, 0); else if (mn === dt) mv(id, 0, -(dt + b.ey + .1)); else mv(id, 0, db + b.ey + .1); }
+      if (noRuin) for (const t of TERRAIN) if (blocksMove(t) && inRect(p, t)) { const dl = p.x - t.x, dr = t.x + t.w - p.x, dt = p.y - t.y, db = t.y + t.h - p.y, mn = Math.min(dl, dr, dt, db); if (mn === dl) mv(id, -(dl + b.ex + .1), 0); else if (mn === dr) mv(id, dr + b.ex + .1, 0); else if (mn === dt) mv(id, 0, -(dt + b.ey + .1)); else mv(id, 0, db + b.ey + .1); }
       for (const q of others) { const sh = shP(id); if (Math.hypot(sh.x - q.sh.x, sh.y - q.sh.y) - sh.r - q.sh.r > foeDist + 1) continue; const sp = sepShapes(sh, q.sh), need = .03 + (q.foe ? foeDist : 0); if (sp.gap < need) mv(id, -sp.nx * (need - sp.gap), -sp.ny * (need - sp.gap)); }
     }
     for (let i = 0; i < ids.length; i++) for (let j = i + 1; j < ids.length; j++) {
@@ -11928,7 +12060,7 @@ function detStatus(s) {
     if (!fightSel && aliveSide('player').some(ok)) return yes(true, 'Select a unit first, then click the card.');
     return timing(advice);
   }
-  if (s.slug === 'blood-fuelled-cruelty') return P && P.strat === s.slug ? yes(false, 'Choose in the side panel.') : timing('The AI never Falls Back, so this can\'t come up yet.');
+  if (s.slug === 'blood-fuelled-cruelty') return P && P.strat === s.slug ? yes(false, 'Choose in the side panel.') : timing('Comes up when an AI unit Falls Back from one of your units.');
   return P && P.strat === s.slug ? yes(false, 'Choose in the side panel.') : timing();
 }
 function useDetCard(slug) {
@@ -14816,6 +14948,7 @@ function detLineHtml(b) {
 /* "6 Deathshroud Terminators 305 pts / Lord of Virulence 100 pts / Face of Death", the way a New Recruit roster lists a led unit */
 function unitBreakdown(b, u) {
   if (!u || !u.leader) return '';
+  if (u.leaders && u.leaders.length > 1) return `<small class="ubreak">${u.models} ${escH(u.name.replace(/\s+with\s+.*$/i, ''))} + ${u.leaders.map(l => escH(l.name)).join(', ')}</small>`;
   const lib = LIB.find(x => x.faction === b.faction && x.name === u.leader.name);
   const ea = (u.leader.abilities || []).find(a => /^enhancement:/i.test(a.name)), en = ea ? ea.name.replace(/^enhancement:\s*/i, '') : '';
   const det = b.detachment, ep = en && det ? ((det.enh || []).find(e => String(e.name).toLowerCase() === en.toLowerCase()) || (typeof findDet === 'function' && det.name ? ((findDet(b.faction, det.name) || {}).enh || []).find(e => String(e.name).toLowerCase() === en.toLowerCase()) : null) || {}).pts || 0 : 0;
@@ -15538,6 +15671,18 @@ function wallRun(mb, a, b, o, rng) {
 function pillar(mb, x, z, h, r, col, rng, m) { const hh = h * (.7 + rng() * .3); tube(mb, [x, 0, z], [x + (rng() - .5) * .1, hh, z], r, r * .86, 7, col, m || [.9, 0]); blob(mb, x, hh, z, r * 1.05, .22, r * 1.05, shade(col, .92), m || [.9, 0], rng, .5); }
 function rubble(mb, cx, cz, rng, col, count, spread, sz) { for (let i = 0; i < count; i++) { const a = rng() * 6.283, d = rng() * spread, s = (sz || .35) * (.4 + rng()); blob(mb, cx + Math.cos(a) * d, s * .3, cz + Math.sin(a) * d, s * 1.3, s * .8, s, vary(col, rng, .15), [.875, 0], rng, .85); } }
 
+/* light terrain: a run of low walls and barricades; exposed terrain: crates and rubble that do not hinder anything */
+function propsLow(mb, r, rng, i) {
+  const light = r.cat === 'light', col = light ? [.34, .31, .27] : [.28, .25, .21], hh = Math.max(.5, Math.min(1.6, (r.ht || 1) * .9));
+  if (light) {
+    const horiz = r.w >= r.h, n = Math.max(2, Math.floor((horiz ? r.w : r.h) / 2.2));
+    for (let k = 0; k < n; k++) { if (rng() < .18) continue; const t = (k + .5) / n, x = horiz ? r.x + t * r.w : r.x + r.w / 2, z = horiz ? r.y + r.h / 2 : r.y + t * r.h; box(mb, x, 0, z, horiz ? r.w / n - .15 : .6, hh * (.85 + rng() * .2), horiz ? .6 : r.h / n - .15, 0, vary(col, rng, .1), [.9, 0], .03, rng); }
+  } else {
+    const n = 3 + Math.floor(rng() * 4);
+    for (let k = 0; k < n; k++) box(mb, r.x + .8 + rng() * (r.w - 1.6), 0, r.y + .8 + rng() * (r.h - 1.6), .7 + rng() * .5, .4 + rng() * .35, .7 + rng() * .5, rng() * 3, vary(col, rng, .12), [.9, 0], .03, rng);
+    rubble(mb, r.x + r.w / 2, r.y + r.h / 2, rng, col, 8, Math.min(r.w, r.h) * .4, .3);
+  }
+}
 /* ---------- theme: Ash Waste (desert) ---------- */
 const SAND = [.31, .24, .16], STONE = [.37, .3, .22];
 function propsDesert(mb, r, rng, i) {
@@ -15841,7 +15986,7 @@ function buildMap(spec) {
   for (let i = 0; i <= nx; i++) for (let j = 0; j <= nz; j++) { const x = x0 + i * step, z = z0 + j * step, h = H(x, z), e = .3, dx = (H(x + e, z) - H(x - e, z)) / (2 * e), dz = (H(x, z + e) - H(x, z - e)) / (2 * e), n = v3.norm([-dx, 1, -dz]); { const g0 = th.ground(x, z, h, fbm(x * .22 + sd, z * .22)), w = fbm(x * .06 + sd + 40, z * .06 + 7) - .5, d = fbm(x * .5 + sd, z * .5) - .5, k = 1 + d * .22; const od = 1 - .62 * sstep(0, 7, outD(x, z)); solid.vtx([x, h, z], n, [clamp(g0[0] * (1 + w * .7) * k * od, 0, 1), clamp(g0[1] * k * od, 0, 1), clamp(g0[2] * (1 - w * .7) * k * od, 0, 1)], [.9, 0]); } }
   for (let i = 0; i < nx; i++) for (let j = 0; j < nz; j++) { const a = base + idx(i, j), b = base + idx(i + 1, j), c = base + idx(i + 1, j + 1), d = base + idx(i, j + 1); solid.I.push(a, d, c, a, c, b); }
   const tv0 = solid.n;
-  rects.forEach((r, i) => { const rr = mulberry(seed * 101 + i * 17 + th.seed); if (r.poly) propsPoly(solid, r, rr, i, th.poly); else th.props(solid, r, rr, i); });
+  rects.forEach((r, i) => { const rr = mulberry(seed * 101 + i * 17 + th.seed); if (r.poly) propsPoly(solid, r, rr, i, th.poly); else if (r.cat && r.cat !== 'dense') propsLow(solid, r, rr, i); else th.props(solid, r, rr, i); });
   { const warm = !(spec.theme === 'desert' || spec.theme === 'forge'), tn = warm ? [1.14, 1.02, .84] : [.86, .98, 1.16]; for (let v = tv0; v < solid.n; v++) for (let k = 0; k < 3; k++) solid.C[v * 3 + k] = Math.min(1, solid.C[v * 3 + k] * tn[k]); }
   th.scatter(solid, mulberry(seed * 13 + th.seed), ok, H);
   dressing(solid, decal, mulberry(seed * 29 + th.seed), ok, H, th, spec.theme);
@@ -15886,7 +16031,7 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
   function specNow() {
     return {
       theme: themeKey(), seed: 1 + (hash(BF3D.tsig) % 9000),
-      terrain: TERRAIN.map(t => ({ x: t.x, y: t.y, w: t.w, h: t.h, walls: t.walls, poly: t.poly })),
+      terrain: TERRAIN.map(t => ({ x: t.x, y: t.y, w: t.w, h: t.h, walls: t.walls, poly: t.poly, cat: t.cat, ht: t.ht, floors: t.floors })),
       objs: OBJ.map(o => ({ x: o.x, y: o.y, poly: o.poly })), objR: typeof OBJ_R === 'number' ? OBJ_R : 3,
       zones: { player: zoneOf('player'), ai: zoneOf('ai') }, decor: (G.decor || []).map(d => ({ x: d.x, y: d.y, r: d.r, kind: d.kind }))
     };
@@ -15951,7 +16096,8 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
     };
     const rotMove = (g, pt) => { if (!pt) return; const d = Math.atan2(pt.y - g.py, pt.x - g.px) - g.a0; for (const q of g.list) q.m.face = q.f0 + d; const n = performance.now(); if (n - g.t > 70) { g.t = n; sync(); } };
     const ov = document.createElement('canvas'); ov.id = 'b-3dov'; ov.hidden = true; holder.appendChild(ov);
-    cv.addEventListener('contextmenu', e => e.preventDefault());
+    cv.addEventListener('pointerdown', e => { if (e.button === 2) cv._rd = { x: e.clientX, y: e.clientY }; }, true);
+    cv.addEventListener('contextmenu', e => { e.preventDefault(); const d = cv._rd; if (d && Math.hypot(e.clientX - d.x, e.clientY - d.y) > 6) return; const pt = boardPt(e); if (pt) inspectAt(pt); });
     cv.addEventListener('pointerdown', e => {
       cv.setPointerCapture(e.pointerId); const o = { x: e.clientX, y: e.clientY, b: e.button, sh: e.shiftKey, touch: e.pointerType === 'touch' }; ptr.set(e.pointerId, o);
       if (ptr.size > 1) { gesture = { k: 'cam' }; hideBox(); return; }
@@ -16083,21 +16229,21 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
   function buildDyn() {
     const mb = new BFX.MB(), H = BF3D.map ? BF3D.map.H : () => 0, S = (typeof mmOn === 'function' && G.mm && mmOn()) ? G.mm : null, mu = S ? mmUnit() : null, units = alive().concat(mu && !mu.placed && !S.fresh ? [mu] : []), total = units.reduce((s, u) => s + (u.mods ? u.mods.length : 1), 0), lo = total > 30;
     const occ = BF3D.occ = []; const bad = new Set(); if (S) { try { for (const v of mmCheck()) for (const id of (v.ids || [])) bad.add(id); } catch (e) { } }
-    const generic = (p, m, sh, side, selm) => { const gy = H(p.x, p.y), col = selm ? [1, .82, .3] : (SIDEC[side] || [1, 1, 1]), hull = !!(sh.hw || sh.hh), rr = hull ? Math.max(sh.hw, sh.hh || 0) + sh.rho : m.r; if (hull) BFX.box(mb, p.x, gy + .7, p.y, (sh.hw + sh.rho) * 2, 1.4, (sh.hh + sh.rho) * 2 || sh.rho * 2, -(sh.rot || 0), shade3(SIDEC[side] || [1, 1, 1], .55), [.1, 0]); else BFX.tube(mb, [p.x, gy, p.y], [p.x, gy + 1.5, p.y], m.r * .7, m.r * .5, 10, shade3(SIDEC[side] || [1, 1, 1], .55), [.1, 0], true); ring(mb, p.x, gy + .05, p.y, rr * .96, rr + .22, col, 24); };
+    const generic = (p, m, sh, side, selm) => { const gy = (H(p.x, p.y) + (p.e || 0)), col = selm ? [1, .82, .3] : (SIDEC[side] || [1, 1, 1]), hull = !!(sh.hw || sh.hh), rr = hull ? Math.max(sh.hw, sh.hh || 0) + sh.rho : m.r; if (hull) BFX.box(mb, p.x, gy + .7, p.y, (sh.hw + sh.rho) * 2, 1.4, (sh.hh + sh.rho) * 2 || sh.rho * 2, -(sh.rot || 0), shade3(SIDEC[side] || [1, 1, 1], .55), [.1, 0]); else BFX.tube(mb, [p.x, gy, p.y], [p.x, gy + 1.5, p.y], m.r * .7, m.r * .5, 10, shade3(SIDEC[side] || [1, 1, 1], .55), [.1, 0], true); ring(mb, p.x, gy + .05, p.y, rr * .96, rr + .22, col, 24); };
     for (const u of units) {
       const side = u.side, pal = miniPalOf(u), cols = palColours(pal), foe = nearestFoe(u), face = foe ? Math.atan2(foe.y - u.y, foe.x - u.x) : (side === 'player' ? -1.5708 : 1.5708);
       const arch = MINI.on ? miniArchOf(u.ds || u.name, miniFactionOf(u)) : null, larch = MINI.on && u.leader ? miniArchOf(u.leader.ds || u.leader.name, miniFactionOf(u)) : null;
       const poses = (arch && (arch === 'blightlord' || POSE_FAMILIES[arch])) ? miniPoses(arch, Math.max(u.start || u.mods.length, u.mods.length) + 1) : null;
       let drawn = 0;
       if (u.mods && u.mods.length) for (const m of u.mods) {
-        const sp = (S && mu === u && !S.fresh) ? S.pos.get(m.id) : null, p = sp ? { x: sp.x, y: sp.y } : { x: u.x + m.dx, y: u.y + m.dy }, rv = sp ? (S.rot.get(m.id) || 0) : (m.rot || 0), sh = shAt(m, p, sp ? rv : undefined), a = m.leader ? larch : arch; occ.push({ x: p.x, y: p.y, r: ((sh.hw || sh.hh) ? Math.max(sh.hw, sh.hh || 0) + (sh.rho || 0) : m.r) + .12 });
-        const _rf = (window.BDModels && BDModels.on()) ? BDModels.pick(m.leader && u.leader ? (u.leader.ds || u.leader.name) : (u.ds || u.name), miniFactionOf(u), u.id + ':' + m.id, m.leader ? 0 : u.mods.indexOf(m) , m.leader ? 1 : u.mods.length) : null;
-        if (_rf) { const hull0 = !!(sh.hw || sh.hh), gy0 = H(p.x, p.y), fa0 = (m.face !== undefined ? m.face : (u.face !== undefined ? u.face : face)) + rv; BDModels.add(mb, _rf, p.x, gy0, p.y, hull0 ? 1.5708 - (sh.rot || 0) : 1.5708 - fa0); if (!hull0 && BF3D.rot && BF3D.rot.has(m)) arrow(mb, p.x, gy0, p.y, fa0, m.r);
+        const sp = (S && mu === u && !S.fresh) ? S.pos.get(m.id) : null, p = sp ? { x: sp.x, y: sp.y, e: elevOf(u) } : { x: u.x + m.dx, y: u.y + m.dy, e: elevOf(u) }, rv = sp ? (S.rot.get(m.id) || 0) : (m.rot || 0), sh = shAt(m, p, sp ? rv : undefined), a = m.leader ? lArchOf(u, m, larch) : arch; occ.push({ x: p.x, y: p.y, r: ((sh.hw || sh.hh) ? Math.max(sh.hw, sh.hh || 0) + (sh.rho || 0) : m.r) + .12 });
+        const _rf = (window.BDModels && BDModels.on()) ? BDModels.pick(m.leader && u.leader ? ((leadersOf(u)[m.lid || 0] || u.leader).ds || (leadersOf(u)[m.lid || 0] || u.leader).name) : (u.ds || u.name), miniFactionOf(u), u.id + ':' + m.id, m.leader ? 0 : u.mods.indexOf(m) , m.leader ? 1 : u.mods.length) : null;
+        if (_rf) { const hull0 = !!(sh.hw || sh.hh), gy0 = (H(p.x, p.y) + (p.e || 0)), fa0 = (m.face !== undefined ? m.face : (u.face !== undefined ? u.face : face)) + rv; BDModels.add(mb, _rf, p.x, gy0, p.y, hull0 ? 1.5708 - (sh.rot || 0) : 1.5708 - fa0); if (!hull0 && BF3D.rot && BF3D.rot.has(m)) arrow(mb, p.x, gy0, p.y, fa0, m.r);
           const rc = (S && mu === u && bad.has(m.id)) ? [1, .25, .2] : (S && mu === u && S.sel.has(m.id)) ? [1, .82, .3] : (SIDEC[side] || [1, 1, 1]);
           if (!hull0) ring(mb, p.x, gy0 + .05, p.y, m.r * .96, m.r + .22, rc, 24); else ring(mb, p.x, gy0 + .05, p.y, Math.max(sh.hw, sh.hh || 0) + sh.rho * .9, Math.max(sh.hw, sh.hh || 0) + sh.rho + .2, SIDEC[side] || [1, 1, 1], 32); drawn++; continue; }
         if (!a) { generic(p, m, sh, side, S && mu === u && S.sel.has(m.id)); drawn++; continue; }
         const lk = (!m.leader && u.looks && arch === 'plague_marine') ? pmxKey(u.looks[m.pose]) : null, k = lk || ((a === 'blightlord' || POSE_FAMILIES[a]) ? poses[m.pose % poses.length] : a);
-        if (!MINI_ARCH[k]) { generic(p, m, sh, side, S && mu === u && S.sel.has(m.id)); drawn++; continue; } const hull = !!(sh.hw || sh.hh), gy = H(p.x, p.y);
+        if (!MINI_ARCH[k]) { generic(p, m, sh, side, S && mu === u && S.sel.has(m.id)); drawn++; continue; } const hull = !!(sh.hw || sh.hh), gy = (H(p.x, p.y) + (p.e || 0));
         let sc, yaw;
         if (hull) { sc = (sh.hw + sh.rho) * 2 / 2.6; yaw = -(sh.rot || 0); }
         else { sc = m.r / .98; const fa = (m.face !== undefined ? m.face : (u.face !== undefined ? u.face : face)) + rv; yaw = 1.5708 - fa; if (BF3D.rot && BF3D.rot.has(m)) arrow(mb, p.x, gy, p.y, fa, m.r); }
@@ -16137,7 +16283,7 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
   /* ---- sync with the game ---- */
   function sync(force) {
     if (!BF3D.on || !G || !BF3D.R) return;
-    const sig = TERRAIN.length + ':' + TERRAIN.map(t => (t.x | 0) + ',' + (t.y | 0) + ',' + (t.w | 0)).join(';') + '|' + OBJ.map(o => (o.x | 0) + ',' + (o.y | 0)).join(';') + '|' + BF3D.theme + '|' + (G.decor || []).length;
+    const sig = TERRAIN.length + ':' + TERRAIN.map(t => (t.x | 0) + ',' + (t.y | 0) + ',' + (t.w | 0) + (t.cat || '')).join(';') + '|' + OBJ.map(o => (o.x | 0) + ',' + (o.y | 0)).join(';') + '|' + BF3D.theme + '|' + (G.decor || []).length;
     const R = BF3D.R;
     if (force || sig !== BF3D.tsig) {
       BF3D.tsig = sig; R.clear(); BF3D.dyn = null;
@@ -16158,7 +16304,7 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
   function ovHit(x1, y1, x2, y2) {
     let best = null; const A = { x: x1, y: y1 }, B = { x: x2, y: y2 };
     for (const t of TERRAIN) {
-      if (inRect(A, t) || inRect(B, t)) continue;
+      if (!blocksSight(t) || inRect(A, t) || inRect(B, t)) continue;
       for (const [a, b] of ovSegs(t)) {
         const rx = x2 - x1, ry = y2 - y1, qx = b[0] - a[0], qy = b[1] - a[1], d = rx * qy - ry * qx; if (Math.abs(d) < 1e-9) continue;
         const s = ((a[0] - x1) * qy - (a[1] - y1) * qx) / d, u = ((a[0] - x1) * ry - (a[1] - y1) * rx) / d;
@@ -16377,13 +16523,65 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
 })();
 
 /* ---- datasheets on demand (right-click a unit, or press 1 with units selected) ---- */
+const TERR_RULES = {
+  exposed: { name: 'Exposed terrain', intro: 'Scant protection to the most desperate troops: craters, razorwire, scattered debris.', rules: [
+    ['Movement', 'All models can move through it, horizontally and vertically, without hindrance.'],
+    ['Sight and cover', 'An area holding only exposed features is open ground: it is not obscuring, gives no benefit of cover and cannot hide a unit.']] },
+  light: { name: 'Light terrain', intro: 'Light terrain can provide cover from incoming attacks, but will not slow an enemy\'s advance or offer lasting defence: barricades, low walls, statuary.', rules: [
+    ['Movement', 'All models can move through it, horizontally and vertically, without hindrance.'],
+    ['Benefit of cover (13.08)', 'A ranged attack against a unit in which every model is INFANTRY, BEASTS or SWARM within this terrain area (or not fully visible because of the terrain) has its BS worsened by 1.'],
+    ['Obscuring (13.10)', 'A terrain area holding light or dense features is obscuring: if every line of sight between two models crosses an obscuring area (not counting areas those models are inside), the two models cannot see each other.'],
+    ['Hidden (13.09)', 'An INFANTRY, BEASTS or SWARM unit inside the area that has not made ranged attacks this turn or last turn can only be seen from within 15".']] },
+  dense: { name: 'Dense terrain', intro: 'An obstacle to even the largest war machines, able to shelter entire squads from enemy sight: buildings, ruins, armoured containers, woods.', rules: [
+    ['Movement: INFANTRY, BEASTS, SWARM, MOBILE', 'Can move horizontally through it. INFANTRY, BEASTS and SWARM can also move vertically through it (climb to its floors).'],
+    ['Movement: everything else', 'Can move through a section only if every part the base crosses is 2" or lower. Otherwise the model must go around, or climb over it vertically if the feature has no floors or ceilings (the climb up and down counts against its move). It cannot pass through ceilings and floors and cannot end a move on a surface above ground level.'],
+    ['Floors', 'INFANTRY, BEASTS, SWARM, FLY and MONSTER models can end a move on an upper floor if they fit on it. The first floor is 3" up. Climbing counts against the move.'],
+    ['Plunging Fire (22.05)', 'A model shooting from a section 3" or higher improves the BS of its ranged attacks by 1 against a visible unit with models on the ground (also TOWERING models, against targets within 12").'],
+    ['Benefit of cover, obscuring and Hidden', 'As for light terrain: it counts as a terrain area holding a light or dense feature.'],
+    ['Solid (13.11)', 'Line of sight cannot be drawn across an enclosed gap in the surface of the feature that is 3" or less above the ground.'],
+    ['Ending a move', 'A model cannot end a move partly inside an enclosed part of the feature that is 3" or less from the ground.']] }
+};
+function terrainInfoHtml(t) {
+  const c = terrCat(t), R = TERR_RULES[c], fl = terrFloors(t);
+  const inside = G ? alive().filter(u => u.placed && !u.reserve && inRect(u, t)) : [];
+  return `<div class="row"><h2 style="margin:0">${escH(R.name)}</h2><button class="btn" id="m-close">Close</button></div>
+    <p class="muted">${escH(R.intro)}</p>
+    <p><b>This feature:</b> ${c === 'dense' ? `height ${terrHt(t)}", ${hardBlock(t) ? 'has ceilings and floors (go around it)' : blocksMove(t) ? 'no floors: a vehicle or monster can climb over it, which costs ' + 2 * terrHt(t) + '" of its move' : '2" or lower: anything can drive through it'}${fl.length ? `, floors at ${fl.map(f => f + '"').join(' and ')}` : ''}` : `height ${terrHt(t)}"`}.</p>
+    <table class="wtab"><tbody>${R.rules.map(([k, v]) => `<tr><th style="text-align:left;vertical-align:top;white-space:nowrap;padding-right:10px">${escH(k)}</th><td>${escH(v)}</td></tr>`).join('')}</tbody></table>
+    <p class="muted" style="margin-top:8px">In this simulator the whole shaded footprint is treated as one terrain area with one height.</p>
+    ${inside.length ? `<p><b>Units inside now:</b> ${inside.map(u => escH(u.name) + (elevOf(u) ? ` (on the ${elevOf(u)}" floor)` : '')).join(', ')}</p>` : ''}`;
+}
+function showTerrainInfo(t) { openModal(terrainInfoHtml(t)); $('#m-close').addEventListener('click', closeModal); }
+function liveStatus(u) {
+  const li = [];
+  if (u.start > 0) li.push(`<b>Models:</b> ${u.models} of ${u.start} still standing${u.models > 0 && mW(u) > 1 ? `; the damaged model has ${u.cur} of ${mW(u)} wounds left` : ''}`);
+  if (u.cdefs && u.models > 0) li.push(`<b>Allocation groups:</b> ${bodyGroups(u).map(g => escH(clsLabel(u, g.c, g.n))).join('; ')}`);
+  for (const l of leadersOf(u)) li.push(`<b>${escH(l.name)}:</b> ${l.alive ? `${l.cur} of ${l.W} wounds` : 'slain'}`);
+  if (!u.placed) li.push(u.reserve ? 'In reserves' : 'Not on the battlefield');
+  else {
+    const foes = engagedWith(u); if (foes.length) li.push(`<b>Engaged with:</b> ${foes.map(e => escH(e.name)).join(', ')}`);
+    const T = TERRAIN.find(t => inRect(u, t)); if (T) li.push(`<b>Terrain:</b> in a ${TERR_RULES[terrCat(T)].name.toLowerCase()} area${elevOf(u) ? `, on the ${elevOf(u)}" floor` : ''}`);
+    const ob = OBJ.filter(o => objIn(u, o)).map(o => o.name); if (ob.length) li.push(`<b>On objective:</b> ${ob.map(escH).join(', ')}`);
+    const st = [u.shocked && 'battle-shocked', coverFor(u) && 'in cover', isHidden(u) && 'hidden (seen only within 15")', u.moved && 'moved', u.advanced && 'advanced', u.fellBack && 'fell back', u.shot && 'shot', u.charged && 'charged', u.fought && 'fought', u.smoked && 'in smoke'].filter(Boolean);
+    if (st.length) li.push(`<b>This turn:</b> ${st.join(', ')}`);
+  }
+  return `<div class="ucard ${u.side}"><h3 style="margin:0 0 4px">Right now</h3><ul style="margin:0;padding-left:18px">${li.map(x => `<li>${x}</li>`).join('')}</ul></div>`;
+}
+function inspectAt(pt) {
+  if (!G || !pt) return false;
+  const hit = unitAt(pt); if (hit) { showUnitSheets([hit]); return true; }
+  const T = TERRAIN.find(t => inRect(pt, t)); if (T) { showTerrainInfo(T); return true; }
+  return false;
+}
 function showUnitSheets(us) {
   us = (us || []).filter(Boolean); if (!us.length || !G) return;
-  const card = u => { try { const b = u.side === 'player' ? G.pb : G.ab; return datasheetCard(u, u.faction, { live: true, rules: G.rules[u.side], det: b && b.detachment, armyRules: b && b.armyRules }); } catch (e) { return ''; } };
+  const card = u => { try { const b = u.side === 'player' ? G.pb : G.ab; return liveStatus(u) + datasheetCard(u, u.faction, { live: true, rules: G.rules[u.side], det: b && b.detachment, armyRules: b && b.armyRules }); } catch (e) { return ''; } };
   openModal(`<div class="row"><h2 style="margin:0">${escH(us.length > 1 ? 'Datasheets' : us[0].name)}</h2><button class="btn" id="m-close">Close</button></div>` + us.map(card).join(''));
   $('#m-close').addEventListener('click', closeModal);
 }
-$('#board').addEventListener('contextmenu', e => { if (!G || G.stage === undefined) return; const pt = toSvg(e), hit = pt && unitAt(pt); if (hit) { e.preventDefault(); showUnitSheets([hit]); } });
+let _rcDown = null;
+$('#board').addEventListener('pointerdown', e => { if (e.button === 2) _rcDown = { x: e.clientX, y: e.clientY }; }, true);
+$('#board').addEventListener('contextmenu', e => { if (!G || G.stage === undefined) return; if (_rcDown && Math.hypot(e.clientX - _rcDown.x, e.clientY - _rcDown.y) > 6) return; const pt = toSvg(e); if (pt && inspectAt(pt)) e.preventDefault(); });
 document.addEventListener('keydown', e => {
   if (e.key !== '1' || e.ctrlKey || e.metaKey || e.altKey || !G || (typeof BF3D !== 'undefined' && BF3D.on)) return;
   const t = e.target; if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
@@ -16529,6 +16727,109 @@ function mixInit(u) {
   const n = Math.min(m.max, Math.max(1, Math.floor(u.models / m.per)));
   if (u.models <= n) return;
   u.wl = Array(u.models - n).fill(u.W).concat(Array(n).fill(m.W)); u.cur = u.wl[0];
+}
+/* Allocation groups (11th edition): one group per CHARACTER, and one group for all other models with the same Wounds, Save and invulnerable save.
+   u.cdefs lists the distinct model profiles, u.cls gives each model's profile in the order models are removed, u.wl follows it. */
+function profInit(u) {
+  if (!(u.models > 1) || u.cdefs) return;
+  let P = u.profs;
+  if (!P || P.length < 2) {
+    const wl = u.wl; if (!wl || new Set(wl).size < 2) return;
+    P = [{ name: 'Models', T: u.T, Sv: u.Sv, inv: u.inv || 0, W: wl[0], n: 0, main: true }];
+    const rest = wl.filter(x => x !== wl[0]), ws = [...new Set(rest)];
+    for (const x of ws) P.push({ name: `${x}-wound models`, T: u.T, Sv: u.Sv, inv: u.inv || 0, W: x, n: rest.filter(y => y === x).length });
+  }
+  const main = P.find(p => p.main) || P[0], others = P.filter(p => p !== main && p.n > 0);
+  if (!others.length) return;
+  const mx = MIX_W[u.ds || u.name] || MIX_W[u.name];
+  const cnt = others.map(p => (mx && mx.per && others.length === 1) ? Math.min(mx.max, Math.max(1, Math.floor(u.models / mx.per))) : p.n);
+  const total = cnt.reduce((a, b) => a + b, 0); if (total >= u.models) return;
+  const dT = (+u.T || 0) - main.T, dS = (+u.Sv || 0) - main.Sv, dW = (+u.W || 0) - main.W;
+  const mk = (p, i) => { const inv = i === 0 ? (u.inv || 0) : ((u.inv && u.inv !== main.inv) ? (p.inv ? Math.min(p.inv, u.inv) : u.inv) : p.inv); return { name: p.name, T: p.T + dT, Sv: p.Sv + dS, inv, W: p.W + dW }; };
+  u.cdefs = [mk(main, 0)].concat(others.map((p, i) => mk(p, i + 1)));
+  u.cls = Array(u.models - total).fill(0).concat(others.flatMap((p, i) => Array(cnt[i]).fill(i + 1)));
+  u.wl = u.cls.map(c => u.cdefs[c].W); u.cur = u.wl[0];
+}
+const unitT = t => { const cd = t.cdefs, c = t.cls; if (!cd || !c || !(t.models > 0)) return t.T; let m = 0; for (let j = Math.max(0, (t.start || c.length) - t.models); j < c.length; j++) m = Math.max(m, cd[c[j]].T); return t.T + (m - cd[0].T); };
+const bodyGroups = t => {
+  const out = []; if (!t.cdefs || !t.cls || !(t.models > 0)) return out;
+  for (let j = Math.max(0, (t.start || t.cls.length) - t.models); j < t.cls.length; j++) { let g = out.find(x => x.c === t.cls[j]); if (!g) out.push(g = { c: t.cls[j], n: 0 }); g.n++; }
+  return out;
+};
+function setBodyOrder(t, order) {
+  if (!t.cdefs || !t.cls) return;
+  const i0 = Math.max(0, (t.start || t.cls.length) - t.models), wounded = t.models > 0 && t.cur < mW(t), rest = t.cls.slice(i0), res = [];
+  let first = null; if (wounded && rest.length) { first = rest.shift(); res.push(first); }
+  for (const c of (first !== null ? [first] : []).concat(order.filter(c => c !== first))) for (let k = 0; k < rest.length;) { if (rest[k] === c) res.push(rest.splice(k, 1)[0]); else k++; }
+  res.push(...rest);
+  t.cls = t.cls.slice(0, i0).concat(res); t.wl = t.cls.map(c => t.cdefs[c].W);
+}
+const kitWeapons = t => { const seen = new Set(); return (t.ranged || []).concat(t.melee || []).filter(w => !w.leader && w.count > 0 && w.count < t.models && !seen.has(w.name) && seen.add(w.name)); };
+function kitApply(t, lost) {
+  if (!(lost > 0) || !t.kitLose || !t.kitLose.length) return;
+  for (const nm of t.kitLose) for (const k of ['ranged', 'melee']) for (const w of t[k].slice()) {
+    if (w.leader || w.name !== nm || !(w.count > 0) || lost <= 0) continue;
+    const n = Math.min(lost, w.count); w.count -= n; lost -= n;
+    if (w.count <= 0) t[k] = t[k].filter(x => x !== w);
+  }
+}
+function carrierSync(t) {
+  if (!t.cdefs || !t.cls) return;
+  const i0 = Math.max(0, (t.start || t.cls.length) - Math.max(0, t.models)), alive = {};
+  if (t.models > 0) for (let j = i0; j < t.cls.length; j++) alive[t.cdefs[t.cls[j]].name] = (alive[t.cdefs[t.cls[j]].name] || 0) + 1;
+  for (const k of ['ranged', 'melee']) t[k] = t[k].filter(w => { if (w.leader || !w.carrier) return true; const n = alive[w.carrier] || 0; if (n <= 0) return false; if (w.count > n) w.count = n; return true; });
+}
+/* 11th edition: when the bodyguard is destroyed, each attached character becomes a separate unit */
+function splitLeaders(t) {
+  if (!G || !t.alive || t.models > 0 || !leaderUp(t)) return;
+  const live = liveLeaders(t); if (live.length < 2) return;
+  const strip = w => { const c = Object.assign({}, w); delete c.leader; delete c.count; delete c.per; delete c.lid; return c; };
+  for (const L of live.slice(1)) {
+    const nu = { name: L.name, ds: L.ds || L.name, M: L.M, T: L.T, Sv: L.Sv, inv: L.inv || 0, W: L.W, Ld: L.Ld, OC: L.OC, fnp: L.fnp || 0, kw: [...(L.kw || [])], scouts: 0, abilities: JSON.parse(JSON.stringify(L.abilities || [])), ranged: t.ranged.filter(w => w.leader && (w.lid || 0) === (L.lid || 0)).map(strip), melee: t.melee.filter(w => w.leader && (w.lid || 0) === (L.lid || 0)).map(strip) };
+    Object.assign(nu, { id: Math.max(...G.units.map(v => v.id)) + 1, side: t.side, alive: true, placed: !!t.placed, reserve: !!t.reserve, models: 1, start: 1, cur: L.cur, faction: t.faction, tag: unitTag(nu.name), r: 1.6, x: t.x, y: t.y, role: t.role });
+    resetFlags(nu); for (const f of ['moved', 'advanced', 'fellBack', 'shot', 'charged', 'fought', 'shocked', 'stayed', 'chargeTried', 'movedDist', 'arrived']) nu[f] = t[f];
+    if (t.placed) for (let ring = 0; ring <= 6; ring += .5) { let ok = false; for (let a = 0; a < 6.3 && !ok; a += .6) { const x = t.x + Math.cos(a) * ring, y = t.y + Math.sin(a) * ring; if (typeof posOk !== 'function' || posOk(nu, x, y, false)) { nu.x = x; nu.y = y; ok = true; } } if (ok) break; }
+    L.alive = false; t.ranged = t.ranged.filter(w => !(w.leader && (w.lid || 0) === (L.lid || 0))); t.melee = t.melee.filter(w => !(w.leader && (w.lid || 0) === (L.lid || 0)));
+    G.units.push(nu); G._nameRe = null;
+    log(`${t.name}: its bodyguard is gone, so ${nu.name} becomes a separate unit.`, t.side);
+  }
+  const k = live[0]; t.name = k.name; t.leader = k; G._nameRe = null;
+}
+const clsLabel = (t, c, n) => { const d = t.cdefs[c]; return `${n} × ${d.name} (T${d.T}, ${d.Sv}+${d.inv ? ', ' + d.inv + '++' : ''}, ${d.W}W)`; };
+async function declareAlloc(u, w, t, shooting) {
+  if (typeof G === 'undefined' || !G || !t.placed) return;
+  const grp = bodyGroups(t), wounded = t.models > 0 && t.cur < mW(t), free = wounded ? grp.slice(1) : grp.slice();
+  const chars = leaderUp(t) ? liveLeaders(t) : [], kit = t.models > 0 ? kitWeapons(t) : [];
+  const key = `${u.id}|${w.name}|${G.attN = (G.attN || 0)}|${G.turnNo}|${G.phase}`, pkey = `${G.turnNo}|${G.phase}`;
+  const chosen = chars.length > 1 || free.length > 1 || kit.length;
+  const ap = +w.AP || 0, need = c => { const d = t.cdefs[c]; return Math.min(d.inv || 7, d.Sv + ap); };
+  const autoOrder = () => {
+    if (grp.length > 1) setBodyOrder(t, free.slice().sort((a, b) => (need(a.c) - need(b.c)) || (t.cdefs[a.c].W - t.cdefs[b.c].W)).map(g => g.c));
+    if (chars.length > 1) t.lorder = chars.slice().sort((a, b) => ((b.cur < b.W) - (a.cur < a.W)) || (a.W - b.W)).map(l => l.lid || 0);
+    t.kitLose = [];
+  };
+  if (!(t.side === 'player' && u.side !== t.side && chosen) || t.allocAuto === pkey) { autoOrder(); return; }
+  t.allocKey = key;
+  const who = `${u.name} ${shooting ? 'shoots' : 'fights'} ${t.name} with ${w.name}.`;
+  const m = await askPlayer({ kind: 'choice', text: `${who} Declare the order that wounds are allocated: ${free.length > 1 || wounded ? 'groups of different models, ' : ''}${chars.length > 1 ? 'your characters (always after the other models), ' : ''}${kit.length ? 'and which models carry special weapons. ' : ''}Failed saves go to the first group until it is destroyed.`, options: [{ label: 'Auto: best order', value: 'auto', primary: true }, { label: 'I\'ll choose the order', value: 'manual' }, { label: 'Auto for the rest of this phase', value: 'phase' }] });
+  if (m === 'phase') t.allocAuto = pkey;
+  if (m !== 'manual') { autoOrder(); return; }
+  if (free.length > 1) {
+    let remain = free.map(g => g.c), ord = [];
+    while (remain.length > 1) { const c = await askPlayer({ kind: 'choice', text: `Allocation order: which group of ${t.name} takes wounds ${ord.length ? 'next' : 'first'}?${wounded ? ' (The group with the wounded model is already first.)' : ''}`, options: remain.map(c => ({ label: clsLabel(t, c, (free.find(g => g.c === c) || {}).n), value: c })) }); ord.push(c); remain = remain.filter(x => x !== c); }
+    setBodyOrder(t, ord.concat(remain));
+  }
+  if (chars.length > 1) {
+    const wc = chars.filter(l => l.cur < l.W), uw = chars.filter(l => l.cur >= l.W), ord = wc.map(l => l.lid || 0);
+    let remain = uw.slice();
+    while (remain.length > 1) { const id = await askPlayer({ kind: 'choice', text: `Which character takes wounds ${ord.length ? 'next' : 'first'}? Characters come after all the other models.${wc.length && !ord.length ? '' : ''}`, options: remain.map(l => ({ label: `${l.name} (${l.cur}/${l.W}W, T${l.T}, ${l.Sv}+${l.inv ? ', ' + l.inv + '++' : ''})`, value: l.lid || 0 })) }); ord.push(id); remain = remain.filter(l => (l.lid || 0) !== id); }
+    t.lorder = ord.concat(remain.map(l => l.lid || 0));
+  }
+  t.kitLose = [];
+  if (kit.length) {
+    const nm = await askPlayer({ kind: 'choice', text: `Which model should ${t.name} lose first? Losing a model that carries a special weapon removes that weapon.`, options: [{ label: 'Ordinary models first (protect special weapons)', value: '', primary: true }].concat(kit.map(k => ({ label: `A model carrying ${k.name}`, value: k.name }))) });
+    if (nm) t.kitLose = [nm];
+  }
 }
 function _statApply(o, name, fac, f) {
   let ch = false;
@@ -16953,7 +17254,7 @@ function schBegin(spec) {
   if (spec.cpAi) G.cp.ai = Math.max(G.cp.ai, spec.cpAi);
   showTab('battle'); render();
 }
-function schTotalW(u) { return (u.models - 1) * u.W + Math.max(u.cur, 0) + (leaderUp(u) ? u.leader.cur : 0); }
+function schTotalW(u) { return (u.models - 1) * u.W + Math.max(u.cur, 0) + (leaderUp(u) ? liveLeaders(u).reduce((a, l) => a + l.cur, 0) : 0); }
 function schCtx() {
   const g = G.school; if (!g) return null;
   const me = G.units.find(u => u.id === g.me), foes = G.units.filter(u => u.side === 'ai'), S = g.S;
@@ -20363,9 +20664,10 @@ function whCounts(ds, models, comp, wps) {
     if (!who || /^(every|all)$/.test(who)) n = models;
     else { const g = groups.find(g => g.key === who || g.key === who + 's' || g.key + 's' === who || g.key.replace(/s$/, '') === who.replace(/s$/, '')); n = g ? g.min : null; }
     if (n == null) continue;
+    const gq = groups.find(g => g.key === who || g.key === who + 's' || g.key + 's' === who || g.key.replace(/s$/, '') === who.replace(/s$/, '')), gname = gq ? gq.key : null;
     for (const it of whTxt(m[2]).split(/;/).map(x => x.trim()).filter(Boolean)) {
       const q = it.match(/^(\d+)\s+(.*)$/), qty = q ? +q[1] : 1, name = whKey(q ? q[2] : it).replace(/s$/, '');
-      for (const w of wps) { const wk = whKey(w.name).replace(/s$/, ''), base = whKey(w.name.split(/\s+[-–]\s+/)[0]).replace(/s$/, ''); if (wk === name || base === name) res.set(w.name, (res.get(w.name) || 0) + qty * n); }
+      for (const w of wps) { const wk = whKey(w.name).replace(/s$/, ''), base = whKey(w.name.split(/\s+[-–]\s+/)[0]).replace(/s$/, ''); if (wk === name || base === name) { res.set(w.name, (res.get(w.name) || 0) + qty * n); if (gname) (res.carr = res.carr || new Map()).set(w.name, gname); } }
     }
   }
   return res;
@@ -20442,6 +20744,8 @@ function whBuild(T, hooks) {
     let main = prof.slice().sort((a, b) => b.n - a.n)[0] || prof[0]; if (!main.n && ml.length) main = prof[0];
     const mm = main.m;
     Object.assign(u, { M: whInt(mm.M, 0), T: whInt(mm.T, 1), Sv: whInt(mm.Sv, 7), W: whInt(mm.W, 1), Ld: whInt(mm.Ld, 7), OC: whInt(mm.OC, 0), inv: /^\d/.test(String(mm.inv_sv || '').trim()) ? whInt(mm.inv_sv, 0) : 0 });
+    { const pf = prof.filter(x => x.n > 0 || x.m === mm).map(x => { const q = x.m; return { name: whNm(q.name), T: whInt(q.T, 1), Sv: whInt(q.Sv, 7), W: whInt(q.W, 1), inv: /^\d/.test(String(q.inv_sv || '').trim()) ? whInt(q.inv_sv, 0) : 0, n: x.n, main: x.m === mm }; });
+      if (pf.length > 1 && pf.some(x => x.T !== u.T || x.Sv !== u.Sv || x.W !== u.W || x.inv !== u.inv)) u.profs = pf; }   // per-model Toughness, Save, invulnerable save and Wounds, used to form allocation groups
     // points and size of the smallest squad that has a cost
     const cr = (cost.get(d.id) || []).slice().sort((a, b) => +a.line - +b.line).find(c => c.cost !== '' && /\d/.test(c.cost));
     u.pts = cr ? whInt(cr.cost, 0) : 0;
@@ -20494,6 +20798,7 @@ function whBuild(T, hooks) {
     // weapon counts from the loadout (only where a profile carries fewer weapons than there are models)
     const cm = whCounts(d, u.models, cl, all);
     for (const w of all) { const c = cm.get(w.name); if (c != null && c < u.models && c > 0) w.count = c; }
+    if (u.profs && cm.carr) for (const w of all) { const g = cm.carr.get(w.name), pr = g && u.profs.find(p => !p.main && whKey(p.name).replace(/s$/, '') === g.replace(/s$/, '')); if (pr && w.count) w.carrier = pr.name; }
     for (const key of ['ranged', 'melee']) { const bases = {}; u[key].forEach(w => { if (w.name.includes(' - ')) { const b = w.name.split(' - ')[0]; bases[b] = (bases[b] || 0) + 1; } }); u[key].forEach(w => { const b = w.name.split(' - ')[0]; if (bases[b] > 1) w.alt = b; }); }
     { const orows = (optg.get(d.id) || []).slice().sort((a, b) => +a.line - +b.line), r = whOptRules(orows, u); if (r.rules.length) u.wgOpts = r.rules; if (r.skipped.length) u.wgNote = `${r.skipped.length} option rule${r.skipped.length > 1 ? 's' : ''} on this datasheet can't be picked here; they are listed under Wargear options on the datasheet.`; }
     const single = u.models === 1; u.size = single && u.W >= 12 ? 'large' : single && u.W >= 6 ? 'medium' : '';
@@ -21051,9 +21356,24 @@ function leadsFromText(u) {
   return out;
 }
 const leadsOf = u => (u && u.leads && u.leads.length) ? u.leads : (u ? (u._ld = u._ld || leadsFromText(u)) : []);
+/* Some leaders may join a unit that already has one other (different) leader. Biologus Putrifier: "You can attach this model to a PLAGUE MARINES unit, even if one other Leader unit has already been attached to it." */
+const DUAL_LEADERS = new Set(['Death Guard|Biologus Putrifier']);
+const dualLeader = u => !!u && (DUAL_LEADERS.has(u.faction + '|' + u.name) || (u.abilities || []).some(a => /even if one other leader/i.test(a.text || '')));
+const isSupportLib = u => !!u && ((u.kw || []).includes('support') || (u.abilities || []).some(a => /^support$/i.test(a.name)));
+function canAttach(l, o) {
+  const u = libOf(l), b = libOf(o); if (!u || !b || l === o || isChar(b) || o.leadTo) return false;
+  if (!leadsOf(u).includes(b.name)) return false;
+  if (l.leadTo === o.key) return true;
+  const cur = B.roster.filter(x => x !== l && x.leadTo === o.key).map(x => ({ e: x, u: libOf(x) }));
+  if (cur.some(c => c.e.id === l.id)) return false;                      // never two of the same character
+  const nSup = cur.filter(c => isSupportLib(c.u)).length, nLead = cur.length - nSup;
+  if (isSupportLib(u)) return nSup === 0;                                 // one Support per unit
+  if (nLead === 0) return true;                                           // one Leader per unit ...
+  return nLead === 1 && (dualLeader(u) || cur.some(c => !isSupportLib(c.u) && dualLeader(c.u)));   // ... or two when a datasheet says "even if one other Leader"
+}
 function eligibleBodyguards(e) {
   const u = libOf(e); if (!u || !leadsOf(u).length) return [];
-  return B.roster.filter(o => o !== e && !o.leadTo && !isChar(libOf(o)) && leadsOf(u).includes(libOf(o).name) && !B.roster.some(x => x !== e && x.leadTo === o.key));
+  return B.roster.filter(o => canAttach(e, o));
 }
 let bMsg = '';
 function builderMsg(t) { bMsg = t; renderBuilder(); }
@@ -21283,8 +21603,7 @@ function swapUnit(k, nid) {
   if (have >= cap) { builderMsg(capMessage(nu, have, cap, size)); return; }
   const notes = [`Swapped ${old.name} for ${nu.name}.`];
   e.id = nid; e.models = nu.models; e.pts = nu.pts; e.wpn = null;
-  const led = B.roster.find(x => x.leadTo === k);
-  if (led && !leadsOf(libOf(led)).includes(nu.name)) { led.leadTo = null; notes.push(`${libOf(led).name} can't lead ${nu.name}, so it's on its own now.`); }
+  for (const led of B.roster.filter(x => x.leadTo === k)) if (!leadsOf(libOf(led)).includes(nu.name)) { led.leadTo = null; notes.push(`${libOf(led).name} can't lead ${nu.name}, so it's on its own now.`); }
   if (e.leadTo) { const bg = B.roster.find(x => x.key === e.leadTo); if (!bg || !leadsOf(nu).includes(libOf(bg).name)) { if (bg) notes.push(`${nu.name} can't lead ${libOf(bg).name}, so it's on its own now.`); e.leadTo = null; } else notes.push(`${nu.name} still leads ${libOf(bg).name}.`); }
   if (B.warlord === k && !isChar(nu)) { const c = B.roster.find(x => x !== e && isChar(libOf(x))); B.warlord = c ? c.key : null; }
   const d = curDet();
@@ -21371,15 +21690,26 @@ function stepContent() {
     case 3: return guide('Step 4: Battleline and other units', `Now add the rest of the army. At ${curSize().name} you can take up to ${curSize().unit} units of each datasheet, or ${curSize().unit * 2} for Battleline and Dedicated Transport datasheets. The + button greys out when you reach the limit. Change the model count if you want a bigger unit, and fix the points if they are estimated.`) + `
       <div class="bld-cols"><div>${catalogue(u => !isChar(u))}</div><div>${totalBar()}<h3 style="margin-top:6px">Your units</h3><div class="bld-roster">${rosterRows(u => !isChar(u), { empty: 'Add units from the list.' })}</div></div></div>`;
     case 4: {
-      const leaders = B.roster.filter(e => leadsOf(libOf(e)).length);
-      return guide('Step 5: Attach leaders', 'Characters with the Leader or Support ability can join a unit. They share its protection and often boost it. Each unit can take one leader. You can also leave a character on its own.') + totalBar() +
-        (leaders.length ? `<div class="bld-roster">${leaders.map(e => {
-          const u = libOf(e), elig = eligibleBodyguards(e);
-          const opts = [...elig, ...(e.leadTo ? [B.roster.find(o => o.key === e.leadTo)] : [])].filter((v, i, a) => v && a.indexOf(v) === i);
-          return `<div class="bld-row" style="grid-template-columns:minmax(0,1fr) minmax(0,1.3fr)"><span class="nm" data-libid="${u.id}" data-nm="${e.models}">${escH(u.name)}${slTag(u)} <small class="muted">#${e.key}</small></span>
-            <select data-lead="${e.key}"><option value="">Stays on its own</option>${opts.map(o => `<option value="${o.key}"${e.leadTo === o.key ? ' selected' : ''}>Leads ${escH(libOf(o).name)} #${o.key}</option>`).join('')}</select>
-            <div class="sub">Can lead: ${escH(leadsOf(u).join(', '))}${!opts.length ? ' (none of these are in your army yet)' : ''}</div></div>`;
-        }).join('')}</div>` : '<p class="muted">None of your characters can lead a unit. You can skip this step.</p>');
+      const leaders = B.roster.filter(e => leadsOf(libOf(e)).length), bodies = B.roster.filter(e => !isChar(libOf(e)));
+      const ledBy = o => B.roster.filter(x => x.leadTo === o.key);
+      const leaderRows = leaders.map(e => {
+        const u = libOf(e), elig = eligibleBodyguards(e), cur = e.leadTo ? B.roster.find(o => o.key === e.leadTo) : null;
+        const opts = [...elig, ...(cur ? [cur] : [])].filter((v, i, a) => v && a.indexOf(v) === i);
+        const note = o => { const others = B.roster.filter(x => x !== e && x.leadTo === o.key); return others.length ? ' (with ' + others.map(x => libOf(x).name).join(', ') + ')' : ''; };
+        return `<div class="bld-row ld-card${e.leadTo ? ' on' : ''}" style="grid-template-columns:minmax(0,1fr)"><div class="ld-h"><span class="nm" data-libid="${u.id}" data-nm="${e.models}">${escH(u.name)}${slTag(u)} <small class="muted">#${e.key} · ${e.pts} pts</small></span>${isSupportLib(u) ? '<span class="ld-tag" data-tip="A Support character: a unit can have one Leader and one Support.">Support</span>' : ''}${dualLeader(u) ? '<span class="ld-tag" data-tip="This leader may join a unit that already has one other (different) leader.">+1 leader OK</span>' : ''}</div>
+          <select data-lead="${e.key}"><option value="">Stays on its own</option>${opts.map(o => `<option value="${o.key}"${e.leadTo === o.key ? ' selected' : ''}>Leads ${escH(libOf(o).name)} #${o.key}${escH(note(o))}</option>`).join('')}</select>
+          <div class="sub">Can lead: ${escH(leadsOf(u).join(', '))}${!opts.length ? ' (none of these are in your army yet, or they already have a leader)' : ''}</div></div>`;
+      }).join('');
+      const unitRows = bodies.map(o => {
+        const b = libOf(o), cur = ledBy(o), canBe = leaders.filter(l => leadsOf(libOf(l)).includes(b.name));
+        const avail = canBe.filter(l => !l.leadTo && canAttach(l, o));
+        const chips = cur.map(l => `<span class="ld-chip"><b>${escH(libOf(l).name)}</b> <small class="muted">#${l.key}</small> <button type="button" class="btn sm" data-unlead="${l.key}" aria-label="Remove ${escH(libOf(l).name)} from this unit">Remove</button></span>`).join('');
+        return `<div class="bld-row ld-card${cur.length ? ' on' : ''}${canBe.length ? '' : ' muted-row'}" style="grid-template-columns:minmax(0,1fr)"><div class="ld-h"><span class="nm" data-libid="${b.id}" data-nm="${o.models}">${escH(b.name)} <small class="muted">#${o.key} · ${o.models} models · ${o.pts} pts</small></span></div>
+          ${chips ? `<div class="ld-led">Led by: ${chips}</div>` : ''}
+          ${canBe.length ? `<select data-attach="${o.key}"${avail.length ? '' : ' disabled'}><option value="">${avail.length ? 'Attach a leader…' : (cur.length ? 'No other leader can join' : 'No leader available')}</option>${avail.map(l => `<option value="${l.key}">${escH(libOf(l).name)} #${l.key}</option>`).join('')}</select>` : '<div class="sub">None of your characters can lead this unit.</div>'}</div>`;
+      }).join('');
+      return guide('Step 5: Attach leaders', 'Leaders are on the left and the units they can join are on the right, so you can see both at once. Pick a unit from a leader\'s list, or pick a leader from a unit\'s list. Each unit can take one Leader and one Support character; a few Leaders (such as the Biologus Putrifier) may also join a unit that already has one other Leader. You can leave a character on its own.') + totalBar() +
+        (leaders.length ? `<p class="muted ld-note">In battle every attached character keeps its own wounds, saves, weapons and abilities. Hits go to the unit's models first, then to the attached characters in the order they were attached (the one listed first takes wounds first), and a character that falls takes its weapons and abilities with it.</p><div class="bld-cols ld-cols"><div><h3 class="ld-ttl">Leaders <small class="muted">(${leaders.length})</small></h3><div class="bld-roster ld-scroll">${leaderRows}</div></div><div><h3 class="ld-ttl">Units <small class="muted">(${bodies.length})</small></h3><div class="bld-roster ld-scroll">${unitRows || '<p class="muted">Add some non-character units in step 4 first.</p>'}</div></div></div>` : '<p class="muted">None of your characters can lead a unit. You can skip this step.</p>');
     }
     case 5: {
       if (!d) return guide('Step 6: Enhancements', 'Enhancements come from your detachment. You haven\'t picked one, so there are none to give out. Go back to step 2 if you want one.');
@@ -21396,10 +21726,10 @@ function stepContent() {
       const cs = checks(), errs = cs.filter(c => c.e);
       const byKey = k => B.roster.find(e => e.key === k);
       const lines = B.roster.filter(e => !e.leadTo).map(e => {
-        const u = libOf(e), L = B.roster.find(x => x.leadTo === e.key);
+        const u = libOf(e), Ls = B.roster.filter(x => x.leadTo === e.key);
         const tags = [B.warlord === e.key && 'Warlord', ...Object.entries(B.enh).filter(([, k]) => k === e.key).map(([n]) => n)].filter(Boolean);
-        const ltags = L ? [B.warlord === L.key && 'Warlord', ...Object.entries(B.enh).filter(([, k]) => k === L.key).map(([n]) => n)].filter(Boolean) : [];
-        return `<li><b>${escH(u.name)}</b> ${e.models > 1 ? `(${e.models} models)` : ''} ${e.pts} pts${tags.length ? ` <span class="muted">[${escH(tags.join(', '))}]</span>` : ''}${L ? `<br>&nbsp;&nbsp;led by <b>${escH(libOf(L).name)}</b> ${L.pts} pts${ltags.length ? ` <span class="muted">[${escH(ltags.join(', '))}]</span>` : ''}` : ''}</li>`;
+        const lead = L => { const ltags = [B.warlord === L.key && 'Warlord', ...Object.entries(B.enh).filter(([, k]) => k === L.key).map(([n]) => n)].filter(Boolean); return `<br>&nbsp;&nbsp;led by <b>${escH(libOf(L).name)}</b> ${L.pts} pts${ltags.length ? ` <span class="muted">[${escH(ltags.join(', '))}]</span>` : ''}`; };
+        return `<li><b>${escH(u.name)}</b> ${e.models > 1 ? `(${e.models} models)` : ''} ${e.pts} pts${tags.length ? ` <span class="muted">[${escH(tags.join(', '))}]</span>` : ''}${Ls.map(lead).join('')}</li>`;
       }).join('');
       return guide('Step 7: Review and save', 'Check the list and fix anything flagged in red. Warnings in grey follow the usual muster rules; your 11th-edition mission pack may differ, so treat them as reminders. Saving creates an army you can edit, use in Combat math and play in Solo battle.') + totalBar() + `
         <h3>${escH(B.name)}</h3><p class="muted">${escH(B.faction)} · ${d ? escH(d.name) + ' (' + escH(d.rule || 'rule') + ')' : 'No detachment'} · ${B.limit} pt limit</p>
@@ -21463,6 +21793,8 @@ function renderBuilder() {
   on('[data-pts]', 'change', ev => { const el = ev.currentTarget, e = B.roster.find(x => x.key === +el.dataset.pts); e.pts = Math.max(0, +el.value || 0); renderBuilder(); });
   on('[data-warlord]', 'change', ev => { B.warlord = +ev.currentTarget.dataset.warlord; renderBuilder(); });
   on('[data-lead]', 'change', ev => { const el = ev.currentTarget, e = B.roster.find(x => x.key === +el.dataset.lead); e.leadTo = el.value ? +el.value : null; renderBuilder(); });
+  on('[data-attach]', 'change', ev => { const el = ev.currentTarget, o = B.roster.find(x => x.key === +el.dataset.attach), l = el.value ? B.roster.find(x => x.key === +el.value) : null; if (l && o && canAttach(l, o)) { l.leadTo = o.key; renderBuilder(); } });
+  on('[data-unlead]', 'click', ev => { const l = B.roster.find(x => x.key === +ev.currentTarget.dataset.unlead); if (l) { l.leadTo = null; renderBuilder(); } });
   on('[data-enh]', 'change', ev => { const el = ev.currentTarget; B.enh[el.dataset.enh] = el.value ? +el.value : null; renderBuilder(); });
   builderExtras(box);
   const sv = $('#bl-save'); if (sv) sv.addEventListener('click', saveRoster);
@@ -21583,25 +21915,30 @@ function rosterToUnits() {
     const u = JSON.parse(JSON.stringify(findLib(e.id)));
     applyWargear(u, e.wpn, e.models);
     u.models = e.models; u.ds = u.name;
-    const L = B.roster.find(x => x.leadTo === e.key);
+    const Ls = B.roster.filter(x => x.leadTo === e.key).slice(0, 3), L = Ls[0];
     let pts = +e.pts || 0;
     for (const a of tagFor(e.key)) { u.abilities.push(a); pts += a.pts || 0; if (a.name === 'Warlord' && !u.kw.includes('warlord')) u.kw.push('warlord'); }
-    if (L) {
-      const l = JSON.parse(JSON.stringify(findLib(L.id)));
-      applyWargear(l, L.wpn, L.models);
-      u.leader = { name: l.name, ds: l.name, M: l.M, T: l.T, Sv: l.Sv, inv: l.inv, W: l.W, Ld: l.Ld, OC: l.OC, fnp: l.fnp, kw: l.kw, abilities: (l.abilities || []).filter(a => !/^(leader|support)$/i.test(a.name) && !(a.fx || []).some(f => f.startsWith('reanimation'))) };
-      for (const a of tagFor(L.key)) { u.leader.abilities.push(a); pts += a.pts || 0; }
-      for (const w of l.ranged) { w.leader = true; delete w.count; u.ranged.push(w); }
-      for (const w of l.melee) { w.leader = true; delete w.count; u.melee.push(w); }
-      u.name = `${u.name} with ${l.name}`;
+    if (Ls.length) {
+      const parts = Ls.map((Lx, li) => {
+        const l = JSON.parse(JSON.stringify(findLib(Lx.id)));
+        applyWargear(l, Lx.wpn, Lx.models);
+        const ab = (l.abilities || []).filter(a => !/^(leader|support)$/i.test(a.name) && !(a.fx || []).some(f => f.startsWith('reanimation')));
+        for (const a of tagFor(Lx.key)) { ab.push(a); pts += a.pts || 0; }
+        for (const w of l.ranged) { w.leader = true; w.lid = li; delete w.count; u.ranged.push(w); }
+        for (const w of l.melee) { w.leader = true; w.lid = li; delete w.count; u.melee.push(w); }
+        pts += +Lx.pts || 0;
+        return { l, obj: { name: l.name, ds: l.name, M: l.M, T: l.T, Sv: l.Sv, inv: l.inv, W: l.W, Ld: l.Ld, OC: l.OC, fnp: l.fnp, kw: l.kw, abilities: ab } };
+      });
+      u.leader = parts[0].obj;
+      if (parts.length > 1) u.leaders = parts.map(p => p.obj);       // each one keeps its own wounds, saves, weapons and abilities in battle
+      if (parts.length > 1) u.name = `${u.name} with ${parts.map(p => p.l.name).slice(0, -1).join(', ')} and ${parts[parts.length - 1].l.name}`; else u.name = `${u.name} with ${parts[0].l.name}`;
       if (!u.kw.includes('character')) u.kw.push('character');
-      if (!(l.kw || []).includes('deep strike')) u.kw = u.kw.filter(k => k !== 'deep strike');
-      pts += +L.pts || 0;
+      if (parts.some(p => !(p.l.kw || []).includes('deep strike'))) u.kw = u.kw.filter(k => k !== 'deep strike');
     }
     u.pts = pts;
     for (const a of u.abilities) delete a.pts;
-    if (u.leader) for (const a of u.leader.abilities) delete a.pts;
-    u.bld = { id: e.id, models: e.models, pts: +e.pts || 0, wpn: e.wpn || null, warlord: B.warlord === e.key, enh: Object.entries(B.enh).filter(([, k]) => k === e.key).map(([n]) => n), lead: L ? { id: L.id, models: L.models, pts: +L.pts || 0, wpn: L.wpn || null, warlord: B.warlord === L.key, enh: Object.entries(B.enh).filter(([, k]) => k === L.key).map(([n]) => n) } : null };
+    for (const LD of leadersOf(u)) for (const a of LD.abilities) delete a.pts;
+    u.bld = { id: e.id, models: e.models, pts: +e.pts || 0, wpn: e.wpn || null, warlord: B.warlord === e.key, enh: Object.entries(B.enh).filter(([, k]) => k === e.key).map(([n]) => n), lead: L ? { id: L.id, models: L.models, pts: +L.pts || 0, wpn: L.wpn || null, warlord: B.warlord === L.key, enh: Object.entries(B.enh).filter(([, k]) => k === L.key).map(([n]) => n) } : null, lead2: Ls[1] ? { id: Ls[1].id, models: Ls[1].models, pts: +Ls[1].pts || 0, wpn: Ls[1].wpn || null, warlord: B.warlord === Ls[1].key, enh: Object.entries(B.enh).filter(([, k]) => k === Ls[1].key).map(([n]) => n) } : null, lead3: Ls[2] ? { id: Ls[2].id, models: Ls[2].models, pts: +Ls[2].pts || 0, wpn: Ls[2].wpn || null, warlord: B.warlord === Ls[2].key, enh: Object.entries(B.enh).filter(([, k]) => k === Ls[2].key).map(([n]) => n) } : null };
     delete u.id; delete u.page; delete u.leads; delete u.baseModels; delete u.role; delete u.crucible;
     if (e.looks) u.looks = JSON.parse(JSON.stringify(e.looks));
     units.push(u);
@@ -21625,10 +21962,21 @@ function loadBuildIntoBuilder(b) {
     B.roster.push(e); enhOf(u.abilities, e.key);
     if (m ? m.warlord : (u.abilities || []).some(a => /^warlord$/i.test(a.name))) B.warlord = e.key;
     if (u.leader) {
-      const ll = (m && m.lead) ? findLib(m.lead.id) : libFor(u.leader.ds, u.leader.name);
-      if (!ll) { skipped.push(u.leader.name); continue; }
-      const L = { key: B.seq++, id: ll.id, models: ll.models, pts: m && m.lead ? m.lead.pts : ll.pts, leadTo: e.key, wpn: m && m.lead && m.lead.wpn ? m.lead.wpn : null };
-      B.roster.push(L); enhOf(u.leader.abilities, L.key); if (m && m.lead ? m.lead.warlord : (u.leader.abilities || []).some(a => /^warlord$/i.test(a.name))) B.warlord = L.key;
+      const ms = m && m.lead ? [m.lead, m.lead2, m.lead3].filter(Boolean) : null;
+      if (ms) {
+        ms.forEach((mm, idx) => {
+          const ll = findLib(mm.id); if (!ll) { skipped.push(idx === 0 ? u.leader.name : 'an attached character'); return; }
+          const L = { key: B.seq++, id: ll.id, models: ll.models, pts: mm.pts, leadTo: e.key, wpn: mm.wpn || null };
+          B.roster.push(L);
+          if (mm.enh) for (const n of mm.enh) { if (dds.some(dd => dd.enh.some(z => z.name === n))) B.enh[n] = L.key; }
+          else if (idx === 0) enhOf(u.leader.abilities, L.key);
+          if (mm.warlord || (!mm.enh && idx === 0 && (u.leader.abilities || []).some(a => /^warlord$/i.test(a.name)))) B.warlord = L.key;
+        });
+      } else {
+        const ll = libFor(u.leader.ds, u.leader.name);
+        if (!ll) skipped.push(u.leader.name);
+        else { const L = { key: B.seq++, id: ll.id, models: ll.models, pts: ll.pts, leadTo: e.key, wpn: null }; B.roster.push(L); enhOf(u.leader.abilities, L.key); if ((u.leader.abilities || []).some(a => /^warlord$/i.test(a.name))) B.warlord = L.key; }
+      }
     }
   }
   bMsg = `Loaded ${b.name}. Change anything, then Save to update it.${skipped.length ? ' Not found in your datasheet library, so left out: ' + skipped.join(', ') + '.' : ''}`;
@@ -22131,11 +22479,11 @@ const NA_AB = /^(travelling players|enslaved star god|shadow assignment|authorit
 const isSimAbility = a => !!(/^(fortification|firing deck\b.*|hover|orders|vox-net|master vox|voice of command|striding colossus)$/i.test(String(a.name).trim()) || (/each time you (?:target|select) [^.]*stratagem[^.]*roll one d6/i.test(String(a.text || '')) && /gain 1\s*cp/i.test(String(a.text || ''))) || INV_TXT.test(String(a.text || '').trim()) || (a.fx && a.fx.length) || (typeof autoMods === 'function' && autoMods(a.name, a.text).length) || DG_ABILITY_SIM.test(a.name) || BT_AB_SIM.test(a.name) || /^(attached unit|servitors|singular purpose|protean purpose)$/i.test(a.name) || (/^storm shield$/i.test(a.name) && /wounds characteristic/i.test(a.text || '')) || ENH_SIM.test(String(a.name).trim()) || (/^transport$/i.test(a.name) && !!tcfg({ abilities: [a] })) || /^(leader|support|warlord)$/i.test(a.name) || /^\*?invulnerable save$/i.test(String(a.name).trim()) || autoMods(a.name, a.text || '').length);
 const CORE_GAPS = [
   ['Battlefield and movement', [
-    'Units are single round tokens: there is no model-by-model placement, unit coherency, or measuring from individual models.',
-    'Only ruins exist as terrain (they block sight and give cover). Woods, hills, barricades and other terrain types, and height, are not modelled. The craters and scorch marks on the board are decoration.',
-    'Movement is not slowed or blocked by terrain or by other units on the way; only the end position is checked.',
+    'Models are placed and measured one by one (range, engagement, objective control, cover and line of sight all go model to model), and a unit that ends its turn out of coherency loses the models that are out of it. Models are drawn at an estimated base size, because the datasheets do not list base sizes.',
+    'Terrain follows the 11th edition categories: dense features (ruins) block sight and give cover, light features (barricades) give cover but block neither sight nor movement, and exposed features block nothing and give no cover. Each feature has a height. Battlefields you generate mix all three; the fixed mission layouts use dense ruins only. Infantry, Beasts, Swarm and Mobile units walk through dense features, other units pass only those 2" high or lower; taller ones without floors can be climbed over (their height up and down counts against the move) and ones with floors and ceilings must be gone around. Infantry, Beasts, Swarm, Fly and Monster units can climb to a floor at the end of a move (the climb counts against the move; the AI does it too) and get Plunging Fire from a floor of 3" or more. Terrain areas holding light or dense features are obscuring and give cover and Hidden. Not modelled: each feature has one height and one set of floors over its whole footprint, a unit has one floor for all its models, climbing during a charge or pile-in, and the exact rule for cover between models on different floors (it was not found in the published rules; the area rule applies on every floor). Right-click a terrain feature to read its rules, or a unit to see its datasheet and current state.',
+    'Movement is blocked by enemy units and by tall dense terrain; units moving through friendly units, and moving up and down the surface of terrain, are not tracked.',
     'Line of sight is traced from token centre to token centre.',
-    'Pile-in and consolidation happen automatically; engaging consolidation is not simulated.',
+    'Pile-in and consolidation: you move the models yourself, while the AI moves its units automatically. Overrun fights, engaging consolidation and objective consolidation are simulated.',
     'Death Guard: Nurgle\'s Gift is simulated: Contagion Range (3\" round 1, 6\" round 2, 9\" after, never over 12\"), Afflicted (-1 Toughness) and all three Plagues (Skullsquirm Blight, Rattlejoint Ague, Scabrous Soulrot, including the Move, Leadership and OC changes). You choose your Plague during formations. All nine detachment rules are simulated (Worldblight, Miasmic Bombardment, Manifold Maladies, Reverberant Rancidity, Numberless Horde, Deadly Vectors, Warped and Rusted Animus, Verminous Haze, Hypervirulent Strains). Enhancements simulated: Daemon Weapon of Nurgle, Furnace of Plagues, Arch Contaminator, Revolting Regeneration, Eye of Affliction, Fell Harvester, Insectile Murmuration, Rejuvenating Swarm, Talisman of Burgeoning, Witherbone Pipes, Vile Vigour, Tome of Bounteous Blessings, Lancet of the Worldsore, Cornucophagus, Host of the Hybridised Pox and Beckoning Blight. Most of the stratagems are simulated and the AI uses about a dozen of them. The rest of the Death Guard stratagems are simulated too, except three that have nothing to act on in this app: Rabid Infusion (it needs a unit with two attached Leaders, and the app attaches one), Aggravus Spasms (detection range) and Simultaneous Contamination (Actions). Some are approximated: Putrid Detonation, Persistent Pests, Smeared with Filth, Stinking Mire and Eyestinger Storm ask you when they could apply (the AI just uses them when it can afford them); Overwhelming Generosity, Bloodrust Deluge, Signal Pox, Blighted Land and Stinking Mire choose the biggest or closest eligible target, or the terrain with the most enemies, for you; Mireslick and Soulrot Flux are only used by the AI, against your fall backs; the fight back from Undying Spite happens right after the attack that killed the models. Every enhancement is simulated except Plagueveil, which changes detection range. Plague Legions units can only be taken with Tallyband Summoners, up to 500, 1000 or 1500 points, and both the muster check and the builder enforce it. Unit abilities simulated (about 55): Grotesque Regeneration, Extraction of Fresh Disease, Foul Infusion, Blistering Fusillade, Atomantic Arc-reactor, Metalophagic Infection, Hail of Corrosive Disease, Lethal Ichor, Thunderhawk cluster bombs and Bomb Rack, Horrifying Visage, Enfeebling Miasma, Death Guard Defenders and Infernal Attendants (Lone Operative, which is now simulated for every faction), Miasma of Pestilence, Malefic Impact, Daemonic Locus, Tainted Narthecium, Chaos Lord, Infectious Bloodshed, Putrescent Vitality, Silent Bodyguard, Scuttling Walker, Barrage of Filth, Explosive Blight, Putrefying Stink, Blinding Spray, Nurgle\'s Rot, Froth-spattered Frenzy, Blessed Icon of Disease, Font of Unreality, Shroud of Disease, Blight Bombardment, Pestilent Fallout, Mischief Makers, Tank Hunters, Sickening Vitality, Tocsin of Misery, Death\'s Heads, Inflamed Infections, Infected Outbreak, Spore-laced Shock Waves, Curse of the Walking Pox, Virulent Blessing, Deluge of Nurgle, Ferocious Assault, The Destroyer Hive, Eater Plague, Pinning Bombardment, Diseased Malice, Gift of Contagion, Virulent Aura, Gift of Poxes, Infused with the Blessings of Nurgle, Host of Plagues, Dessication Conduit, Seven-fold Chant, Fearsome, Death Approaches and Daemon Lord of Nurgle. The reaction abilities are simulated too: Mortarion\'s Diseased Influence (after an enemy move) and Inflamed Reprisal (after a nearby Death Guard unit is shot at), Inviolable Transport, Even In Death I Serve, Unholy Resilience, Rolling Fortress, Fire Support and Pestilent Familiar. Mortarion uses one of his Lord of the Death Guard abilities once per turn; you are asked each time one could be used. Inviolable Transport is applied automatically to the first attack doing 2 or more damage each battle round, and Rolling Fortress treats a unit as hidden when a Fellblade stands on the line between it and the attacker. Everything in Death Guard unit abilities is now simulated. Where a rule asks you to pick a target, such as Blight Bombardment, Nurgle\'s Rot and Eater Plague, the app picks the nearest or biggest eligible enemy for you.',
     'Space Marines: Oath of Moment now applies to every Space Marine army and Combat Doctrines to Gladius Task Force, even when the army was built in the app. Detachment rules simulated: Combat Doctrines, Shield of the Imperium, Armoured Wrath (one re-roll per phase, used on the first failed roll), Close-range Eradication, Lightning Assault, Shadow Masters, Extremis-level Threat (a button in your Command phase, once per battle), Interlocking Tactics (auspex scanned), Rapid-drop Deployment (you pick the units that get Deep Strike during formations), Adaptive Defence (terrain and Entrenched), Rapid Deployment (disembarked units move D6\", or D3+3\" from a Heavy Transport), Target Sighted (Tank Aces advance 6\" without a roll and re-roll Damage), Imperator Unleashed, Skystrike (Speeders arrive in round 1) and Psychic Disciplines (chosen each battle round). Enhancements simulated: Artificer Armour, The Honour Vehement, Adept of the Codex (a button), Fire Discipline (Sustained Hits only), Indomitable Fury and Honour Indefatigable (return on a 2+), Fleet Commander (markers are placed for you), Stoic Defender, Architect of War, Target Augury Web, The Flesh is Weak, Adept of the Omnissiah, Master of Machine War, Champion of Humanity, War-tempered Artifice, Forged in Battle, Adamantine Mantle, Fury of the Storm, Hunter\'s Instincts, The Blade Driven Deep, Ghostweave Cloak, Execute and Redeploy (a button, you only), Shadow War Veteran, The Imperium\'s Sword, Fear Made Manifest, Rites of War (the bearer\'s +1 OC only), Iron Resolve, Eye of the Primarch, Hero of the Chapter, Blades of Valour, Omnivox Bombast, Laurels of Thunder, Veteran of the Vanguard, Honour Indefatigable, Spy-skull Data Link, Liberator, Tip of the Spear, Shock Deployment, Armoured Commander, Redoubtable Machine Spirit, Gunnery Honours, Firestorm Coordinators, Astartes Tank Ace, Orksbane, Bellicose Weapon Spirits (Damage re-rolls only), Raptorial Cogitator Core, Shroud Field and Fusillade. Not simulated: the Subversion Assets rule and Death in the Dark, Cloaked Position and the other detection-range effects (the app has no Hidden or detection range), Avenging Angel, Celerity, Prescience, Obfuscation, Temporal Corridor, Orbital Uplink Reliquary, Defensive Mastery, Dedicated Gunship, the Advance re-rolls on Fire Discipline and Portents of Wisdom, and the once-per-battle part of Rites of War. None of the Space Marine detachment Stratagems are simulated yet. The army builder now only offers each enhancement to the units its text allows (for example Captain only).',
     'Fly: a Fly unit can Take to the Skies on a Normal, Advance, Ordered Retreat or charge move (-2" Move, free with Hover) to move over enemy units and ruins. To give that something to do, enemy units block every move and ruins block anything that is not Infantry, Beast or Swarm; a move may bend once around an obstacle and is measured along the route. Desperate Escape moves through enemy units. Scout moves, pile-ins and consolidation are not blocked. Aircraft start in strategic reserves, arrive by Ingress, never move again, go back to reserves at the end of the opponent\'s turn, cannot charge, and can only be charged or fought by Fly units; other units move through them. Aircraft are not simulated further than that (no hit-roll or cover changes, and an Aircraft with Deep Strike is treated like any other).',
@@ -22158,23 +22506,22 @@ const CORE_GAPS = [
   ]],
   ['Shooting and fighting', [
     'Psychic weapons have no special effect (it only matters for a few defensive abilities).',
-    'Damage goes to bodyguard models first, then to an attached leader. Precision attacks go to the leader first; there is no other choice of which model takes wounds.',
+    'Damage allocation follows the 11th edition allocation groups: one group per attached character, and one group for all other models with the same Wounds, Save and invulnerable save. Before an attack you declare the order (you choose when you are defending; the AI picks a sensible order for its own units): models that are not characters take hits first (the group with a wounded model first), characters always come last, and a wounded model within a group is taken first. Failed saves are resolved from the lowest die to the highest. You can also choose to lose a model carrying a special weapon before ordinary models. Each attached character keeps its own wounds, saves, weapons and abilities. Precision lets the attacker pick the character group. When the bodyguard is destroyed, each attached character becomes a separate unit. The order is declared again for each weapon attacking. Models of a mixed unit are told apart only if the library has per-model data (refresh the library from Wahapedia once), or for the Ork units with an odd-Wounds model; a champion\'s own weapon is lost with him only when the datasheet loadout names which model carries it.',
     'Weapons with two modes fire one mode at a time (you choose; the AI picks the better one).',
     'Only the wargear loadout stored on each datasheet is available, unless you import a roster that uses other options.'
   ]],
   ['Stratagems and enhancements', [
-    'Epic Challenge is not simulated (characters are not tracked separately in combat).',
-    'Detachment stratagems are simulated only for the detachments described under each faction below (Necrons, Tyranids and Black Templars). Every other detachment\'s stratagems are reference only. Blood-fuelled Cruelty is built but can\'t come up because the AI never Falls Back.',
-    'Enhancement effects are not simulated. They appear on the datasheet and add their points.',
+    'Detachment stratagems are simulated only for the detachments described under each faction below (Necrons, Tyranids and Black Templars). Every other detachment\'s stratagems are reference only. Blood-fuelled Cruelty is offered when the AI Falls Back from your unit.',
+    'Enhancement effects: many are simulated (the lists under each faction below); the rest appear on the datasheet and add their points.',
     'Command Re-roll covers advance and charge rolls (buttons) and hit, wound, save and damage rolls (a per-phase selector in the Stratagems panel that re-rolls the first failed die of the chosen kind and spends 1 CP). Hazard and number-of-attacks re-rolls are still not offered.',
-    'Reaction-move stratagems are simulated for you (the AI does not use them): Squad Tactics, Wind-Swift Evasion, Reactive Repositioning and Reactive Evasion after an AI unit ends a move; Evasive Repositioning after your unit is shot; Calculated Feint when the AI declares a charge; Purge by Sectors and Rigid Discipline at the end of the Fight phase; and Guerrilla Tactics, Anti-grav Surge and Orbital Teleportarium into Strategic Reserves after the AI\'s Fight phase. Rapid Gunnery, Heresy Undone and Adaptive Operations let a unit shoot or charge after falling back or advancing, or after starting an action. Heresy Undone\'s "auspex scanned targets only" limit is not enforced. Squad Tactics always uses D6 (the Tactical Doctrine 6" bonus is not applied).',
-    'Epic Challenge is simulated: select a unit with an attached Character in Engagement Range during the Fight phase; the whole unit\'s melee gains Precision for the phase (the Character\'s attacks are not separated from the bodyguard\'s). The AI does not use it.',
-    'Overwatch is limited to targets within 24" and cannot be fired by Titanic units; cover now applies to Infantry, Beasts and Swarm in a terrain area or not fully visible because of terrain, and units that stay in terrain without shooting can become Hidden (seen only within 15"). Smokescreen is offered at the start of the opponent\'s Shooting phase. Plunging Fire and Super-Heavy Walker movement are not simulated, and the generated battlefields only contain ruins.',
+    'Reaction-move stratagems are simulated for you (the AI does not use them; it does use its own unit-targeted detachment stratagems such as Tyranid protocols, and Fall Back, Heroic Intervention, Rapid Ingress, Explosives, Crushing Impact, Overwatch and Epic Challenge): Squad Tactics, Wind-Swift Evasion, Reactive Repositioning and Reactive Evasion after an AI unit ends a move; Evasive Repositioning after your unit is shot; Calculated Feint when the AI declares a charge; Purge by Sectors and Rigid Discipline at the end of the Fight phase; and Guerrilla Tactics, Anti-grav Surge and Orbital Teleportarium into Strategic Reserves after the AI\'s Fight phase. Rapid Gunnery, Heresy Undone and Adaptive Operations let a unit shoot or charge after falling back or advancing, or after starting an action. Heresy Undone\'s "auspex scanned targets only" limit is not enforced. Squad Tactics always uses D6 (the Tactical Doctrine 6" bonus is not applied).',
+    'Epic Challenge is simulated: select a unit with an attached Character in Engagement Range during the Fight phase; the whole unit\'s melee gains Precision for the phase (the Character\'s attacks are not separated from the bodyguard\'s). The AI uses it on its own Characters.',
+    'Overwatch is limited to targets within 24" and cannot be fired by Titanic units; cover now applies to Infantry, Beasts and Swarm in a terrain area or not fully visible because of terrain, and units that stay in terrain without shooting can become Hidden (seen only within 15"). Smokescreen is offered at the start of the opponent\'s Shooting phase. Plunging Fire and Super-Heavy Walker movement are not simulated, and the fixed mission layouts only contain dense ruins.',
     'Charge and Advance debuffs from abilities (Pinned, Shaken, Disrupted, Gravitational Field) are not simulated, and the AI does not use "shoot then move" abilities.'
   ]],
   ['Missions', [
-    'Primary and secondary mission cards are stand-ins with the same timing and caps as the real deck, not the real cards.',
-    'Deployment cards, mission twists, Force Dispositions and mission-specific rules are not used. There are three built-in deployment layouts.',
+    'Primary missions follow the 11th-edition Mission Deck 2026-27 as published online; missions that need operation markers or actions score only their objective and kill parts, and the mission panel says what each one leaves out. Secondary mission cards are stand-ins with the same timing and caps as the real deck, not the real cards.',
+    'Deployment uses the Event Companion layout for each pairing of Force Dispositions where one exists (otherwise one of three built-in layouts). Mission twists and mission-specific rules are not used.',
     'Battles are fixed at five rounds on a 60" by 44" board.'
   ]],
   ['The AI opponent', [
@@ -22185,7 +22532,7 @@ const CORE_GAPS = [
   ['Army building', [
     'Points for unit sizes other than the starting size are estimates.',
     'The builder takes one detachment. Detachment Point budgets for several detachments, Unique tags, and "must include / cannot include" detachment restrictions are not enforced.',
-    'A bodyguard unit takes one attached character in the builder (11th edition allows a Leader and a Support). Support units are not forced to attach.',
+    'A bodyguard unit takes one Leader and one Support in the builder, plus a second Leader where the datasheet allows it (the Biologus Putrifier, for example). A Support must be attached to a unit in the rules; the builder lets you leave one on its own.',
     'Upgrade enhancements (for non-Character units) are not supported, and detachments that grant Battleline do not raise the duplicate limit.',
     'Allied units (Agents of the Imperium, Freeblades, Harlequins and so on) are not supported.',
     'Warlord rules ("must be your Warlord", faction keyword) are not checked.'
