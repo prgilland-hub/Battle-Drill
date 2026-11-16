@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.16-0437';
+  const VERSION = '2026.11.16-0514';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -3053,7 +3053,10 @@ function zoneFront(z, other) {
 /* one layout, seen from the player's side: the player gets the red zone when it is the first named in the pairing */
 function layoutDep(L, playerRed) {
   const zP = mkZone(playerRed ? L.r : L.u), zA = mkZone(playerRed ? L.u : L.r);
-  const terr = L.t.map(P => { const b = polyBox(P), c = polyCentroid(P); return { x: b.x, y: b.y, w: b.w, h: b.h, poly: P, cx: c.x, cy: c.y, open: true }; });
+  /* Footprint sizes in the standard layouts: large rectangles 7x11.5, large triangles 8x11.5, medium rectangles 6x4, long lines 10x2.5, short lines 6x2. Lines are filled with barricades (light); the larger footprints hold ruins (dense). */
+  const polyWidth = P => { let w = 1e9; for (let k = 0; k < P.length; k++) { const a = P[k], b = P[(k + 1) % P.length], l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, nx = -(b[1] - a[1]) / l, ny = (b[0] - a[0]) / l; let lo = 1e9, hi = -1e9; for (const q of P) { const d = q[0] * nx + q[1] * ny; lo = Math.min(lo, d); hi = Math.max(hi, d); } w = Math.min(w, hi - lo); } return w; };
+  const polyArea0 = P => { let a = 0; for (let k = 0; k < P.length; k++) { const q = P[(k + 1) % P.length]; a += P[k][0] * q[1] - q[0] * P[k][1]; } return Math.abs(a) / 2; };
+  const terr = L.t.map(P => { const b = polyBox(P), c = polyCentroid(P), wd = polyWidth(P), ar = polyArea0(P), line = wd <= 3.2, big = ar >= 50; return { x: b.x, y: b.y, w: b.w, h: b.h, poly: P, cx: c.x, cy: c.y, open: true, cat: line ? 'light' : 'dense', ht: line ? 1 : big ? 5 : 3, floors: !line && big ? [3] : [], fp: line ? (ar > 18 ? 'long line' : 'short line') : big ? (P.length > 4 ? 'large triangle' : 'large rectangle') : 'medium rectangle' }; });
   const homeRed = L.o.find(o => o[0] === 'home_red'), homeBlue = L.o.find(o => o[0] === 'home_blue');
   const cen = L.o.filter(o => o[0] === 'central'), exp = L.o.filter(o => o[0] === 'exp');
   const mk = (o, name, kind) => ({ x: o[1], y: o[2], name, kind, terr: o[3], poly: terr[o[3]].poly, R: Math.max(1, distEdges(o[1], o[2], terr[o[3]].poly)) });
@@ -6270,7 +6273,7 @@ function newGame() {
     TERRAIN = genTerrain(dep);
   }
   const decor = [];
-  for (let i = 0, tries = 0; i < 9 && tries < 200; tries++) {
+  for (let i = 0, tries = 0; i < 0 && tries < 200; tries++) {
     const r = .9 + Math.random() * 1.8, x = r + Math.random() * (BW - 2 * r), y = r + Math.random() * (BH - 2 * r);
     if (OBJ.some(o => Math.hypot(o.x - x, o.y - y) < OBJ_R + r + .5)) continue;
     if (TERRAIN.some(t => distPointRect(x, y, t) < r + .3)) continue;
@@ -15796,6 +15799,15 @@ const edgeD = (x, y, P) => { let d = 1e9; for (let i = 0; i < P.length; i++) { c
 const tdist = (x, z, r) => r.poly ? (inPoly(x, z, r.poly) ? 0 : edgeD(x, z, r.poly)) : distRect(x, z, r);
 const polyCen = P => { let x = 0, y = 0; for (const p of P) { x += p[0]; y += p[1]; } return [x / P.length, y / P.length]; };
 const polyArea = P => { let s = 0; for (let i = 0; i < P.length; i++) { const a = P[i], b = P[(i + 1) % P.length]; s += a[0] * b[1] - b[0] * a[1]; } return Math.abs(s) / 2; };
+/* a light area (a barricade line): one low wall run along the middle of the footprint */
+function propsLowPoly(mb, r, rng, th) {
+  const P = r.poly; let best = null;
+  for (let k = 0; k < P.length; k++) { const a = P[k], b = P[(k + 1) % P.length], L = Math.hypot(b[0] - a[0], b[1] - a[1]); if (!best || L > best.L) best = { a, b, L }; }
+  const ux = (best.b[0] - best.a[0]) / best.L, uz = (best.b[1] - best.a[1]) / best.L; let t0 = 1e9, t1 = -1e9, n0 = 1e9, n1 = -1e9;
+  for (const q of P) { const t = q[0] * ux + q[1] * uz, n = -q[0] * uz + q[1] * ux; t0 = Math.min(t0, t); t1 = Math.max(t1, t); n0 = Math.min(n0, n); n1 = Math.max(n1, n); }
+  const nm = (n0 + n1) / 2, pt = t => [t * ux - nm * uz, t * uz + nm * ux], col = th && th.wall ? th.wall.col : [.34, .31, .27];
+  wallRun(mb, pt(t0 + .35), pt(t1 - .35), { h: 1.5, th: .5, col, windows: 0, var: .08, grit: .9 }, rng);
+}
 function propsPoly(mb, r, rng, i, th) {
   const P = r.poly, c = polyCen(P), area = polyArea(P), W = th.wall;
   for (let k = 0; k < P.length; k++) { const a = P[k], b = P[(k + 1) % P.length]; mb.tri([c[0], .07, c[1]], [a[0], .07, a[1]], [b[0], .07, b[1]], W.floor, [.9, 0], [c[0], -10, c[1]]); }
@@ -15806,7 +15818,7 @@ function propsPoly(mb, r, rng, i, th) {
     let t = 0; while (t < L - 1.5) { const seg = Math.min(L - t, 3 + rng() * 3.5); if (seg > 1.6 && used < per * .5 && rng() < .55) { const d = W.th / 2 + .05, p0 = [a[0] + ux * t + nx * d, a[1] + uz * t + nz * d], p1 = [a[0] + ux * (t + seg) + nx * d, a[1] + uz * (t + seg) + nz * d]; wallRun(mb, p0, p1, { h: W.h[0] + rng() * (W.h[1] - W.h[0]), th: W.th, col: W.col, windows: seg > 3.6 && rng() < .5 ? 1 : 0, sill: .95, lintel: rng() < .5, moss: W.moss, var: .1 }, rng); used += seg; } t += seg + .9 + rng() * 1.6; }
   }
   for (let k = 0; k < P.length; k++) if (rng() < .5) { const a = P[k], d = [c[0] - a[0], c[1] - a[1]], l = Math.hypot(d[0], d[1]) || 1; if (th.pillar) th.pillar(mb, a[0] + d[0] / l * .7, a[1] + d[1] / l * .7, rng); }
-  const n = Math.max(2, Math.min(9, Math.round(area / 15))); let placed = 0;
+  const n = Math.max(1, Math.min(3, Math.round(area / 30))); let placed = 0;
   for (let tries = 0; tries < 80 && placed < n; tries++) { const bb = r, x = bb.x + rng() * bb.w, z = bb.y + rng() * bb.h; if (!inPoly(x, z, P) || edgeD(x, z, P) < 1.3) continue; th.clutter(mb, x, z, rng, placed++); }
 }
 
@@ -16006,19 +16018,18 @@ function buildMap(spec) {
   for (let i = 0; i <= nx; i++) for (let j = 0; j <= nz; j++) { const x = x0 + i * step, z = z0 + j * step, h = H(x, z), e = .3, dx = (H(x + e, z) - H(x - e, z)) / (2 * e), dz = (H(x, z + e) - H(x, z - e)) / (2 * e), n = v3.norm([-dx, 1, -dz]); { const g0 = th.ground(x, z, h, fbm(x * .22 + sd, z * .22)), w = fbm(x * .06 + sd + 40, z * .06 + 7) - .5, d = fbm(x * .5 + sd, z * .5) - .5, k = 1 + d * .22; const od = 1 - .62 * sstep(0, 7, outD(x, z)); solid.vtx([x, h, z], n, [clamp(g0[0] * (1 + w * .7) * k * od, 0, 1), clamp(g0[1] * k * od, 0, 1), clamp(g0[2] * (1 - w * .7) * k * od, 0, 1)], [.9, 0]); } }
   for (let i = 0; i < nx; i++) for (let j = 0; j < nz; j++) { const a = base + idx(i, j), b = base + idx(i + 1, j), c = base + idx(i + 1, j + 1), d = base + idx(i, j + 1); solid.I.push(a, d, c, a, c, b); }
   const tv0 = solid.n;
-  rects.forEach((r, i) => { const rr = mulberry(seed * 101 + i * 17 + th.seed); if (r.poly) propsPoly(solid, r, rr, i, th.poly); else if (r.cat && r.cat !== 'dense') propsLow(solid, r, rr, i); else th.props(solid, r, rr, i); });
+  rects.forEach((r, i) => { const rr = mulberry(seed * 101 + i * 17 + th.seed); if (r.poly && r.cat === 'light') propsLowPoly(solid, r, rr, th.poly); else if (r.poly) propsPoly(solid, r, rr, i, th.poly); else if (r.cat && r.cat !== 'dense') propsLow(solid, r, rr, i); else th.props(solid, r, rr, i); });
   { const warm = !(spec.theme === 'desert' || spec.theme === 'forge'), tn = warm ? [1.14, 1.02, .84] : [.86, .98, 1.16]; for (let v = tv0; v < solid.n; v++) for (let k = 0; k < 3; k++) solid.C[v * 3 + k] = Math.min(1, solid.C[v * 3 + k] * tn[k]); }
-  th.scatter(solid, mulberry(seed * 13 + th.seed), ok, H);
-  dressing(solid, decal, mulberry(seed * 29 + th.seed), ok, H, th, spec.theme);
+  /* no random open-ground scatter or dressing: the table shows only the layout's own terrain */
   surround(solid, decal, mulberry(seed * 53 + th.seed), H, spec.theme, th);
   const floodT = spec.theme === 'base' || spec.theme === 'hive', floods = [];
   if (floodT) {
     const fr = mulberry(seed * 71 + th.seed), IRN = [.06, .06, .07];
     OB.slice(0, 5).forEach((o, k) => { const a = k * 1.9 + fr() * .5, fx = o.x + Math.cos(a) * (OR + .9), fz = o.y + Math.sin(a) * (OR + .9), y = H(fx, fz); if (fx < 1 || fz < 1 || fx > BW - 1 || fz > BH - 1) return; tube(solid, [fx, y, fz], [fx, y + 3.6, fz], .1, .08, 6, IRN, [.6, 0]); box(solid, fx, y + 3.7, fz, .7, .3, .45, a, [1, .78, .4], [.2, 1], 0, fr); floods.push({ x: fx - Math.cos(a) * .6, y: y + 3.2, z: fz - Math.sin(a) * .6, r: 17, c: [2.3, 1.2, .45] }); ground(decal, o.x, o.y, OR + 1.2, OR + 1.2, 28, [1, .7, .3], [.07, 0], .069, H, fr, .1); });
-    for (let i = 0; i < 9; i++) { const px = 3 + fr() * (BW - 6), pz = 3 + fr() * (BH - 6); if (!ok(px, pz, 2)) continue; const red = pz < BH / 2; ground(solid, px, pz, 1 + fr() * 1.4, .7 + fr() * .9, 16, [.012, .02, .035], [6, 0], .067, H, fr, .3); ground(decal, px, pz, .55, .4, 12, red ? [.9, .2, .15] : [.2, .45, 1], [.16, 0], .068, H, fr, .3); }
-    for (let i = 0; i < 7; i++) { const px = 3 + fr() * (BW - 6), pz = 3 + fr() * (BH - 6); if (ok(px, pz, 2)) ground(decal, px, pz, .9 + fr() * .8, .7 + fr() * .6, 14, [.01, .01, .014], [.5, 0], .066, H, fr, .4); }
+    for (let i = 0; i < 0; i++) { const px = 3 + fr() * (BW - 6), pz = 3 + fr() * (BH - 6); if (!ok(px, pz, 2)) continue; const red = pz < BH / 2; ground(solid, px, pz, 1 + fr() * 1.4, .7 + fr() * .9, 16, [.012, .02, .035], [6, 0], .067, H, fr, .3); ground(decal, px, pz, .55, .4, 12, red ? [.9, .2, .15] : [.2, .45, 1], [.16, 0], .068, H, fr, .3); }
+    for (let i = 0; i < 0; i++) { const px = 3 + fr() * (BW - 6), pz = 3 + fr() * (BH - 6); if (ok(px, pz, 2)) ground(decal, px, pz, .9 + fr() * .8, .7 + fr() * .6, 14, [.01, .01, .014], [.5, 0], .066, H, fr, .4); }
   }
-  const chaosOn = spec.chaos !== false && localStorage.getItem('bd.chaos') !== '0', lights = floods.concat(chaosOn ? chaosDetail(solid, decal, mulberry(seed * 37 + th.seed), ok, H, spec.theme) : []);
+  const chaosOn = spec.chaos !== false && localStorage.getItem('bd.chaos') === '1', lights = floods.concat(chaosOn ? chaosDetail(solid, decal, mulberry(seed * 37 + th.seed), ok, H, spec.theme) : []);
   /* what kind of cover each footprint is: heavy ruins read cold and pale, light cover reads warm and dark */
   rects.forEach((r, i) => { if (r.poly) return; const rr = mulberry(seed * 211 + i * 7 + th.seed), ex = [[r.x - .6, r.y - .6, r.w + 1.2, .9], [r.x - .6, r.y + r.h - .3, r.w + 1.2, .9], [r.x - .6, r.y - .6, .9, r.h + 1.2], [r.x + r.w - .3, r.y - .6, .9, r.h + 1.2]]; for (const [x, z, w, d] of ex) decal.quad([x, .066, z], [x, .066, z + d], [x + w, .066, z + d], [x + w, .066, z], [.01, .01, .01], [.32, 0]); for (let k = 0; k < 4; k++) { const x = r.x + rr() * r.w, z = rr() < .5 ? r.y - .3 : r.y + r.h + .3; rubbleAt(solid, rr, H, x, z, (th.poly && th.poly.wall && th.poly.wall.col) || [.3, .3, .3], .5 + rr() * .5); } });
   rects.forEach(r => { if (r.poly) return; const heavy = (r.walls || []).length >= 2, c = heavy ? [.56, .53, .47] : [.2, .16, .1]; decal.quad([r.x, .068, r.y], [r.x, .068, r.y + r.h], [r.x + r.w, .068, r.y + r.h], [r.x + r.w, .068, r.y], c, [heavy ? .22 : .3, 0]); });
@@ -16031,7 +16042,6 @@ function buildMap(spec) {
     if (o.poly) { ring(o.poly); } else { const pts = []; for (let k = 0; k < 48; k++) pts.push([o.x + Math.cos(k / 48 * 6.283) * OR, o.y + Math.sin(k / 48 * 6.283) * OR]); ring(pts); ground(odec, o.x, o.y, OR, OR, 48, GOLD, [.08, 0], .085, H, rng, 0); }
     ground(odec, o.x, o.y, .5, .5, 20, GOLD, [.55, 0], .11, H, rng, 0);
   }
-  for (const d of (spec.decor || [])) ground(decal, d.x, d.y, d.r, d.kind === 'crater' ? d.r : d.r * 1.3, 18, [.02, .02, .02], [d.kind === 'crater' ? .45 : .32, 0], .065, H, rng, .35);
   return { solid, decal, zdec, odec, th: Object.assign({}, th, { env: Object.assign({}, th.env, { lights }) }), H, ok, rects };
 }
 
@@ -16436,7 +16446,7 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
   /* walls and ruin pieces fade out around any model that stands in or beside terrain, so figures never look sunk into masonry */
   function bfFades() {
     const out = [], S = (typeof mmOn === 'function' && G.mm && mmOn()) ? G.mm : null, mu = S ? mmUnit() : null;
-    const solid = TERRAIN.filter(t => t.cat !== 'exposed' && !(t.open));
+    const solid = TERRAIN.filter(t => t.cat !== 'exposed');
     for (const u of alive().concat(mu && !mu.placed ? [mu] : [])) {
       if (!u.mods || (u.elev || 0) > 0) continue;
       for (const m of u.mods) {
@@ -22513,7 +22523,7 @@ const isSimAbility = a => !!(/^(fortification|firing deck\b.*|hover|orders|vox-n
 const CORE_GAPS = [
   ['Battlefield and movement', [
     'Models are placed and measured one by one (range, engagement, objective control, cover and line of sight all go model to model), and a unit that ends its turn out of coherency loses the models that are out of it. Models are drawn at an estimated base size, because the datasheets do not list base sizes.',
-    'Terrain follows the 11th edition categories: dense features (ruins) block sight and give cover, light features (barricades) give cover but block neither sight nor movement, and exposed features block nothing and give no cover. Each feature has a height. Battlefields you generate mix all three; the fixed mission layouts use dense ruins only. Infantry, Beasts, Swarm and Mobile units walk through dense features, other units pass only those 2" high or lower; taller ones without floors can be climbed over (their height up and down counts against the move) and ones with floors and ceilings must be gone around. Infantry, Beasts, Swarm, Fly and Monster units can climb to a floor at the end of a move (the climb counts against the move; the AI does it too) and get Plunging Fire from a floor of 3" or more. Terrain areas holding light or dense features are obscuring and give cover and Hidden. Not modelled: each feature has one height and one set of floors over its whole footprint, a unit has one floor for all its models, climbing during a charge or pile-in, and the exact rule for cover between models on different floors (it was not found in the published rules; the area rule applies on every floor). Right-click a terrain feature to read its rules, or a unit to see its datasheet and current state.',
+    'Official layouts: each of the 45 Event Companion layouts has the standard 16 footprints (4 large rectangles, 2 large triangles, 4 medium rectangles, 2 long lines, 4 short lines). The layout data gives only the outlines, so this app treats the long and short lines as light terrain (barricades, 1" high) and the rectangles and triangles as dense ruins (5" for large, 3" for medium, with a floor at 3" in the large ones). That split is an assumption based on the published footprint sizes; the app adds no random craters, rubble or crates. Terrain follows the 11th edition categories: dense features (ruins) block sight and give cover, light features (barricades) give cover but block neither sight nor movement, and exposed features block nothing and give no cover. Each feature has a height. Battlefields you generate mix all three; the fixed mission layouts use dense ruins only. Infantry, Beasts, Swarm and Mobile units walk through dense features, other units pass only those 2" high or lower; taller ones without floors can be climbed over (their height up and down counts against the move) and ones with floors and ceilings must be gone around. Infantry, Beasts, Swarm, Fly and Monster units can climb to a floor at the end of a move (the climb counts against the move; the AI does it too) and get Plunging Fire from a floor of 3" or more. Terrain areas holding light or dense features are obscuring and give cover and Hidden. Not modelled: each feature has one height and one set of floors over its whole footprint, a unit has one floor for all its models, climbing during a charge or pile-in, and the exact rule for cover between models on different floors (it was not found in the published rules; the area rule applies on every floor). Right-click a terrain feature to read its rules, or a unit to see its datasheet and current state.',
     'Movement is blocked by enemy units and by tall dense terrain; units moving through friendly units, and moving up and down the surface of terrain, are not tracked.',
     'Line of sight is traced from token centre to token centre.',
     'Pile-in and consolidation: you move the models yourself, while the AI moves its units automatically. Overrun fights, engaging consolidation and objective consolidation are simulated.',
