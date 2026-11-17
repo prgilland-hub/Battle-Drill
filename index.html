@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.16-0514';
+  const VERSION = '2026.11.17-1801';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -692,6 +692,7 @@ input[type=checkbox]{accent-color:var(--brass);width:17px;height:17px}
 .terrain{fill:var(--ruin);stroke:var(--ruin-edge);stroke-width:.15}
 .terrain.light{opacity:.7;stroke-dasharray:.6 .3}
 .terrain.exposed{opacity:.4;stroke-dasharray:.3 .5}
+.ruin-wall{stroke:var(--ruin-edge);stroke-width:.5;stroke-linecap:butt;opacity:.95;pointer-events:none}.ruin-wall.low{stroke-dasharray:.6 .4;opacity:.7}
 .terr-lab{font-size:.9px;fill:var(--ruin-edge);opacity:.8;pointer-events:none}
 .wall{stroke:var(--ruin-edge);stroke-width:.55;stroke-linecap:round}
 .obj-ring{fill:none;stroke:var(--muted);stroke-width:.14;stroke-dasharray:.55 .35}
@@ -3056,7 +3057,7 @@ function layoutDep(L, playerRed) {
   /* Footprint sizes in the standard layouts: large rectangles 7x11.5, large triangles 8x11.5, medium rectangles 6x4, long lines 10x2.5, short lines 6x2. Lines are filled with barricades (light); the larger footprints hold ruins (dense). */
   const polyWidth = P => { let w = 1e9; for (let k = 0; k < P.length; k++) { const a = P[k], b = P[(k + 1) % P.length], l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, nx = -(b[1] - a[1]) / l, ny = (b[0] - a[0]) / l; let lo = 1e9, hi = -1e9; for (const q of P) { const d = q[0] * nx + q[1] * ny; lo = Math.min(lo, d); hi = Math.max(hi, d); } w = Math.min(w, hi - lo); } return w; };
   const polyArea0 = P => { let a = 0; for (let k = 0; k < P.length; k++) { const q = P[(k + 1) % P.length]; a += P[k][0] * q[1] - q[0] * P[k][1]; } return Math.abs(a) / 2; };
-  const terr = L.t.map(P => { const b = polyBox(P), c = polyCentroid(P), wd = polyWidth(P), ar = polyArea0(P), line = wd <= 3.2, big = ar >= 50; return { x: b.x, y: b.y, w: b.w, h: b.h, poly: P, cx: c.x, cy: c.y, open: true, cat: line ? 'light' : 'dense', ht: line ? 1 : big ? 5 : 3, floors: !line && big ? [3] : [], fp: line ? (ar > 18 ? 'long line' : 'short line') : big ? (P.length > 4 ? 'large triangle' : 'large rectangle') : 'medium rectangle' }; });
+  const terr = L.t.map((P, ti) => { const b = polyBox(P), c = polyCentroid(P), wd = polyWidth(P), ar = polyArea0(P), line = wd <= 3.2, big = ar >= 50; return { wseg: line ? null : ruinWalls(P, Math.round(ar * 131 + wd * 977 + P.length * 31), big), x: b.x, y: b.y, w: b.w, h: b.h, poly: P, cx: c.x, cy: c.y, open: true, cat: line ? 'light' : 'dense', ht: line ? 1 : big ? 5 : 3, floors: !line && big ? [3] : [], fp: line ? (ar > 18 ? 'long line' : 'short line') : big ? (P.length > 4 ? 'large triangle' : 'large rectangle') : 'medium rectangle' }; });
   const homeRed = L.o.find(o => o[0] === 'home_red'), homeBlue = L.o.find(o => o[0] === 'home_blue');
   const cen = L.o.filter(o => o[0] === 'central'), exp = L.o.filter(o => o[0] === 'exp');
   const mk = (o, name, kind) => ({ x: o[1], y: o[2], name, kind, terr: o[3], poly: terr[o[3]].poly, R: Math.max(1, distEdges(o[1], o[2], terr[o[3]].poly)) });
@@ -3161,6 +3162,47 @@ const objIn = (u, o) => { const ms = (MODELS.on && isUnitObj(u)) ? modelsOf(u) :
 const inRect = (p, t) => t.poly ? ptInPoly(p.x, p.y, t.poly) : p.x >= t.x && p.x <= t.x + t.w && p.y >= t.y && p.y <= t.y + t.h;
 const cvKw = u => has(u, 'infantry') || has(u, 'beast') || has(u, 'beasts') || has(u, 'swarm');
 const terrCat = t => t.cat || 'dense';
+/* ---- ruin walls (13.06): a dense footprint holds wall sections with gaps between them. Models other than INFANTRY/BEASTS/SWARM/MOBILE cross a wall only where it is 2" or lower, or by climbing; the same walls are drawn in 2D and 3D ---- */
+function ruinWalls(P, seed, big) {
+  const rng = (a => () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; })(seed), out = []; let gaps = 0; const cand = [];
+  for (let k = 0; k < P.length; k++) {
+    const a = P[k], b = P[(k + 1) % P.length], L = Math.hypot(b[0] - a[0], b[1] - a[1]); if (L < 2.4) continue;
+    const ux = (b[0] - a[0]) / L, uy = (b[1] - a[1]) / L; let nx = -uy, ny = ux; if (!ptInPoly(a[0] + ux * L / 2 + nx * .3, a[1] + uy * L / 2 + ny * .3, P)) { nx = -nx; ny = -ny; }
+    const d = .35; let t = rng() * 1.2;
+    while (t < L - 1.2) {
+      const wl = Math.min(L - t, 3 + rng() * 3.5); if (wl > 1.6) {
+        const h = rng() < .18 ? 1.8 : big ? 3.5 + rng() * 1.5 : 3 + rng() * .4, w = { a: [a[0] + ux * t + nx * d, a[1] + uy * t + ny * d], b: [a[0] + ux * (t + wl) + nx * d, a[1] + uy * (t + wl) + ny * d], h: +h.toFixed(1), win: wl > 3.6 && rng() < .5 };
+        out.push(w); cand.push({ w, wl });
+      }
+      const gap = 2.6 + rng() * 2.4; if (gap >= 3.6) gaps++; t += wl + gap;
+    }
+  }
+  /* every ruin keeps at least two openings a vehicle can use: open up the longest walls if the dice left it closed */
+  cand.sort((x, y) => y.wl - x.wl); let i = 0; while (gaps < 2 && i < cand.length) { const k = out.indexOf(cand[i++].w); if (k >= 0) { out.splice(k, 1); gaps++; } }
+  return out;
+}
+function segSegDist(ax, ay, bx, by, cx, cy, dx, dy) {
+  const o = (px, py, qx, qy, rx, ry) => (qx - px) * (ry - py) - (qy - py) * (rx - px);
+  const d1 = o(ax, ay, bx, by, cx, cy), d2 = o(ax, ay, bx, by, dx, dy), d3 = o(cx, cy, dx, dy, ax, ay), d4 = o(cx, cy, dx, dy, bx, by);
+  if (((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))) return 0;
+  return Math.min(segCircleDist(ax, ay, bx, by, cx, cy), segCircleDist(ax, ay, bx, by, dx, dy), segCircleDist(cx, cy, dx, dy, ax, ay), segCircleDist(cx, cy, dx, dy, bx, by));
+}
+/* a base of radius r moving along (x1,y1)-(x2,y2) touches a wall section taller than 2" */
+function wallSweep(t, r, x1, y1, x2, y2) {
+  for (const w of t.wseg) {
+    if (w.h <= 2) continue;
+    const d0 = segCircleDist(w.a[0], w.a[1], w.b[0], w.b[1], x1, y1), rr = Math.min(r + .1, d0 - .02);
+    if (rr <= 0) continue;
+    if (segSegDist(x1, y1, x2, y2, w.a[0], w.a[1], w.b[0], w.b[1]) < rr) return true;
+  }
+  return false;
+}
+const wallCross = (t, x1, y1, x2, y2) => { let c = 0; for (const w of t.wseg) if (segSegDist(x1, y1, x2, y2, w.a[0], w.a[1], w.b[0], w.b[1]) === 0) c += w.h > 2 ? 2 * w.h : 0; return c; };
+/* walls are solid (13.11): no base may end overlapping one */
+function wallHit(x, y, r) {
+  for (const t of TERRAIN) { if (!t.wseg || x < t.x - r - 1 || x > t.x + t.w + r + 1 || y < t.y - r - 1 || y > t.y + t.h + r + 1) continue; for (const w of t.wseg) if (segCircleDist(w.a[0], w.a[1], w.b[0], w.b[1], x, y) < r + .15) return true; }
+  return false;
+}
 /* 11th edition terrain (13.02, 13.06): dense features block sight and, when taller than 2", block vehicles and monsters; light and exposed features block neither; only light and dense features give cover */
 const terrHt = t => t.ht != null ? t.ht : (terrCat(t) === 'dense' ? 4 : 1);
 const blocksMove = t => !t.open && terrCat(t) === 'dense' && terrHt(t) > 2;
@@ -3234,6 +3276,7 @@ function posOk(u, x, y, allowEngage) {
 }
 function posOkLegacy(u, x, y, allowEngage) {
   if (x < u.r || x > BW - u.r || y < u.r || y > BH - u.r) return false;
+  if (wallHit(x, y, u.r)) return false;
   for (const o of alive()) {
     if (o === u) continue;
     const d = Math.hypot(o.x - x, o.y - y);
@@ -3260,13 +3303,13 @@ function segClear(u, x1, y1, x2, y2, o) {
   if (abIn(u, /^scuttling walker/i)) return true;
   o = o || {};
   if (!o.skies && !o.models) for (const e of aliveSide(other(u.side))) { if (e === o.exclude || isAircraft(e) || (hasFx(u, 'walker-over') && !has(e, 'titanic'))) continue; if (segCircleDist(x1, y1, x2, y2, e.x, e.y) < e.r + u.r - 0.05) return false; }
-  if (!o.skies && !passesRuins(u)) for (const t of TERRAIN) { if (!blocksMove(t) || inRect({ x: x1, y: y1 }, t)) continue; if (segHitsRect(x1, y1, x2, y2, t) && (hardBlock(t) || inRect({ x: x2, y: y2 }, t))) return false; }
+  if (!o.skies && !passesRuins(u)) for (const t of TERRAIN) { if (t.wseg) { if (terrFloors(t).length && wallSweep(t, u.r, x1, y1, x2, y2)) return false; continue; } if (!blocksMove(t) || inRect({ x: x1, y: y1 }, t)) continue; if (segHitsRect(x1, y1, x2, y2, t) && (hardBlock(t) || inRect({ x: x2, y: y2 }, t))) return false; }
   return true;
 }
 /* climbing over a tall dense feature that has no floors or ceilings costs its height up and again down (13.06) */
 function climbEx(u, x1, y1, x2, y2, o) {
   if ((o && o.skies) || passesRuins(u) || !moveBlock) return 0;
-  let c = 0; for (const t of TERRAIN) { if (!blocksMove(t) || hardBlock(t) || inRect({ x: x1, y: y1 }, t)) continue; if (segHitsRect(x1, y1, x2, y2, t)) c += 2 * terrHt(t); }
+  let c = 0; for (const t of TERRAIN) { if (t.wseg) { if (!terrFloors(t).length) c += wallCross(t, x1, y1, x2, y2); continue; } if (!blocksMove(t) || hardBlock(t) || inRect({ x: x1, y: y1 }, t)) continue; if (segHitsRect(x1, y1, x2, y2, t)) c += 2 * terrHt(t); }
   return c;
 }
 /* shortest route: straight, or around the obstacles through their corners; null when there is none */
@@ -3282,6 +3325,18 @@ function pathTo(u, x, y, o) {
     for (const f of [1.2, 1.7]) for (let k = 0; k < 16; k++) { const a = k * Math.PI / 8, rr = (e.r + u.r) * f + 0.5, wx = e.x + Math.cos(a) * rr, wy = e.y + Math.sin(a) * rr; if (inB(wx, wy)) nodes.push([wx, wy]); }
   }
   if (!(o && o.skies) && !passesRuins(u)) for (const t of TERRAIN) {
+    if (t.wseg) {
+      if (!near(t.x + t.w / 2, t.y + t.h / 2, Math.hypot(t.w, t.h) / 2 + u.r)) continue;
+      const m = u.r + .3;
+      const ends = []; for (const w of t.wseg) if (w.h > 2) ends.push({ p: w.a, q: w.b, w }, { p: w.b, q: w.a, w });
+      for (let i = 0; i < ends.length; i++) for (let j = i + 1; j < ends.length; j++) {
+        const A = ends[i], B = ends[j]; if (A.w === B.w) continue; const gd = Math.hypot(A.p[0] - B.p[0], A.p[1] - B.p[1]); if (gd < 2 * u.r + .6 || gd > 8) continue;
+        const mx = (A.p[0] + B.p[0]) / 2, my = (A.p[1] + B.p[1]) / 2, ex = (B.p[0] - A.p[0]) / gd, ey = (B.p[1] - A.p[1]) / gd;
+        for (const sg of [-1, 0, 1]) { const nx = mx - ey * sg * m, ny = my + ex * sg * m; if (inB(nx, ny)) nodes.push([nx, ny]); }
+      }
+      for (const w of t.wseg) { if (w.h <= 2) continue; for (const [p, q] of [[w.a, w.b], [w.b, w.a]]) { const L = Math.hypot(p[0] - q[0], p[1] - q[1]) || 1, dx = (p[0] - q[0]) / L, dy = (p[1] - q[1]) / L; for (const sg of [-1, 0, 1]) { const nx = p[0] + dx * m - dy * sg * m, ny = p[1] + dy * m + dx * sg * m; if (inB(nx, ny)) nodes.push([nx, ny]); } } }
+      continue;
+    }
     if (!blocksMove(t)) continue;
     if (!near(t.x + t.w / 2, t.y + t.h / 2, Math.hypot(t.w, t.h) / 2)) continue;
     for (const mg of [u.r + 0.5, u.r + 1.5]) for (const c of [[t.x - mg, t.y - mg], [t.x + t.w + mg, t.y - mg], [t.x - mg, t.y + t.h + mg], [t.x + t.w + mg, t.y + t.h + mg]]) if (inB(c[0], c[1])) nodes.push(c);
@@ -7940,7 +7995,7 @@ function renderBoard() {
   if (zp.pts) s.push(`<text class="zone-t" x="${za.cx0.toFixed(1)}" y="${(za.cy0 - 1).toFixed(1)}" text-anchor="middle" font-size="1.2">AI deployment zone</text><text class="zone-t" x="${zp.cx0.toFixed(1)}" y="${(zp.cy0 + 1).toFixed(1)}" text-anchor="middle" font-size="1.2">Your deployment zone</text>`);
   else s.push(`<text class="zone-t" x="${za.x + 1}" y="${za.y + 1.8}" font-size="1.2">AI deployment zone</text><text class="zone-t" x="${zp.x + 1}" y="${zp.y + zp.h - 1}" font-size="1.2">Your deployment zone</text>`);
   for (const t of TERRAIN) {
-    if (t.poly) { const pts = t.poly.map(p => p[0] + ',' + p[1]).join(' '); s.push(`<polygon class="terrain" points="${pts}" stroke-linejoin="round"/><polygon points="${pts}" fill="url(#hatch)" opacity=".5"/>`); continue; }
+    if (t.poly) { const pts = t.poly.map(p => p[0] + ',' + p[1]).join(' '); s.push(`<polygon class="terrain ${terrCat(t)}" points="${pts}" stroke-linejoin="round"/><polygon points="${pts}" fill="url(#hatch)" opacity="${terrCat(t) === 'dense' ? .5 : .22}"/>`); for (const w of (t.wseg || [])) s.push(`<line class="ruin-wall${w.h <= 2 ? ' low' : ''}" x1="${w.a[0].toFixed(2)}" y1="${w.a[1].toFixed(2)}" x2="${w.b[0].toFixed(2)}" y2="${w.b[1].toFixed(2)}"/>`); continue; }
     s.push(`<rect class="terrain ${terrCat(t)}" x="${t.x}" y="${t.y}" width="${t.w}" height="${t.h}" rx=".3"/><rect x="${t.x}" y="${t.y}" width="${t.w}" height="${t.h}" fill="url(#hatch)" opacity="${terrCat(t) === 'dense' ? .5 : .22}" rx=".3"/>`);
     if (terrCat(t) !== 'dense') s.push(`<text class="terr-lab" x="${t.x + t.w / 2}" y="${t.y + t.h / 2 + .4}" text-anchor="middle">${terrCat(t) === 'light' ? 'Light' : 'Exposed'} ${terrHt(t)}"</text>`);
     else s.push(`<text class="terr-lab" x="${t.x + t.w / 2}" y="${t.y + t.h / 2 + .4}" text-anchor="middle">Dense ${terrHt(t)}"</text>`);
@@ -11180,7 +11235,7 @@ function fitRadius(u, t, ang, gap) {
 }
 function posOkModels(u, x, y, allowEngage) {
   const ms = u.mods, dx = x - u.x, dy = y - u.y, SM = ms.map(m => shAbs(u, m, dx, dy));
-  for (const sm of SM) { const b = shapeBox(sm); if (sm.x < b.ex || sm.x > BW - b.ex || sm.y < b.ey || sm.y > BH - b.ey) return false; }
+  for (const sm of SM) { const b = shapeBox(sm); if (sm.x < b.ex || sm.x > BW - b.ex || sm.y < b.ey || sm.y > BH - b.ey) return false; if (wallHit(sm.x, sm.y, (b.ex + b.ey) / 2)) return false; }
   for (const o of alive()) {
     if (o === u) continue;
     if (Math.hypot(o.x - x, o.y - y) - o.r - u.r > ENG + 0.5) continue;
@@ -15811,7 +15866,8 @@ function propsLowPoly(mb, r, rng, th) {
 function propsPoly(mb, r, rng, i, th) {
   const P = r.poly, c = polyCen(P), area = polyArea(P), W = th.wall;
   for (let k = 0; k < P.length; k++) { const a = P[k], b = P[(k + 1) % P.length]; mb.tri([c[0], .07, c[1]], [a[0], .07, a[1]], [b[0], .07, b[1]], W.floor, [.9, 0], [c[0], -10, c[1]]); }
-  let used = 0; const per = P.reduce((s, p, k) => s + Math.hypot(P[(k + 1) % P.length][0] - p[0], P[(k + 1) % P.length][1] - p[1]), 0);
+  if (r.wseg) for (const w of r.wseg) wallRun(mb, w.a, w.b, { h: w.h, th: W.th, col: W.col, windows: w.win ? 1 : 0, sill: .95, lintel: true, moss: W.moss, var: .1 }, rng);
+  let used = r.wseg ? 1e9 : 0; const per = P.reduce((s, p, k) => s + Math.hypot(P[(k + 1) % P.length][0] - p[0], P[(k + 1) % P.length][1] - p[1]), 0);
   for (let k = 0; k < P.length; k++) {
     const a = P[k], b = P[(k + 1) % P.length], L = Math.hypot(b[0] - a[0], b[1] - a[1]); if (L < 2.4) continue;
     const ux = (b[0] - a[0]) / L, uz = (b[1] - a[1]) / L; let nx = -uz, nz = ux; if (inPoly(a[0] + ux * L / 2 + nx * .3, a[1] + uz * L / 2 + nz * .3, P) === false) { nx = -nx; nz = -nz; }
@@ -16061,7 +16117,7 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
   function specNow() {
     return {
       theme: themeKey(), seed: 1 + (hash(BF3D.tsig) % 9000),
-      terrain: TERRAIN.map(t => ({ x: t.x, y: t.y, w: t.w, h: t.h, walls: t.walls, poly: t.poly, cat: t.cat, ht: t.ht, floors: t.floors })),
+      terrain: TERRAIN.map(t => ({ x: t.x, y: t.y, w: t.w, h: t.h, walls: t.walls, poly: t.poly, cat: t.cat, ht: t.ht, floors: t.floors, wseg: t.wseg })),
       objs: OBJ.map(o => ({ x: o.x, y: o.y, poly: o.poly })), objR: typeof OBJ_R === 'number' ? OBJ_R : 3,
       zones: { player: zoneOf('player'), ai: zoneOf('ai') }, decor: (G.decor || []).map(d => ({ x: d.x, y: d.y, r: d.r, kind: d.kind }))
     };
@@ -22523,7 +22579,7 @@ const isSimAbility = a => !!(/^(fortification|firing deck\b.*|hover|orders|vox-n
 const CORE_GAPS = [
   ['Battlefield and movement', [
     'Models are placed and measured one by one (range, engagement, objective control, cover and line of sight all go model to model), and a unit that ends its turn out of coherency loses the models that are out of it. Models are drawn at an estimated base size, because the datasheets do not list base sizes.',
-    'Official layouts: each of the 45 Event Companion layouts has the standard 16 footprints (4 large rectangles, 2 large triangles, 4 medium rectangles, 2 long lines, 4 short lines). The layout data gives only the outlines, so this app treats the long and short lines as light terrain (barricades, 1" high) and the rectangles and triangles as dense ruins (5" for large, 3" for medium, with a floor at 3" in the large ones). That split is an assumption based on the published footprint sizes; the app adds no random craters, rubble or crates. Terrain follows the 11th edition categories: dense features (ruins) block sight and give cover, light features (barricades) give cover but block neither sight nor movement, and exposed features block nothing and give no cover. Each feature has a height. Battlefields you generate mix all three; the fixed mission layouts use dense ruins only. Infantry, Beasts, Swarm and Mobile units walk through dense features, other units pass only those 2" high or lower; taller ones without floors can be climbed over (their height up and down counts against the move) and ones with floors and ceilings must be gone around. Infantry, Beasts, Swarm, Fly and Monster units can climb to a floor at the end of a move (the climb counts against the move; the AI does it too) and get Plunging Fire from a floor of 3" or more. Terrain areas holding light or dense features are obscuring and give cover and Hidden. Not modelled: each feature has one height and one set of floors over its whole footprint, a unit has one floor for all its models, climbing during a charge or pile-in, and the exact rule for cover between models on different floors (it was not found in the published rules; the area rule applies on every floor). Right-click a terrain feature to read its rules, or a unit to see its datasheet and current state.',
+    'Official layouts: each of the 45 Event Companion layouts has the standard 16 footprints (4 large rectangles, 2 large triangles, 4 medium rectangles, 2 long lines, 4 short lines). The layout data gives only the outlines, so this app treats the long and short lines as light terrain (barricades, 1" high) and the rectangles and triangles as dense ruins (5" for large, 3" for medium, with a floor at 3" in the large ones). That split is an assumption based on the published footprint sizes; the app adds no random craters, rubble or crates. Each dense footprint is given wall sections with gaps (made once per layout, the same in 2D and 3D; the heights and gap positions are assumptions, with at least two vehicle-sized openings per ruin). Models other than INFANTRY, BEASTS, SWARM and MOBILE cross a wall only where it is 2\" or lower: they use a gap that fits their base or go around, and in a ruin without floors they may instead climb a wall at twice its height in movement. Walls are solid, so no base can end on one. Terrain follows the 11th edition categories: dense features (ruins) block sight and give cover, light features (barricades) give cover but block neither sight nor movement, and exposed features block nothing and give no cover. Each feature has a height. Battlefields you generate mix all three; the fixed mission layouts use dense ruins only. Infantry, Beasts, Swarm and Mobile units walk through dense features, other units pass only those 2" high or lower; taller ones without floors can be climbed over (their height up and down counts against the move) and ones with floors and ceilings must be gone around. Infantry, Beasts, Swarm, Fly and Monster units can climb to a floor at the end of a move (the climb counts against the move; the AI does it too) and get Plunging Fire from a floor of 3" or more. Terrain areas holding light or dense features are obscuring and give cover and Hidden. Not modelled: each feature has one height and one set of floors over its whole footprint, a unit has one floor for all its models, climbing during a charge or pile-in, and the exact rule for cover between models on different floors (it was not found in the published rules; the area rule applies on every floor). Right-click a terrain feature to read its rules, or a unit to see its datasheet and current state.',
     'Movement is blocked by enemy units and by tall dense terrain; units moving through friendly units, and moving up and down the surface of terrain, are not tracked.',
     'Line of sight is traced from token centre to token centre.',
     'Pile-in and consolidation: you move the models yourself, while the AI moves its units automatically. Overrun fights, engaging consolidation and objective consolidation are simulated.',
