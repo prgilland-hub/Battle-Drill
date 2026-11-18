@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.17-2025';
+  const VERSION = '2026.11.17-1933';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -3219,7 +3219,8 @@ const inTerrArea = u => inTerrAreaOf(u, coversT);
 const inCover = u => cvKw(u) && inTerrArea(u);
 /* Hidden (13.09): Infantry/Beasts/Swarm wholly in a terrain area with a dense feature, that did not make ranged attacks this turn or last turn */
 const isHidden = u => !!G && u.alive && u.placed && !u.reserve && cvKw(u) && inTerrAreaOf(u, blocksSight) && !(u.rngTurn !== undefined && u.rngTurn >= (G.turnNo || 0) - 1);
-const hiddenFrom = (a, b) => a.side !== b.side && isHidden(b) && edge(a, b) > 15;
+const detRange = b => 15 - ((typeof enhHolder === 'function' && enhHolder(b, /plagueveil/i)) ? 3 : 0) + ((G && b.detBoost === G.turnNo) ? 6 : 0);   /* Plagueveil: -3" detection range */
+const hiddenFrom = (a, b) => a.side !== b.side && isHidden(b) && edge(a, b) > detRange(b);
 const distPtSeg = (px, py, ax, ay, bx, by) => { const dx = bx - ax, dy = by - ay, L = dx * dx + dy * dy; let k = L ? ((px - ax) * dx + (py - ay) * dy) / L : 0; k = Math.max(0, Math.min(1, k)); return { d: Math.hypot(ax + k * dx - px, ay + k * dy - py), k }; };
 /* a model that is not fully visible because of intervening terrain, or because of a smoke screen, also has cover (13.08, 15.10) */
 function sightCover(a, t) {
@@ -8151,7 +8152,7 @@ function unitCard(u) {
   if (u.W > 1) bits.push(`${u.cur}/${mW(u)} wounds on current model`);
   if (u.shocked) bits.push('battle-shocked');
   if (u.placed && coverFor(u)) bits.push('in cover');
-  if (isHidden(u)) bits.push('hidden (seen only within 15")');
+  if (isHidden(u)) bits.push(`hidden (seen only within ${detRange(u)}")`);
   if (u.reserve && !u.placed) bits.push('in reserves');
   if (u.side === 'ai') bits.push(u.role === 'hold' ? 'AI role: hold objectives' : 'AI role: assault');
   const cell = (k, v) => `<div>${v}<small>${k}</small></div>`;
@@ -9262,6 +9263,7 @@ Object.assign(DET_UNIT, {
   'avatars-of-decay': dgDef('avatar', { ctx: dgCtx.shoot, pred: u => isPL(u) && u.alive && u.placed, advice: 'Select a Plague Legions unit (it does not need to be able to shoot).', apply: u => { u.avatars = G.phaseNo; }, log: u => `Enemy units within 6" of ${u.name} are Afflicted until the end of the phase.` }),
   'blooming-pestilence': dgDef('bloomf', { ctx: m => m && G.stage === 'battle', pred: u => isDGU(u) && has(u, 'terminator'), advice: 'Select a Terminator unit.', apply: u => { u.bloom = G.phaseNo; }, log: u => `${u.name} adds 3" to its Contagion Range until the end of the phase.` }),
   'plaguesurge': dgDef('surgef', { ctx: dgCtx.cmd, pred: u => isDGU(u) && !!u.warlord, advice: 'Select your Warlord (a Death Guard model) in your Command phase.', apply: u => { G.surge[u.side] = (G.turnNo || 0) + 1; }, log: u => `All your Contagion Ranges are 3" larger until your next Command phase.` }),
+  'aggravus-spasms': dgDef('aggr', { ctx: dgCtx.shoot, pred: u => isDGU(u) && has(u, 'character'), advice: 'Select a Death Guard Character unit at the start of your Shooting phase.', apply: u => { const e = aliveSide(other(u.side)).filter(x => x.placed && !x.reserve && edge(u, x) <= contRange(u)).sort((a, b) => (isHidden(b) ? 1 : 0) - (isHidden(a) ? 1 : 0) || edge(u, a) - edge(u, b))[0]; if (e) { e.detBoost = G.turnNo; log(`Aggravus Spasms: ${e.name} gains +6" detection range this turn.`, u.side); } }, log: u => `${u.name} marks the nearest enemy unit in Contagion Range: it gains +6" detection range.` }),
   'territorial-infection': dgDef('terr', { turn: true, ctx: dgCtx.cmd, pred: u => isDGU(u) && has(u, 'character'), advice: 'Select a Death Guard Character unit in your Command phase.', log: u => `${u.name} has +1 OC until the end of the turn.` }),
   'gnawing-hunger': dgDef('hunger', { turn: true, ctx: dgCtx.cmd, pred: u => isPox(u), advice: 'Select a Poxwalkers unit in your Command phase.', log: u => `${u.name} gets +1 Move and +1 Attacks and Strength on its melee weapons until the end of the turn.` }),
   'relentless-grind': dgDef('grind', { ctx: dgCtx.move, pred: u => isDGU(u) && has(u, 'vehicle') && !u.moved, advice: 'Select a Death Guard Vehicle that has not moved yet.', apply: u => { u.terrainOk = G.phaseNo; }, log: u => `${u.name} can move through terrain features this phase.` }),
@@ -16751,7 +16753,7 @@ function liveStatus(u) {
     const foes = engagedWith(u); if (foes.length) li.push(`<b>Engaged with:</b> ${foes.map(e => escH(e.name)).join(', ')}`);
     const T = TERRAIN.find(t => inRect(u, t)); if (T) li.push(`<b>Terrain:</b> in a ${TERR_RULES[terrCat(T)].name.toLowerCase()} area${elevOf(u) ? `, on the ${elevOf(u)}" floor` : ''}`);
     const ob = OBJ.filter(o => objIn(u, o)).map(o => o.name); if (ob.length) li.push(`<b>On objective:</b> ${ob.map(escH).join(', ')}`);
-    const st = [u.shocked && 'battle-shocked', coverFor(u) && 'in cover', isHidden(u) && 'hidden (seen only within 15")', u.moved && 'moved', u.advanced && 'advanced', u.fellBack && 'fell back', u.shot && 'shot', u.charged && 'charged', u.fought && 'fought', u.smoked && 'in smoke'].filter(Boolean);
+    const st = [u.shocked && 'battle-shocked', coverFor(u) && 'in cover', isHidden(u) && `hidden (seen only within ${detRange(u)}")`, u.moved && 'moved', u.advanced && 'advanced', u.fellBack && 'fell back', u.shot && 'shot', u.charged && 'charged', u.fought && 'fought', u.smoked && 'in smoke'].filter(Boolean);
     if (st.length) li.push(`<b>This turn:</b> ${st.join(', ')}`);
   }
   return `<div class="ucard ${u.side}"><h3 style="margin:0 0 4px">Right now</h3><ul style="margin:0;padding-left:18px">${li.map(x => `<li>${x}</li>`).join('')}</ul></div>`;
@@ -22680,7 +22682,7 @@ const SIM_CATS = [
 ];
 const simCat = t => { for (const [n, re] of SIM_CATS) if (re.test(t || '')) return n; return 'Other'; };
 const ENH_SIM = new RegExp('^enhancement:\\s*(' + [
-  'daemon weapon of nurgle', 'furnace of plagues', 'arch contaminator', 'revolting regeneration', 'eye of affliction', 'bilemaw blight', 'shriekworm familiar', 'tendrilous emissions', 'final ingredient', 'visions of virulence', 'needle of nurgle', 'cornucophagus', 'beckoning blight', 'fell harvester', 'entropic knell', 'tome of bounteous blessings', 'witherbone pipes', 'lord of the walking pox', 'sorrowsyphon', 'talisman of burgeoning', 'face of death', 'vile vigour', 'warprot talisman', 'helm of the fly king', 'parasitic woe-reaper', 'lancet of the worldsore', 'insectile murmuration', 'rejuvenating swarm', 'host of the hybridised pox',
+  'daemon weapon of nurgle', 'furnace of plagues', 'arch contaminator', 'revolting regeneration', 'eye of affliction', 'bilemaw blight', 'shriekworm familiar', 'tendrilous emissions', 'final ingredient', 'visions of virulence', 'needle of nurgle', 'cornucophagus', 'beckoning blight', 'fell harvester', 'entropic knell', 'tome of bounteous blessings', 'witherbone pipes', 'lord of the walking pox', 'sorrowsyphon', 'talisman of burgeoning', 'plagueveil', 'face of death', 'vile vigour', 'warprot talisman', 'helm of the fly king', 'parasitic woe-reaper', 'lancet of the worldsore', 'insectile murmuration', 'rejuvenating swarm', 'host of the hybridised pox',
   "headwoppa's killchoppa", "da boss is watchin'", "kunnin' but brutal", 'follow me ladz', 'ferocious show-off', "'ardboyz", 'tellyporta boss', 'minefield detail', 'supa-glowy fing', "targetin' squigs", 'kill kommanda', 'throat-slittas', 'supa-snazz dakka', 'glory hog', 'it came from da drops', 'mekwaaagh! mastermind', 'cybork boosta', 'dreadherder', 'competitive streak', 'flyboss', "brutal but kunnin'", 'proper killy', 'da gobshot thunderbuss', 'da krunch', "'eadbanger", 'saintly example', 'through suffering, strength', 'chaplet of sacrifice', 'mantle of ophelia', 'psalm of righteous judgement', 'refrain of enduring faith', 'catechism of divine penitence', 'righteous rage', 'manual of saint griselda', 'fire and fury', 'iron surplice of saint istalela', 'litanies of faith', 'blade of saint ellynor', 'divine aspect', 'triptych of the macharian crusade', 'triptych of judgement', 'mark of devotion', 'eyes of the oracle', 'symphonic payload', 'writ of compunction', 'perfervid haste', 'nether-realm casket', 'phasal subjugator', 'enaegic dermal bond', 'stalker', 'chameleonic', 'adaptive biology', 'synaptoprescience', 'relentless hunger', 'destroyer ankh', 'murdermind', 'ominous presence', 'osteoclave fulcrum', 'enlivened sentinels', 'gauntlet of compression', 'tools of dominion', 'destabilising predation', 'miniaturised nebuloscope', 'mark of the nekrosor', 'arisen tyrant', 'monstrous nemesis', 'elevated might', 'ocular adaptation', 'power of the hive mind', 'synaptic control', 'the dirgeheart of kharis', 'cursed circlet', 'deepening madness', 'eternal conqueror', 'unflinching will', 'incendiary animus', 'oathbound exemplar', 'merciless denunciation', 'zealous vanguard', 'imperialis of the eternal crusade', 'consecrating aura', 'orb of the emperor.s aegis', 'paragon of fury', 'battle-psalm precentor', 'servo-host augury', 'benediction of fury', 'guiding omens', 'artificer armour', 'the honour vehement', 'adept of the codex', 'fire discipline', 'indomitable fury', 'fleet commander', 'stoic defender', 'architect of war', 'target augury web', 'the flesh is weak', 'adept of the omnissiah', 'master of machine war', 'champion of humanity', 'war-tempered artifice', 'forged in battle', 'adamantine mantle', 'fury of the storm', 'portents of wisdom', 'feinting withdrawal', 'hunter.s instincts', 'the blade driven deep', 'ghostweave cloak', 'execute and redeploy', 'shadow war veteran', 'the imperium.s sword', 'fear made manifest', 'rites of war', 'iron resolve', 'eye of the primarch', 'hero of the chapter', 'blades of valour', 'bombast omnivox', 'laurels of thunder', 'veteran of the vanguard', 'honour indefatigable', 'spy-skull data link', 'castellum omnivox', 'liberator', 'tip of the spear', 'shock deployment', 'armoured commander', 'redoubtable machine spirit', 'gunnery honours', 'firestorm coordinators', 'astartes tank ace', 'orksbane', 'bellicose weapon spirits', 'raptorial cogitator core', 'shroud field', 'fusillade',
   'regenerating monstrosity', 'instinctive defence', 'biophagic flow', 'parasitic biomorphology'].join('|') + ')', 'i');
 const NA_AB = /^(travelling players|enslaved star god|shadow assignment|authority of the inquisition|flip belt|embarking|one shot)$/i;
