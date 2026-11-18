@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.17-2016';
+  const VERSION = '2026.11.18-0124';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -15650,7 +15650,7 @@ const FS = `#version 300 es
 precision highp float; precision highp sampler2DShadow;
 in vec3 vW, vN, vC; in vec2 vM; in vec4 vL; out vec4 o;
 uniform float uFadeOn; uniform int uFN; uniform vec4 uFd[40];
-uniform sampler2DShadow uSh; uniform vec3 uSun, uSunC, uAmbT, uAmbB, uFog, uCam, uSky; uniform float uFogD, uShadow, uTexel, uDust; uniform vec2 uRes; uniform int uLN; uniform vec4 uLP[12]; uniform vec3 uLC[12];
+uniform sampler2DShadow uSh; uniform vec3 uSun, uSunC, uAmbT, uAmbB, uFog, uCam, uSky; uniform float uFogD, uShadow, uTexel, uDust, uQ; uniform vec2 uRes; uniform int uLN; uniform vec4 uLP[12]; uniform vec3 uLC[12];
 float h31(vec3 p){ p=fract(p*.3183099+.1); p*=17.; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }
 float vn(vec3 x){ vec3 i=floor(x), f=fract(x); f=f*f*(3.-2.*f); return mix(mix(mix(h31(i),h31(i+vec3(1,0,0)),f.x),mix(h31(i+vec3(0,1,0)),h31(i+vec3(1,1,0)),f.x),f.y),mix(mix(h31(i+vec3(0,0,1)),h31(i+vec3(1,0,1)),f.x),mix(h31(i+vec3(0,1,1)),h31(i+vec3(1,1,1)),f.x),f.y),f.z); }
 void main(){
@@ -15670,10 +15670,11 @@ void main(){
   float low=1.-smoothstep(0.,1.6,vW.y);
   c=mix(c,c*vec3(1.1,1.04,.92)+uDust*.05,low*(1.-abs(n.y))*uDust*.5);
   float ndl=max(dot(n,uSun),0.);
+  if(uQ>.5) ndl=mix(ndl,max((dot(n,uSun)+.3)/1.3,0.),.45);
   float sh=1.;
-  if(uShadow>.5){ vec3 p=vL.xyz/vL.w*.5+.5; float b=.0022; sh=0.;
-    for(int x=-1;x<=1;x++) for(int y=-1;y<=1;y++) sh+=texture(uSh,vec3(p.xy+vec2(x,y)*uTexel,p.z-b));
-    sh/=9.; if(p.x<0.||p.x>1.||p.y<0.||p.y>1.) sh=1.; }
+  if(uShadow>.5){ vec3 p=vL.xyz/vL.w*.5+.5; float b=.0022; sh=0.; int r=uQ>1.5?2:(uQ>.5?1:0); float cnt=0.;
+    for(int x=-2;x<=2;x++) for(int y=-2;y<=2;y++){ if(abs(x)>r||abs(y)>r) continue; sh+=texture(uSh,vec3(p.xy+vec2(x,y)*uTexel*(r==2?1.15:1.),p.z-b)); cnt+=1.; }
+    sh/=cnt; if(p.x<0.||p.x>1.||p.y<0.||p.y>1.) sh=1.; }
   vec3 vd0=normalize(uCam-vW);
   vec3 amb=mix(uAmbB,uAmbT,n.y*.5+.5);
   float ao=mix(.62,1.,smoothstep(0.,1.4,vW.y)); ao=mix(1.,ao,1.-abs(n.y)*.6);
@@ -15686,7 +15687,7 @@ void main(){
   float hz=exp(-max(vW.y,0.)*.6)*clamp((d-16.)*.011,0.,.4); col=mix(col,uFog,hz);
   col=mix(col,uFog,clamp(f,0.,1.));
   float ed=max(abs(vW.x-30.)/88.,abs(vW.z-22.)/80.); col=mix(col,uFog,smoothstep(.78,1.15,ed));
-  vec3 vd=normalize(uCam-vW); float rim=pow(1.-max(dot(n,vd),0.),3.)*(1.-abs(n.y))*smoothstep(.0,.7,vW.y+.3); col+=vec3(.05,.12,.26)*rim*(.35+.65*(1.-ndl));
+  vec3 vd=normalize(uCam-vW); float rim=pow(1.-max(dot(n,vd),0.),3.)*(1.-abs(n.y))*smoothstep(.0,.7,vW.y+.3); col+=vec3(.05,.12,.26)*rim*(.35+.65*(1.-ndl)); if(uQ>1.5) col+=uAmbT*c*pow(1.-max(dot(n,vd),0.),4.)*.5*(.4+.6*n.y);
   col=max(col-.018,0.)*1.05;
   col=col/(1.+col*.55); col=pow(col,vec3(1./2.2));
   col=mix(col,col*col*(3.-2.*col),.38);
@@ -15797,7 +15798,7 @@ class Renderer {
     const mp = this.main; gl.useProgram(mp.p); const U = mp.U;
     gl.uniformMatrix4fv(U.uVP, false, VP); gl.uniformMatrix4fv(U.uLVP, false, LVP);
     gl.uniform3fv(U.uSun, sd); gl.uniform3fv(U.uSunC, env.sunC.map(v => v * 1.18)); gl.uniform3fv(U.uAmbT, env.ambT.map(v => v * .5)); gl.uniform3fv(U.uAmbB, env.ambB.map(v => v * .5)); gl.uniform2f(U.uRes, W, H); gl.uniform3fv(U.uFog, env.fog); gl.uniform3fv(U.uCam, eye); gl.uniform3fv(U.uSky, env.fog);
-    gl.uniform1f(U.uFogD, env.fogD); gl.uniform1f(U.uShadow, this.q.shadowOn ? 1 : 0); gl.uniform1f(U.uTexel, 1 / this.q.shadow); gl.uniform1f(U.uDust, env.dust || 0);
+    gl.uniform1f(U.uFogD, env.fogD); gl.uniform1f(U.uShadow, this.q.shadowOn ? 1 : 0); gl.uniform1f(U.uTexel, 1 / this.q.shadow); gl.uniform1f(U.uDust, env.dust || 0); gl.uniform1f(U.uQ, this.q.level == null ? 1 : this.q.level);
     { const Ls = (env.lights || []).slice(0, 12), lp = new Float32Array(48), lc = new Float32Array(36); Ls.forEach((l, i) => { lp.set([l.x, l.y, l.z, l.r], i * 4); lc.set(l.c, i * 3); }); gl.uniform1i(U.uLN, Ls.length); if (Ls.length) { gl.uniform4fv(U['uLP[0]'], lp); gl.uniform3fv(U['uLC[0]'], lc); } }
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.shTex); gl.uniform1i(U.uSh, 0);
     { const fd = this.fades || [], n = Math.min(40, fd.length / 4 | 0), arr = new Float32Array(160); arr.set(fd.slice(0, n * 4)); gl.uniform1i(U.uFN, n); if (U['uFd[0]']) gl.uniform4fv(U['uFd[0]'], arr); }
@@ -16241,6 +16242,9 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
     BF3D.fit = top => { const cv = BF3D.R && BF3D.R.cv, asp = cv && cv.clientHeight > 50 ? cv.clientWidth / cv.clientHeight : 1.6; return Math.max(66 / (.753 * asp), top ? 60 : 51); };
     const R = BF3D.R, cam = BF3D.cam = new BFX.Cam(); cam.dist = BF3D.fit(); cam.pitch = .95; cam.target = [30, 0, 24];
     if (/Mobi|Android|iPad|iPhone/.test(navigator.userAgent) || (navigator.hardwareConcurrency || 8) <= 4) { R.q.shadow = 1024; R.q.dpr = 1; R.makeShadow(); }
+    { const R2 = BF3D.R, weak = /Mobi|Android|iPad|iPhone/.test(navigator.userAgent) || (navigator.hardwareConcurrency || 8) <= 4; let sv = 'auto'; try { sv = localStorage.getItem('bd.q') || 'auto'; } catch (e) { }
+      R2.q.auto = sv === 'auto'; let lv = sv === 'low' ? 0 : sv === 'high' ? 2 : sv === 'std' ? 1 : (weak ? 0 : 1); if (sv === 'auto') { try { const k = localStorage.getItem('bd.lv'); if (k !== null && !weak) lv = Math.max(0, Math.min(2, +k || 0)); } catch (e) { } }
+      gfxLevel(R2, lv); }
     const ptr = new Map(); let gesture = null;
     /* screen point -> board point (the ray meets the table at height 0) */
     const boardPt = e => {
@@ -16351,14 +16355,15 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
     addEventListener('blur', () => keys.clear());
     /* controls */
     const bar = document.createElement('div'); bar.id = 'b-3dbar'; bar.hidden = true;
-    bar.innerHTML = '<button type="button" id="b-3dmore" aria-expanded="false" title="3D view options and controls">View options \u25BE</button><div id="b-3dpanel"><select id="b-3dtheme" aria-label="Terrain theme"><option value="auto">Theme: auto</option><option value="desert">Desert ruins</option><option value="base">Hive base</option><option value="marsh">Rot marsh</option><option value="ice">Frozen hive</option><option value="forge">Forge world</option><option value="jungle">Death world</option><option value="hive">Hive city</option></select><button type="button" data-o="zones" aria-pressed="true" title="Show or hide the deployment zones">Zones</button><button type="button" data-o="objs" aria-pressed="true" title="Show or hide the objective markers">Objectives</button><button type="button" data-o="dice" aria-pressed="true" title="Show or hide the dice trays">Dice trays</button><button type="button" data-o="guides" aria-pressed="true" title="Show or hide the placement guides: 8 inch rings and the 6 inch edge band">Guides</button><button type="button" id="b-3dsight" aria-pressed="true" title="Show or hide sight lines, with the distance to every enemy">Sight lines</button><select id="b-3dq" aria-label="Graphics quality" title="Graphics quality"><option value="low">Quality: low</option><option value="std">Quality: standard</option><option value="high">Quality: high</option></select><button type="button" id="b-3dchk" title="List which 3D model each unit on the board matched">Model check</button><button type="button" id="b-3dtop" title="Top-down view">Top</button><button type="button" id="b-3dtab" title="Tabletop view">Table</button><span id="b-3dnote">Drag = select units · Alt-drag = turn models · right-drag = orbit · WASD move · Q/E turn view · Z/X zoom · right-click or 1 = datasheet</span></div>';
+    bar.innerHTML = '<button type="button" id="b-3dmore" aria-expanded="false" title="3D view options and controls">View options \u25BE</button><div id="b-3dpanel"><select id="b-3dtheme" aria-label="Terrain theme"><option value="auto">Theme: auto</option><option value="desert">Desert ruins</option><option value="base">Hive base</option><option value="marsh">Rot marsh</option><option value="ice">Frozen hive</option><option value="forge">Forge world</option><option value="jungle">Death world</option><option value="hive">Hive city</option></select><button type="button" data-o="zones" aria-pressed="true" title="Show or hide the deployment zones">Zones</button><button type="button" data-o="objs" aria-pressed="true" title="Show or hide the objective markers">Objectives</button><button type="button" data-o="dice" aria-pressed="true" title="Show or hide the dice trays">Dice trays</button><button type="button" data-o="guides" aria-pressed="true" title="Show or hide the placement guides: 8 inch rings and the 6 inch edge band">Guides</button><button type="button" id="b-3dsight" aria-pressed="true" title="Show or hide sight lines, with the distance to every enemy">Sight lines</button><select id="b-3dq" aria-label="Graphics quality" title="Graphics quality"><option value="low">Quality: low</option><option value="std">Quality: standard</option><option value="high">Quality: high</option><option value="auto">Quality: auto</option></select><button type="button" id="b-3dfps" title="Show frame time, resolution and draw load">Stats</button><button type="button" id="b-3dchk" title="List which 3D model each unit on the board matched">Model check</button><button type="button" id="b-3dtop" title="Top-down view">Top</button><button type="button" id="b-3dtab" title="Tabletop view">Table</button><span id="b-3dnote">Drag = select units · Alt-drag = turn models · right-drag = orbit · WASD move · Q/E turn view · Z/X zoom · right-click or 1 = datasheet</span></div>';
     bar.querySelector('#b-3dmore').addEventListener('click', () => { const o = bar.classList.toggle('open'); bar.querySelector('#b-3dmore').setAttribute('aria-expanded', String(o)); });
     holder.appendChild(bar);
     bar.querySelectorAll('[data-o]').forEach(b => b.addEventListener('click', () => { BF3D.opt[b.dataset.o] = !BF3D.opt[b.dataset.o]; try { localStorage.setItem(OPT_KEY, JSON.stringify(BF3D.opt)); } catch (e) { } applyOpts(); if (b.dataset.o === 'guides') buildGhost(); }));
     bar.querySelector('#b-3dsight').addEventListener('click', () => { const cb = document.getElementById('b-sight'); if (cb) { cb.checked = !cb.checked; cb.dispatchEvent(new Event('change')); } });
     bar.querySelector('#b-3dtheme').addEventListener('change', e => { BF3D.theme = e.target.value; BF3D.tsig = ''; sync(true); });
-    { const qs = bar.querySelector('#b-3dq'), Rn = BF3D.R, cur = () => !Rn.q.bloom && !Rn.q.ao ? 'low' : Rn.q.shadow >= 4096 ? 'high' : 'std'; qs.value = cur();
-      qs.addEventListener('change', () => { const v = qs.value, set = (k, x) => { try { localStorage.setItem(k, x); } catch (e) { } }; Rn.q.bloom = v !== 'low' && !!Rn.comp; Rn.q.ao = v !== 'low'; const sh = v === 'low' ? 1024 : v === 'high' ? 4096 : 2048; set('bd.bloom', Rn.q.bloom ? '1' : '0'); set('bd.ao', Rn.q.ao ? '1' : '0'); set('bd.shadow', String(sh)); if (sh !== Rn.q.shadow) { Rn.q.shadow = sh; Rn.makeShadow(); } BF3D.dirty = true; kick(); }); }
+    { const qs = bar.querySelector('#b-3dq'), Rn = BF3D.R; qs.value = Rn.q.auto ? 'auto' : Rn.q.level === 0 ? 'low' : Rn.q.level === 2 ? 'high' : 'std';
+      qs.addEventListener('change', () => { const v = qs.value; Rn.q.auto = v === 'auto'; try { localStorage.setItem('bd.q', v); } catch (e) { } gfxLevel(Rn, v === 'auto' ? (Rn.q.level == null ? 1 : Rn.q.level) : v === 'low' ? 0 : v === 'high' ? 2 : 1); Rn.q.fr = []; });
+      bar.querySelector('#b-3dfps').addEventListener('click', () => { BF3D.stats = !BF3D.stats; BF3D.dirty = true; kick(); }); }
     bar.querySelector('#b-3dchk').addEventListener('click', () => {
       const B = window.BDModels, L = [];
       if (!B) L.push('Model library code is not loaded.'); else {
@@ -16621,7 +16626,34 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
     }
     return out;
   }
-  function kick() { if (BF3D.raf || !BF3D.on) return; BF3D.raf = requestAnimationFrame(() => { BF3D.raf = 0; if (!BF3D.on || !BF3D.map || !BF3D.dirty) return; BF3D.dirty = false; place(); try { BF3D.R.fades = bfFades(); } catch (e) { BF3D.R.fades = []; } BF3D.R.draw(BF3D.cam, BF3D.map.th.env); try { overlay(); } catch (e) { console.error(e); } }); }
+  /* graphics presets: 0 low, 1 standard, 2 high. Each sets render scale, shadow-map size, AO and bloom together; Auto moves between them from measured frame times */
+function gfxLevel(Rn, lv) {
+  const set = (k, x) => { try { localStorage.setItem(k, x); } catch (e) { } }, dpr0 = devicePixelRatio || 1;
+  Rn.q.level = lv; Rn.q.bloom = lv > 0 && !!Rn.comp; Rn.q.ao = lv > 0; Rn.q.dpr = lv === 0 ? 1 : lv === 1 ? Math.min(dpr0, 1.5) : Math.min(dpr0, 2);
+  const sh = lv === 0 ? 1024 : lv === 2 ? 4096 : 2048; set('bd.bloom', Rn.q.bloom ? '1' : '0'); set('bd.ao', Rn.q.ao ? '1' : '0'); set('bd.shadow', String(sh)); set('bd.lv', String(lv));
+  if (sh !== Rn.q.shadow) { Rn.q.shadow = sh; Rn.makeShadow(); } BF3D.dirty = true; kick();
+}
+/* frame timing: gaps between consecutive draws while the view is animating (camera moves, fades). Idle gaps over 120 ms are ignored. */
+function gfxSample(Rn, now) {
+  const q = Rn.q, last = q.lastT; q.lastT = now; if (!last || now - last > 120) return;
+  const dt = now - last; q.fr = q.fr || []; q.fr.push(dt); if (q.fr.length > 90) q.fr.shift();
+  if (!q.auto || q.fr.length < 30 || now < (q.hold || 0)) return;
+  const avg = q.fr.reduce((a, b) => a + b, 0) / q.fr.length;
+  if (avg > 26 && q.level > 0) { q.hold = now + 4000; q.fr = []; gfxLevel(Rn, q.level - 1); }
+  else if (avg < 13 && q.fr.length >= 90 && q.level < 2 && !q.noUp) { q.hold = now + 8000; q.fr = []; const was = q.level; gfxLevel(Rn, q.level + 1); q.upFrom = was; q.upAt = now; }
+  if (q.upAt && now - q.upAt < 3000 && avg > 26 && q.level > q.upFrom) q.noUp = true;
+}
+function gfxStatsEl() {
+  const R = BF3D.R; let el = document.getElementById('b-3dstats');
+  if (!BF3D.stats) { if (el) el.remove(); return; }
+  if (!el) { el = document.createElement('pre'); el.id = 'b-3dstats'; el.style.cssText = 'position:absolute;left:8px;bottom:8px;margin:0;padding:6px 9px;background:rgba(10,12,16,.78);color:#cfe;font:11px/1.4 ui-monospace,monospace;border-radius:6px;pointer-events:none;z-index:6;white-space:pre'; R.cv.parentNode.appendChild(el); if (getComputedStyle(R.cv.parentNode).position === 'static') R.cv.parentNode.style.position = 'relative'; }
+  el.textContent = gfxStatsText(R);
+}
+function gfxStatsText(Rn) {
+  const q = Rn.q, fr = q.fr || [], avg = fr.length ? fr.reduce((a, b) => a + b, 0) / fr.length : 0, mx = fr.length ? Math.max(...fr) : 0;
+  return (avg ? Math.round(1000 / avg) + ' fps \u00b7 ' + avg.toFixed(1) + ' ms (worst ' + mx.toFixed(0) + ')' : 'move the view to measure') + '\n' + Rn.cv.width + '\u00d7' + Rn.cv.height + ' \u00b7 scale ' + q.dpr.toFixed(2) + ' \u00b7 shadow ' + q.shadow + (q.ao ? ' \u00b7 AO' : '') + (q.bloom ? ' \u00b7 bloom' : '') + '\n' + ['low', 'standard', 'high'][q.level] + (q.auto ? ' (auto)' : '');
+}
+function kick() { if (BF3D.raf || !BF3D.on) return; BF3D.raf = requestAnimationFrame(() => { BF3D.raf = 0; if (!BF3D.on || !BF3D.map || !BF3D.dirty) return; BF3D.dirty = false; place(); try { BF3D.R.fades = bfFades(); } catch (e) { BF3D.R.fades = []; } BF3D.R.draw(BF3D.cam, BF3D.map.th.env); try { gfxSample(BF3D.R, performance.now()); gfxStatsEl(); } catch (e) { } try { overlay(); } catch (e) { console.error(e); } }); }
   /* ---- dice trays and rolling: the game decides every result, the table only shows it ---- */
   const TRAY = { player: { x: 30, z: BH + 7, w: 26, d: 9 }, ai: { x: 30, z: -7, w: 26, d: 9 } };
   const FELT = [.03, .1, .05], WOOD = [.14, .08, .04];
