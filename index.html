@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.17-2005';
+  const VERSION = '2026.11.17-2025';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -21871,10 +21871,10 @@ function stepContent() {
     case 0: return guide('Step 1: Choose your army', 'Pick the faction and the size of game. The points limit caps how much you can spend on units and enhancements. Most tournament games are Strike Force (2000 pts); Incursion (1000 pts) is a good size to learn with.') + `
       <div class="bld-top">
         <label>Faction<select id="bl-fac">${(() => { const all = [...new Set([...ALL_FACTIONS, ...fac])].sort(); const has = all.filter(f => libCount(f)), none = all.filter(f => !libCount(f)); const o = f => `<option value="${escH(f)}"${f === B.faction ? ' selected' : ''}>${escH(f)}${libCount(f) ? ` (${libCount(f)} datasheets)` : ''}</option>`; return (has.length ? `<optgroup label="Datasheets loaded">${has.map(o).join('')}</optgroup>` : '') + `<optgroup label="No datasheets yet">${none.map(o).join('')}</optgroup>`; })()}</select></label>
-        ${B.faction === 'Space Marines' ? `<label>Chapter<select id="bl-chap"><option value="">Any chapter (no restriction)</option>${SM_CHAPS.filter(c => c[0] !== 'Salamanders' && c[0] !== 'Black Templars').map(c => `<option${B.chapter === c[0] ? ' selected' : ''}>${c[0]}</option>`).join('')}</select></label>` : ''}
+        ${['Space Marines', 'Salamanders', 'Black Templars'].includes(B.faction) ? `<label>Chapter<select id="bl-chap">${B.faction === 'Space Marines' ? `<option value="">Any chapter (no restriction)</option>` : `<option value="">Any chapter (back to Space Marines)</option>`}${SM_CHAPS.map(c => c[0]).sort().map(c => `<option${curChapter() === c ? ' selected' : ''}>${c}</option>`).join('')}</select></label>` : ''}
         <label>Army name<input id="bl-name" value="${escH(B.name)}"></label>
       </div>
-      ${B.faction === 'Space Marines' ? `<p class="muted" style="font-size:.85rem;margin:0 0 6px">${B.chapter ? `Showing generic Space Marine datasheets and ${escH(B.chapter)} units. Detachments for other chapters are hidden.` : 'No chapter picked: every Space Marine datasheet and detachment is listed, including ones that belong to a single chapter.'}${B.chapNote ? ` <b>${escH(B.chapNote)}</b>` : ''}</p>` : ''}
+      ${['Space Marines', 'Salamanders', 'Black Templars'].includes(B.faction) ? `<p class="muted" style="font-size:.85rem;margin:0 0 6px">${curChapter() ? `Showing ${escH(curChapter())} datasheets and detachments${B.faction === 'Space Marines' ? ' plus the generic Space Marine ones' : ''}. Other chapters are hidden.` : 'No chapter picked: every Space Marine datasheet and detachment is listed, including ones that belong to a single chapter.'}${B.chapNote ? ` <b>${escH(B.chapNote)}</b>` : ''}</p>` : ''}
       <div class="det-grid">${SIZES.map(([v, n]) => `<button type="button" class="det-card${B.limit === v ? ' on' : ''}" data-size="${v}"><b>${n}</b><span>${v} points</span></button>`).join('')}
         <label class="det-card" style="cursor:default"><b>Custom</b><input id="bl-limit" type="number" min="100" step="50" value="${B.limit}" style="margin-top:4px;background:var(--raised);border:1px solid var(--line);border-radius:4px;padding:4px 6px;color:var(--ink)"></label></div>
       ${libCount(B.faction) ? `<p class="muted" style="font-size:.85rem">${libCount(B.faction)} ${escH(B.faction)} datasheets available.</p>` : noDatasheets()}`;
@@ -21969,7 +21969,9 @@ function renderBuilder() {
   const next = $('#bl-next'); if (next) next.addEventListener('click', () => { B.step = Math.min(STEPS.length - 1, B.step + 1); B.q = ''; renderBuilder(); });
   const cat = box.querySelector('.bld-cat'); if (cat) cat.scrollTop = scrollCat;
   on('.bld-cat details', 'toggle', e => { const d = e.currentTarget; if (!B.q) { d.open ? B.open.add(d.dataset.role) : B.open.delete(d.dataset.role); } });
-  const chp = $('#bl-chap'); if (chp) chp.addEventListener('change', e => { B.chapter = e.target.value; const before = B.roster.length; B.roster = B.roster.filter(r => { const l = libOf(r); return !l || chapterOk(l); }); syncDet(); B.chapNote = B.roster.length < before ? `${before - B.roster.length} unit(s) from other chapters were removed from your roster.` : ''; renderBuilder(); });
+  const chp = $('#bl-chap'); if (chp) chp.addEventListener('change', e => { const v = e.target.value;
+    if (v === 'Salamanders' || v === 'Black Templars' || B.faction !== 'Space Marines') { const own = v === 'Salamanders' || v === 'Black Templars'; B.faction = own ? v : 'Space Marines'; B.chapter = own ? '' : v; B.roster = []; B.det = null; B.dets = []; B.enh = {}; B.warlord = null; B.chapNote = ''; if (!B.nameEdited) B.name = `${B.faction} ${B.limit} pts`; renderBuilder(); refreshTheme(B.faction); return; }
+    B.chapter = v; const before = B.roster.length; B.roster = B.roster.filter(r => { const l = libOf(r); return !l || chapterOk(l); }); syncDet(); B.chapNote = B.roster.length < before ? `${before - B.roster.length} unit(s) from other chapters were removed from your roster.` : ''; renderBuilder(); });
   const fac = $('#bl-fac'); if (fac) fac.addEventListener('change', e => { B.faction = e.target.value; B.chapter = ''; B.roster = []; B.det = null; B.dets = []; B.enh = {}; B.warlord = null; if (!B.nameEdited) B.name = `${B.faction} ${B.limit} pts`; renderBuilder(); refreshTheme(B.faction); });
   const nm = $('#bl-name'); if (nm) nm.addEventListener('input', e => { B.name = e.target.value; B.nameEdited = true; });
   on('[data-size]', 'click', e => { B.limit = +e.currentTarget.dataset.size; if (!B.nameEdited) B.name = `${B.faction} ${B.limit} pts`; renderBuilder(); });
