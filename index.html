@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.18-0124';
+  const VERSION = '2026.11.18-0128';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -559,6 +559,7 @@ window.BDModels = BDModels; window.MODELIMP = MODELIMP;
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=Cinzel:wght@600;800&family=Share+Tech+Mono&family=IM+Fell+English:ital@0;1&display=swap" rel="stylesheet">
+<script>try{document.documentElement.dataset.tone=localStorage.getItem('battleDrill.tone')==='phosphor'?'phosphor':'amber'}catch(e){document.documentElement.dataset.tone='amber'}</script>
 <script>try{document.documentElement.dataset.look=localStorage.getItem('battleDrill.look')==='classic'?'classic':'cog'}catch(e){document.documentElement.dataset.look='cog'}</script>
 <style>
 :root{
@@ -1639,6 +1640,43 @@ html[data-look="cog"] .sidebar,html[data-look="cog"] .sidebar *{color:inherit}
 html[data-look="cog"] table th{font-family:var(--cg-mono);font-weight:400;letter-spacing:.08em;text-transform:uppercase;color:var(--brass)}
 html[data-look="cog"] b{color:var(--brass);font-weight:400}
 html[data-look="cog"] .muted{color:var(--muted)}
+/* ===== Cogitator amber/brass tone (default; Settings > Look > Colour switches back to green phosphor) ===== */
+.sidebar .ico-v,.cg-status,.cg-flavour{display:none}
+html[data-look="cog"][data-tone="amber"]{
+  --bg:#0b0a08 !important;--surface:#14130f !important;--raised:#1d1b15 !important;--ink:#d9ccb0 !important;--muted:#8d8470 !important;--line:#5a4726 !important;
+  --brass:#e59a24 !important;--brass-soft:rgba(229,154,36,.15) !important;--on-brass:#150e02 !important;--field:#12110d !important;--ruin:#2a251a !important;--ruin-edge:#7a6234 !important;
+  --you:#6fb8d8 !important;--them:#d9553f !important;--good:#a8c46a !important;--bad:#e0553f !important;
+  --dz-you:rgba(111,184,216,.12) !important;--dz-them:rgba(217,85,63,.12) !important;
+  --cg-glow:rgba(229,154,36,.2);--bolt:#c59b57;--bolt-d:#5b4420}
+html[data-look="cog"][data-tone="amber"] body{background:radial-gradient(ellipse at 50% -10%,rgba(229,154,36,.07),transparent 60%),#0b0a08 !important}
+html[data-look="cog"][data-tone="amber"] h1,html[data-look="cog"][data-tone="amber"] h2,html[data-look="cog"][data-tone="amber"] .sb-title{font-family:"Cinzel",Georgia,serif;font-weight:800;letter-spacing:.1em;color:#c59b57;text-shadow:0 2px 4px rgba(0,0,0,.85)}
+html[data-look="cog"][data-tone="amber"] h3,html[data-look="cog"][data-tone="amber"] h4{color:var(--brass)}
+html[data-look="cog"][data-tone="amber"] .panel,html[data-look="cog"][data-tone="amber"] .set-sec{border:1px solid #8c6d3f !important;
+  background:radial-gradient(circle,var(--bolt) 0 1.4px,var(--bolt-d) 1.6px 2.8px,transparent 3.2px) top 6px left 6px/9px 9px no-repeat,
+    radial-gradient(circle,var(--bolt) 0 1.4px,var(--bolt-d) 1.6px 2.8px,transparent 3.2px) bottom 6px right 6px/9px 9px no-repeat,
+    repeating-linear-gradient(0deg,rgba(0,0,0,.3) 0 1px,transparent 1px 3px),radial-gradient(ellipse at 50% 0%,var(--cg-glow),transparent 70%),linear-gradient(180deg,var(--raised),var(--surface)) !important;
+  box-shadow:inset 0 0 40px rgba(0,0,0,.7),0 0 12px rgba(229,154,36,.05) !important}
+html[data-look="cog"][data-tone="amber"] .btn,html[data-look="cog"][data-tone="amber"] .chip-btn{border-color:#8c6d3f;color:var(--brass)}
+html[data-look="cog"][data-tone="amber"] .btn.primary{background:linear-gradient(180deg,#b88b44,#7d5b24) !important;color:#0d0d0b;border:1px solid #e6be7a;font-family:"Cinzel",Georgia,serif;font-weight:800;letter-spacing:.08em;box-shadow:0 0 12px var(--cg-glow);position:relative}
+html[data-look="cog"][data-tone="amber"] .btn.primary:hover:not(:disabled){background:linear-gradient(180deg,#d4a355,#966e2d) !important;box-shadow:0 0 18px rgba(229,154,36,.5)}
+html[data-look="cog"][data-tone="amber"] #b-new::after{content:"";position:absolute;right:-6px;bottom:-12px;width:22px;height:22px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#c23030,#7a1c1c 60%,#4a0f0f);box-shadow:0 2px 3px rgba(0,0,0,.6),inset 0 0 0 2px rgba(0,0,0,.25);pointer-events:none}
+html[data-look="cog"][data-tone="amber"] .btn.primary .sub{color:#2a1c06}
+html[data-look="cog"][data-tone="amber"] select,html[data-look="cog"][data-tone="amber"] input,html[data-look="cog"][data-tone="amber"] textarea{background:#0b0a08 !important;color:var(--brass) !important;border:1px solid #8c6d3f !important;border-left:4px solid #c59b57 !important}
+html[data-look="cog"][data-tone="amber"] input[type=checkbox]{accent-color:#e59a24}
+html[data-look="cog"][data-tone="amber"] .sidebar{background:linear-gradient(180deg,#100f0b,#070605) !important;border-right:1px solid #5a4726 !important}
+html[data-look="cog"][data-tone="amber"] .sidebar .tabs button[aria-selected="true"]{background:rgba(197,155,87,.15) !important;border-left-color:var(--brass) !important}
+html[data-look="cog"][data-tone="amber"] .sidebar .tabs button .lbl{letter-spacing:0;font-size:.74rem}
+html[data-look="cog"][data-tone="amber"] .sb-title{font-size:.74rem;letter-spacing:.02em}
+html[data-look="cog"][data-tone="amber"] .sidebar .ico{display:none}
+html[data-look="cog"][data-tone="amber"] .sidebar .ico-v{display:inline-flex;flex:none;width:26px;height:26px;align-items:center;justify-content:center}
+html[data-look="cog"][data-tone="amber"] .sidebar .ico-v svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+html[data-look="cog"][data-tone="amber"] .sidebar .ico:has(.aquila){display:inline-block}
+html[data-look="cog"][data-tone="amber"] .cg-status{display:block;margin:0 0 10px;padding:4px 10px;border:1px solid #5a4726;border-left:3px solid var(--brass);background:rgba(0,0,0,.45);color:#9a7c47;font-size:.74rem;letter-spacing:.14em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+html[data-look="cog"][data-tone="amber"] .cg-flavour{display:block;margin:18px 0 6px;padding:8px 12px;border:1px solid #5a4726;background:rgba(0,0,0,.4);color:#9a7c47;font-size:.76rem;letter-spacing:.1em;text-align:center;text-transform:uppercase}
+.lbl[data-sub]::after,.sb-title[data-sub]::after{content:attr(data-sub);display:block;font:400 .66rem/1.1 "Share Tech Mono",monospace;letter-spacing:.06em;text-transform:none;opacity:.6;margin-top:1px}
+.sidebar .lbl[data-sub]{display:block;line-height:1.15}
+.btn .sub{display:block;font:400 .72rem/1.2 "Share Tech Mono",monospace;letter-spacing:.04em;text-transform:none;opacity:.75;margin-top:2px}
+@media (prefers-reduced-motion:no-preference){html[data-look="cog"][data-tone="amber"] .cg-status::after{content:" _";animation:cgblink 1.1s steps(1) infinite}}
 /* ===== Kill Team mode ===== */
 #kt-root{max-width:1240px;margin:0 auto}
 #kt-root .kt-sub{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}
@@ -1887,25 +1925,26 @@ html[data-look="cog"] .muted{color:var(--muted)}
 <div id="sb-backdrop" class="sb-backdrop"></div>
 <aside id="sidebar" class="sidebar" aria-label="Main menu">
   <div class="sb-top">
-    <div class="sb-brand"><span class="sb-logo" aria-hidden="true">⚔</span><span class="sb-title">Battle Drill</span></div>
+    <div class="sb-brand"><span class="sb-logo" aria-hidden="true">⚔</span><span class="sb-title" data-sub="Battle Drill">Tactical Cogitator</span></div>
     <button type="button" id="sb-toggle" class="sb-toggle" aria-label="Collapse the menu" aria-expanded="true"><span class="chev" aria-hidden="true">‹</span></button>
   </div>
   <nav class="tabs" role="tablist" aria-orientation="vertical">
-    <button role="tab" aria-selected="true" data-tab="calc"><span class="ico" aria-hidden="true">⚔️</span><span class="lbl">Combat math</span></button>
-    <button role="tab" aria-selected="false" data-tab="turn"><span class="ico" aria-hidden="true">🕒</span><span class="lbl">Turn trainer</span></button>
-    <button role="tab" aria-selected="false" data-tab="battle"><span class="ico" aria-hidden="true"><svg class="aquila" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false" viewBox="0 0 64 44" ><g fill="currentColor"><path d="M30.5 19 C27 16 25.4 12 26.4 8.6" fill="none" stroke="currentColor" stroke-width="4.6" stroke-linecap="round"/><path d="M33.5 19 C37 16 38.6 12 37.6 8.6" fill="none" stroke="currentColor" stroke-width="4.6" stroke-linecap="round"/><path d="M28.5 4.2 C26 3.2 22.6 3.8 21 6.4 C19.2 6.4 17.6 5.6 16.2 4 C16 6.6 17.2 8.4 19.2 9.4 C19.2 10 19.6 10.6 20.2 11 C21 9.8 21.8 9.6 22.8 10.2 C25 11.4 28 10.6 29.2 8.4 C30 6.8 29.8 5.2 28.5 4.2 Z"/><path d="M35.5 4.2 C38 3.2 41.4 3.8 43 6.4 C44.8 6.4 46.4 5.6 47.8 4 C48 6.6 46.8 8.4 44.8 9.4 C44.8 10 44.4 10.6 43.8 11 C43 9.8 42.2 9.6 41.2 10.2 C39 11.4 36 10.6 34.8 8.4 C34 6.8 34.2 5.2 35.5 4.2 Z"/><path d="M32 15 C35.8 15 38 18 37.6 22.5 C37.2 26.5 36.2 29.5 36.8 33 L38.6 40.5 L34.8 38.6 L32 42 L29.2 38.6 L25.4 40.5 L27.2 33 C27.8 29.5 26.8 26.5 26.4 22.5 C26 18 28.2 15 32 15 Z"/><path d="M27 18.5 C22 17 15 17.5 9 14 C6 12.5 3.5 10 2 6.5 C4 8.5 6.5 9.6 9 9.8 C7 8.4 5.8 6.2 5.5 3.6 C8 6.2 11.2 7.4 14.4 7.4 C13 6 12.4 4.2 12.6 2.2 C15.4 5 19.4 6.4 22.4 6.8 L24.6 9.8 C21 10.6 19.6 12.4 19.6 12.4 C22 12 24.4 12.8 26.4 14.4 Z"/><path d="M27 21 C22 20.4 15.5 22 9.5 20 C6 18.8 3.4 16.4 2.2 13.4 C4.4 15 7 15.6 9.4 15.4 C11.4 17.4 14.2 18.4 17 18.6 C20 18.8 24 18.8 27 19.5 Z"/><path d="M27 24 C22.4 24.4 17 26.4 11.6 25.2 C8.2 24.4 5.6 22.4 4.2 19.8 C6.6 21.2 9.2 21.6 11.6 21.2 C14.6 22.2 18 22.4 21 22 C23.4 21.8 25.4 21.4 27 21.8 Z"/><path d="M27 27 C23.6 28 19.6 30.4 15.4 29.8 C12.4 29.4 10 27.8 8.6 25.6 C10.8 26.6 13 26.8 15 26.4 C18 27 21.6 26.4 24 25.8 Z"/><g transform="translate(64 0) scale(-1 1)"><path d="M27 18.5 C22 17 15 17.5 9 14 C6 12.5 3.5 10 2 6.5 C4 8.5 6.5 9.6 9 9.8 C7 8.4 5.8 6.2 5.5 3.6 C8 6.2 11.2 7.4 14.4 7.4 C13 6 12.4 4.2 12.6 2.2 C15.4 5 19.4 6.4 22.4 6.8 L24.6 9.8 C21 10.6 19.6 12.4 19.6 12.4 C22 12 24.4 12.8 26.4 14.4 Z"/><path d="M27 21 C22 20.4 15.5 22 9.5 20 C6 18.8 3.4 16.4 2.2 13.4 C4.4 15 7 15.6 9.4 15.4 C11.4 17.4 14.2 18.4 17 18.6 C20 18.8 24 18.8 27 19.5 Z"/><path d="M27 24 C22.4 24.4 17 26.4 11.6 25.2 C8.2 24.4 5.6 22.4 4.2 19.8 C6.6 21.2 9.2 21.6 11.6 21.2 C14.6 22.2 18 22.4 21 22 C23.4 21.8 25.4 21.4 27 21.8 Z"/><path d="M27 27 C23.6 28 19.6 30.4 15.4 29.8 C12.4 29.4 10 27.8 8.6 25.6 C10.8 26.6 13 26.8 15 26.4 C18 27 21.6 26.4 24 25.8 Z"/></g></g><circle cx="32" cy="24" r="2.6" fill="var(--surface)"/><path d="M32 21.8 L32 26.2 M29.8 24 L34.2 24" stroke="currentColor" stroke-width="1.1"/></svg></span><span class="lbl">Solo battle</span></button>
-    <button role="tab" aria-selected="false" data-tab="armies"><span class="ico" aria-hidden="true">🛡️</span><span class="lbl">Armies</span></button>
-    <button role="tab" aria-selected="false" data-tab="school"><span class="ico" aria-hidden="true">🎓</span><span class="lbl">Unit School</span></button>
-    <button role="tab" aria-selected="false" data-tab="campaign"><span class="ico" aria-hidden="true">🏴</span><span class="lbl">Crusade</span></button>
-    <button role="tab" aria-selected="false" data-tab="kt"><span class="ico" aria-hidden="true">🪖</span><span class="lbl">Kill Team</span></button>
-    <button role="tab" aria-selected="false" data-tab="sim"><span class="ico" aria-hidden="true">📜</span><span class="lbl">Sim log</span></button>
+    <button role="tab" aria-selected="true" data-tab="calc"><span class="ico" aria-hidden="true">⚔️</span><span class="ico-v" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 5l14 14M19 5L5 19"/><circle cx="12" cy="12" r="2"/></svg></span><span class="lbl" data-sub="Combat math">Ballistics &amp; Attrition</span></button>
+    <button role="tab" aria-selected="false" data-tab="turn"><span class="ico" aria-hidden="true">🕒</span><span class="ico-v" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/></svg></span><span class="lbl">Turn trainer</span></button>
+    <button role="tab" aria-selected="false" data-tab="battle"><span class="ico" aria-hidden="true"><svg class="aquila" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false" viewBox="0 0 64 44" ><g fill="currentColor"><path d="M30.5 19 C27 16 25.4 12 26.4 8.6" fill="none" stroke="currentColor" stroke-width="4.6" stroke-linecap="round"/><path d="M33.5 19 C37 16 38.6 12 37.6 8.6" fill="none" stroke="currentColor" stroke-width="4.6" stroke-linecap="round"/><path d="M28.5 4.2 C26 3.2 22.6 3.8 21 6.4 C19.2 6.4 17.6 5.6 16.2 4 C16 6.6 17.2 8.4 19.2 9.4 C19.2 10 19.6 10.6 20.2 11 C21 9.8 21.8 9.6 22.8 10.2 C25 11.4 28 10.6 29.2 8.4 C30 6.8 29.8 5.2 28.5 4.2 Z"/><path d="M35.5 4.2 C38 3.2 41.4 3.8 43 6.4 C44.8 6.4 46.4 5.6 47.8 4 C48 6.6 46.8 8.4 44.8 9.4 C44.8 10 44.4 10.6 43.8 11 C43 9.8 42.2 9.6 41.2 10.2 C39 11.4 36 10.6 34.8 8.4 C34 6.8 34.2 5.2 35.5 4.2 Z"/><path d="M32 15 C35.8 15 38 18 37.6 22.5 C37.2 26.5 36.2 29.5 36.8 33 L38.6 40.5 L34.8 38.6 L32 42 L29.2 38.6 L25.4 40.5 L27.2 33 C27.8 29.5 26.8 26.5 26.4 22.5 C26 18 28.2 15 32 15 Z"/><path d="M27 18.5 C22 17 15 17.5 9 14 C6 12.5 3.5 10 2 6.5 C4 8.5 6.5 9.6 9 9.8 C7 8.4 5.8 6.2 5.5 3.6 C8 6.2 11.2 7.4 14.4 7.4 C13 6 12.4 4.2 12.6 2.2 C15.4 5 19.4 6.4 22.4 6.8 L24.6 9.8 C21 10.6 19.6 12.4 19.6 12.4 C22 12 24.4 12.8 26.4 14.4 Z"/><path d="M27 21 C22 20.4 15.5 22 9.5 20 C6 18.8 3.4 16.4 2.2 13.4 C4.4 15 7 15.6 9.4 15.4 C11.4 17.4 14.2 18.4 17 18.6 C20 18.8 24 18.8 27 19.5 Z"/><path d="M27 24 C22.4 24.4 17 26.4 11.6 25.2 C8.2 24.4 5.6 22.4 4.2 19.8 C6.6 21.2 9.2 21.6 11.6 21.2 C14.6 22.2 18 22.4 21 22 C23.4 21.8 25.4 21.4 27 21.8 Z"/><path d="M27 27 C23.6 28 19.6 30.4 15.4 29.8 C12.4 29.4 10 27.8 8.6 25.6 C10.8 26.6 13 26.8 15 26.4 C18 27 21.6 26.4 24 25.8 Z"/><g transform="translate(64 0) scale(-1 1)"><path d="M27 18.5 C22 17 15 17.5 9 14 C6 12.5 3.5 10 2 6.5 C4 8.5 6.5 9.6 9 9.8 C7 8.4 5.8 6.2 5.5 3.6 C8 6.2 11.2 7.4 14.4 7.4 C13 6 12.4 4.2 12.6 2.2 C15.4 5 19.4 6.4 22.4 6.8 L24.6 9.8 C21 10.6 19.6 12.4 19.6 12.4 C22 12 24.4 12.8 26.4 14.4 Z"/><path d="M27 21 C22 20.4 15.5 22 9.5 20 C6 18.8 3.4 16.4 2.2 13.4 C4.4 15 7 15.6 9.4 15.4 C11.4 17.4 14.2 18.4 17 18.6 C20 18.8 24 18.8 27 19.5 Z"/><path d="M27 24 C22.4 24.4 17 26.4 11.6 25.2 C8.2 24.4 5.6 22.4 4.2 19.8 C6.6 21.2 9.2 21.6 11.6 21.2 C14.6 22.2 18 22.4 21 22 C23.4 21.8 25.4 21.4 27 21.8 Z"/><path d="M27 27 C23.6 28 19.6 30.4 15.4 29.8 C12.4 29.4 10 27.8 8.6 25.6 C10.8 26.6 13 26.8 15 26.4 C18 27 21.6 26.4 24 25.8 Z"/></g></g><circle cx="32" cy="24" r="2.6" fill="var(--surface)"/><path d="M32 21.8 L32 26.2 M29.8 24 L34.2 24" stroke="currentColor" stroke-width="1.1"/></svg></span><span class="lbl" data-sub="Solo battle">Skirmish Simulation</span></button>
+    <button role="tab" aria-selected="false" data-tab="armies"><span class="ico" aria-hidden="true">🛡️</span><span class="ico-v" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6z"/><path d="M12 8v8M9 12h6"/></svg></span><span class="lbl" data-sub="Armies">Imperial Forces</span></button>
+    <button role="tab" aria-selected="false" data-tab="school"><span class="ico" aria-hidden="true">🎓</span><span class="ico-v" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 4h11a3 3 0 013 3v13H8a3 3 0 01-3-3z"/><path d="M8 4v13M11 9h5"/></svg></span><span class="lbl" data-sub="Unit School">Librarium</span></button>
+    <button role="tab" aria-selected="false" data-tab="campaign"><span class="ico" aria-hidden="true">🏴</span><span class="ico-v" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 21V4"/><path d="M6 5h12l-3 4 3 4H6"/></svg></span><span class="lbl">Crusade</span></button>
+    <button role="tab" aria-selected="false" data-tab="kt"><span class="ico" aria-hidden="true">🪖</span><span class="ico-v" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 11a5 5 0 0110 0v4l-2 2h-6l-2-2z"/><circle cx="10" cy="11" r="1"/><circle cx="14" cy="11" r="1"/><path d="M10 17v3M14 17v3"/></svg></span><span class="lbl">Kill Team</span></button>
+    <button role="tab" aria-selected="false" data-tab="sim"><span class="ico" aria-hidden="true">📜</span><span class="ico-v" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 3h10v18l-2-2-3 2-3-2-2 2z"/><path d="M10 8h4M10 12h4"/></svg></span><span class="lbl">Sim log</span></button>
   </nav>
   <div class="sb-foot">
     <span class="ticker" id="ticker" aria-hidden="true"></span>
-    <button type="button" class="chip-btn" id="sb-settings" aria-controls="tab-settings" data-tip="Dice rolling, sound and music, atmosphere and the order of this menu."><span class="ico" aria-hidden="true">⚙️</span><span class="lbl">Settings</span></button>
+    <button type="button" class="chip-btn" id="sb-settings" aria-controls="tab-settings" data-tip="Dice rolling, sound and music, atmosphere and the order of this menu."><span class="ico" aria-hidden="true">⚙️</span><span class="ico-v" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></svg></span><span class="lbl">Settings</span></button>
   </div>
 </aside>
 <div class="wrap">
+<div class="cg-status" id="cg-status" aria-hidden="true">++ Cogitator: online // Noosphere link: stable // Segmentum Obscurus ++</div>
 
 <!-- ============ COMBAT MATH ============ -->
 <section class="tab on" id="tab-calc">
@@ -2074,8 +2113,8 @@ html[data-look="cog"] .muted{color:var(--muted)}
       <div class="setup">
         <div id="b-warn"></div>
         <div id="b-legal"></div>
-        <label>Your army<select id="b-army-p"></select></label>
-        <label>AI army<select id="b-army-a"></select></label>
+        <label>Your army (Imperial Forces)<select id="b-army-p"></select></label>
+        <label>AI army (Hostile Cogitator)<select id="b-army-a"></select></label>
         <label>Your Force Disposition<select id="b-disp-p"><option value="auto">From my army's detachment</option><option value="take and hold">Take and Hold</option><option value="purge the foe">Purge the Foe</option><option value="disruption">Disruption</option><option value="reconnaissance">Reconnaissance</option><option value="priority assets">Priority Assets</option></select></label>
         <label>AI Force Disposition<select id="b-disp-a"><option value="auto">From the AI army's detachment</option><option value="take and hold">Take and Hold</option><option value="purge the foe">Purge the Foe</option><option value="disruption">Disruption</option><option value="reconnaissance">Reconnaissance</option><option value="priority assets">Priority Assets</option></select></label>
         <label>Battlefield layout<select id="b-deploy"><option value="random">Random (A, B or C)</option><option value="A">Layout A</option><option value="B">Layout B</option><option value="C">Layout C</option></select></label>
@@ -2087,7 +2126,7 @@ html[data-look="cog"] .muted{color:var(--muted)}
           <label class="check-line" style="flex-direction:row;color:var(--ink)"><input type="checkbox" id="b-moveblock" checked>Enemy units block movement, and ruins block non-Infantry (Fly can bypass both)</label>
           <label class="check-line" style="flex-direction:row;color:var(--ink)"><input type="checkbox" id="b-minis" checked>Draw 3D miniatures on unit tokens where available (so far: every Death Guard, Space Marine, Salamander, Black Templar and Tyranid datasheet, in army colours)</label>
         </div></div>
-        <button class="btn primary" id="b-new">Start a new game with these armies</button>
+        <button class="btn primary" id="b-new">Initiate Engagement<span class="sub">Start a new game with these armies</span></button>
       </div>
     </div>
     <div class="panel next" id="b-next">
@@ -2248,6 +2287,7 @@ Unit: Big Walker | models 1 | M 8 | T 10 | Sv 2 | Inv 5 | W 12 | Ld 6 | OC 4 | s
     <div class="set-sec" id="set-look">
       <h3>Look</h3>
       <div class="set-row"><div><b>Cogitator interface</b><span class="muted">The green-phosphor data-slate look across the whole app. Turn it off to go back to the classic light and dark look.</span></div><button type="button" class="chip-btn" id="look-toggle" aria-pressed="true" data-tip="Cogitator interface on or off."><span class="ico" aria-hidden="true">🖥️</span><span class="lbl">Cogitator</span></button></div>
+      <div class="set-row"><div><b>Colour</b><span class="muted">Amber and brass (Mechanicus dataslate) or green phosphor. Only applies while the Cogitator interface is on.</span></div><select id="tone-sel" aria-label="Interface colour"><option value="amber">Amber and brass</option><option value="phosphor">Green phosphor</option></select></div>
       <div class="set-row"><div><b>Atmosphere</b><span class="muted">Grimdark look: grain, vignette, riveted panels and a scarred battlefield.</span></div><button type="button" class="chip-btn" id="atmo-toggle" aria-pressed="true" data-tip="Grimdark look: grain, vignette, riveted panels and a scarred battlefield."><span class="ico" aria-hidden="true">🌫️</span><span class="lbl">Atmosphere</span></button></div>
     </div>
     <div class="set-sec" id="set-board">
@@ -23080,6 +23120,8 @@ newQuiz();
 $('#b-guide-toggle').checked = guideOn;
 setGrim(grimOn); $('#atmo-toggle').addEventListener('click', () => setGrim(!grimOn));
 function setLook(on) { document.documentElement.dataset.look = on ? 'cog' : 'classic'; const b = $('#look-toggle'); if (b) b.setAttribute('aria-pressed', on ? 'true' : 'false'); try { localStorage.setItem('battleDrill.look', on ? 'cog' : 'classic'); } catch (e) { } if (typeof refreshTheme === 'function') refreshTheme(); }
+{ const ts = $('#tone-sel'); if (ts) { ts.value = document.documentElement.dataset.tone; ts.addEventListener('change', () => { document.documentElement.dataset.tone = ts.value; try { localStorage.setItem('battleDrill.tone', ts.value); } catch (e) { } if (typeof refreshTheme === 'function') refreshTheme(); }); }
+  const fl = ['An open mind is like a fortress with its gates unbarred', 'Ignorance is a virtue', 'Hope is the first step on the road to disappointment', 'A small mind is a safe mind', 'Blessed is the mind too small for doubt'], w = document.querySelector('.wrap'); if (w) { const d = document.createElement('div'); d.className = 'cg-flavour'; d.setAttribute('aria-hidden', 'true'); d.textContent = '++ Thought for the day: ' + fl[new Date().getDate() % fl.length] + ' ++'; w.appendChild(d); } }
 setLook(document.documentElement.dataset.look !== 'classic'); $('#look-toggle').addEventListener('click', () => setLook(document.documentElement.dataset.look !== 'cog'));
 $('#snd-toggle').setAttribute('aria-pressed', 'false'); $('#snd-toggle').addEventListener('click', () => setSound(!soundOn));
 if (soundOn) { const once = () => { setSound(true); document.removeEventListener('pointerdown', once); }; document.addEventListener('pointerdown', once); }
@@ -26510,7 +26552,7 @@ UI.gcStart = function () {
 THE PLAYER IS STILL ON THE NEW-GAME SET-UP SCREEN. No battle has started. Your job now:
 - Greet them in two short sentences (you are their coach for a whole guided battle) and ask one or two quick questions: have they played 40k before, and which kind of army or style appeals (shooting, melee, tough, fast), or whether they want you to just pick.
 - Recommend a beginner-friendly matchup from the options in the state (small, simple armies; roughly even; sample armies are fine). Use the set_armies tool to apply your recommendation or whatever they ask for, then say in one line what you chose and why. Disposition left on its default ("From my army's detachment") and layout on random are fine for a first game unless they ask.
-- Choose only from the options listed in the state. Never start the battle yourself: tell them to press the "Start a new game with these armies" button when they are happy.
+- Choose only from the options listed in the state. Never start the battle yourself: tell them to press the "Initiate Engagement" button (subtitled "Start a new game with these armies") when they are happy.
 - If asked about rules, answer briefly. Keep every reply short.`;
   const RULES = `You are the in-app coach for a beginner learning Warhammer 40,000 (this app's 11th-edition-style rules) inside the Battle Drill web app. The player is the side called "you"; the opponent is the AI. A solo battle is in progress and the app shows you its exact state below. Be a friendly, concise coach.
 
