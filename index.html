@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.17-1959';
+  const VERSION = '2026.11.17-2009';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -2309,7 +2309,7 @@ function woundNeed(S, T) {
   return 5;
 }
 function hitNeedOf(p) {
-  const skill = p.skill + (p.shooting && p.cover ? 1 : 0);
+  const skill = clamp(p.skill + (p.shooting && p.cover ? 1 : 0), 2, 6);   /* BS can never be worse than 6+ or better than 2+: cover worsens the characteristic, before roll modifiers */
   const mod = clamp(p.hitMod, -1, 1);
   return { skill, mod, need: clamp(skill - mod, 2, 7) };
 }
@@ -2328,7 +2328,7 @@ function pSucc(need, mod) {
 function resolve(p, def, rec) {
   const st = { A: 0, hits: 0, extra: 0, auto: 0, wounds: 0, dev: 0, unsaved: 0, dmg: 0, start: def.models, used: { hit: 0, wound: 0, dmg: 0, wrath: 0 } };
   const bud = Object.assign({ hit: 0, wound: 0, dmg: 0, wrath: 0 }, p.budget || {});
-  for (let m = 0; m < p.models; m++) st.A += (p.rrA && p.Aexpr && rollExpr(p.Aexpr) < avgDice(p.Aexpr) ? Math.max(rollExpr(p.Aexpr), rollExpr(p.Aexpr)) : rollExpr(p.Aexpr)) + ((p.halfN === undefined || m < p.halfN) ? (p.bonusA || 0) : 0) + (p.blast ? Math.floor(def.models / 5) : 0) + (p.cleave ? p.cleave * Math.floor((def.models + (def.leader && def.leader.alive ? 1 : 0)) / 5) : 0);
+  for (let m = 0; m < p.models; m++) st.A += (p.rrA && p.Aexpr && rollExpr(p.Aexpr) < avgDice(p.Aexpr) ? Math.max(rollExpr(p.Aexpr), rollExpr(p.Aexpr)) : rollExpr(p.Aexpr)) + ((p.halfN === undefined || m < p.halfN) ? (p.bonusA || 0) : 0) + (p.blast ? Math.floor((p.selModels !== undefined ? p.selModels : def.models + ((def.leaders || (def.leader ? [def.leader] : [])).filter(x => x.alive).length)) / 5) : 0) + (p.cleave ? p.cleave * Math.floor((p.selModels !== undefined ? p.selModels : def.models + ((def.leaders || (def.leader ? [def.leader] : [])).filter(x => x.alive).length)) / 5) : 0);
   const afA = p.afU ? asPlanAtk(p, def, st) : null;
   const { skill, mod } = hitNeedOf(p);
   const critAt = p.critAt || 6;
@@ -2339,8 +2339,8 @@ function resolve(p, def, rec) {
     let r, rr = false; if (afA && afA.kind === 'hit' && !afA.done && asCan(p.afU)) { afA.done = true; r = asUse(p.afU, afA.V, 'a hit roll', st); } else r = d6();
     let ok = hitOk(r);
     if (!ok && !p.snap && (p.rrHit === 'all' || (p.rrHit === '1s' && r === 1))) { r = d6(); ok = hitOk(r); rr = true; }
-    if (!ok && !p.snap && !rr) { if (bud.hit > 0) { bud.hit--; st.used.hit++; r = d6(); ok = hitOk(r); rr = true; } else if (bud.wrath > 0) { bud.wrath--; st.used.wrath++; r = d6(); ok = hitOk(r); rr = true; } }
-    if (!ok && !rr && p.cmd && p.cmd.kind === 'hit' && !p.cmd.used) { p.cmd.used = true; r = d6(); ok = hitOk(r); rr = true; }
+    if (!ok && !p.snap && !p.noRRHit && !rr) { if (bud.hit > 0) { bud.hit--; st.used.hit++; r = d6(); ok = hitOk(r); rr = true; } else if (bud.wrath > 0) { bud.wrath--; st.used.wrath++; r = d6(); ok = hitOk(r); rr = true; } }
+    if (!ok && !rr && !p.snap && !p.noRRHit && p.cmd && p.cmd.kind === 'hit' && !p.cmd.used) { p.cmd.used = true; r = d6(); ok = hitOk(r); rr = true; }
     if (!ok && !p.snap && p.forged && !st.forgedUsed) { st.forgedUsed = true; r = 6; ok = hitOk(r); }
     if (!ok && !p.snap && p.shrineU && !p.shrineU.shrineUsed) { p.shrineU.shrineUsed = true; r = 6; ok = hitOk(r); if (typeof log === 'function' && typeof G !== 'undefined' && G) log(`Aspect Shrine Token: ${p.shrineU.name} turns a failed Hit roll into an unmodified 6.`, p.shrineU.side); }
     const crit = ok && (r >= critAt || !!p.hitCritAll);
@@ -2806,7 +2806,7 @@ function quizSpec(key, p, st, count, w, t) {
   const who = t ? t.name : 'the target';
   if (key === 'hit') {
     if (!p.Aexpr || p.Aexpr.n !== 0) return null;
-    const flat = p.Aexpr.flat, bb = p.blast ? Math.floor(st.start / 5) : 0, per = flat + (p.bonusA || 0) * (p.halfN === undefined ? 1 : p.halfN / Math.max(1, p.models)) + bb;
+    const flat = p.Aexpr.flat, bb = p.blast ? Math.floor((p.selModels !== undefined ? p.selModels : st.start) / 5) : 0, per = flat + (p.bonusA || 0) * (p.halfN === undefined ? 1 : p.halfN / Math.max(1, p.models)) + bb;
     const parts = [`${flat} base`, p.bonusA ? `${p.bonusA} from Rapid Fire` : '', bb ? `${bb} from Blast` : ''].filter(Boolean);
     return { label: `How many dice do you roll for the hit rolls?`, count, why: `One hit roll per attack: ${p.models} ${p.models === 1 ? 'model' : 'models'} × ${per} ${per === 1 ? 'attack' : 'attacks'}${parts.length > 1 ? ' (' + parts.join(' + ') + ')' : ''} = ${count}.` };
   }
@@ -5581,7 +5581,7 @@ function profile(u, w, t, shooting, cover) {
   if (G && u.ritualTurn === G.turnNo) { hitMod += 1; woundMod += 1; notes.push('Dark Ritual'); }
   if (u.spoor && isDC(u)) { if (belowStart(t)) { hitMod += 1; notes.push('Spoor of Frailty'); } if (belowHalf(t)) woundMod += 1; }
   if (t.masked) { hitMod -= 1; notes.push('Masks of Death'); }
-  if (shooting && (elevOf(u) >= 3 || (has(u, 'towering') && edge(u, t) <= 12)) && elevOf(t) === 0 && !(typeof wIsIndirect === 'function' && wIsIndirect(w))) { hitMod += 1; notes.push('Plunging Fire'); }
+  if (shooting && (elevOf(u) >= 3 || (has(u, 'towering') && edge(u, t) <= 12)) && elevOf(t) === 0 && !(typeof wIsIndirect === 'function' && wIsIndirect(w))) { skillAdj -= 1; notes.push('Plunging Fire'); }
   const hv = !!(u.hungry && !shooting); if (hv) notes.push('Hungry Void');
   if (G && u.paroxPh && u.paroxPh === G.phaseNo) { aAdd -= 1; note('Paroxysm'); }
   if (G && !shooting && u.finestPh === G.phaseNo) { aAdd += 3; dev = true; note('Finest Hour'); }
@@ -5663,9 +5663,9 @@ function profile(u, w, t, shooting, cover) {
     for (const x of fxAll(t)) if (x.t[0] === 'dmod' && (x.t[1] === 'wound-1' || x.t[1] === 'hit-1') && (!x.t.includes('if-led') || leaderUp(t)) && (!x.t.includes('melee') || !shooting) && (!x.t.includes('ranged') || shooting)) { if (x.t[1] === 'wound-1') woundMod -= 1; else hitMod -= 1; note(x.a.name); }
   }
   /* Indirect Fire at an unseen target, and shooting out of combat with a Monster or Vehicle */
-  let hitAtLeast = 0, indirectCover = false;
+  let hitAtLeast = 0, indirectCover = false, noRRHit = false;
   if (shooting && inG && wIsIndirect(w) && !visible(u, t)) {
-    indirectCover = true; rrHit = 'none';
+    indirectCover = true; rrHit = 'none'; noRRHit = true;
     hitAtLeast = (u.stayed && aliveSide(u.side).some(v => v !== u && visible(v, t))) ? 4 : 6;
     note('indirect fire');
   }
@@ -5694,7 +5694,7 @@ function profile(u, w, t, shooting, cover) {
     melta: half && w.melta ? w.melta : 0, meltaP: attackers && nModels ? attackers.nHalf / nModels : undefined, halfN: attackers ? attackers.nHalf : undefined, bonusA: half && ((w.rapid || 0) + rapAdd) ? (w.rapid || 0) + rapAdd : 0,
     allWoundCrit: !shooting && hasFx(u, 'swallow-whole') && /gaping maw/i.test(w.name) && (has(t, 'infantry') || has(t, 'mounted') || has(t, 'beast')), afU: (inG && u && u.placed && asIs(u)) ? u : null, cleave: (() => { const m = wKw(w).map(k => /^cleave\s*(\d+)/.exec(k)).find(Boolean); const base = m ? +m[1] : 0; return (!shooting || true) && (base || cleaveAdd) ? base + cleaveAdd : 0; })(), torrent: !!w.torrent, lethal, useLethal: true, dev, twin: !!w.twin, blast: !!w.blast, sustained: Math.max(w.sustained || 0, grantSus, susMod), susD3: (w.xkw || []).some(k => /sustained hits d3/i.test(k)) && Math.max(grantSus, susMod) <= 2,
     rrHit, rrWound, hitMod, woundMod, cover: shooting && (cover || indirectCover) && !w.ignoresCover && !noCover && !ignoreMods, notes,
-    rrDmg, antiN, precision: wIsPrec(w) || dgPrec || btPrec || modPrec || (!shooting && u.epic === G.phaseNo && leaderUp(u)), isMelta: wKw(w).some(k => /^melta/.test(k)), budget: btMergeBudget(btMergeBudget(dgBudget, btBudget), oneRR(u, t, shooting)), forged: dgForged, shrineU: (hasFx(u, 'aspect-shrine') && !u.shrineUsed && !has(u, 'character')) ? u : null, rrA: dgRrA, hitAtLeast, critAt, hitCritAll,
+    rrDmg, antiN, precision: wIsPrec(w) || dgPrec || btPrec || modPrec || (!shooting && u.epic === G.phaseNo && leaderUp(u)), isMelta: wKw(w).some(k => /^melta/.test(k)), budget: btMergeBudget(btMergeBudget(dgBudget, btBudget), oneRR(u, t, shooting)), forged: dgForged, shrineU: (hasFx(u, 'aspect-shrine') && !u.shrineUsed && !has(u, 'character')) ? u : null, rrA: dgRrA, hitAtLeast, noRRHit, critAt, hitCritAll,
     T: tT, Sv: t.Sv + (dgOn ? dgSvWorse(t) : 0), inv: (G && t.rampartPh && t.rampartPh === G.phaseNo && (!t.inv || t.inv > 2)) ? 2 : (G && ((t.barrierPh && t.barrierPh === G.phaseNo) || t.omniInv) && (!t.inv || t.inv > 4)) ? 4 : t.inv, W: t.W, fnp: t.fnp };
 }
 
@@ -5760,6 +5760,7 @@ async function attack(u, w, t, shooting, cover, snap) {
   if (!p.models) { if (MODELS.on && u.placed && t.placed) log(`${u.name}: no model with ${w.name} ${shooting ? 'is in range of and can see' : 'is engaged with'} ${t.name}, so it makes no attacks.`, u.side); return; }
   if (snap) { p.snap = true; p.rrHit = 'none'; p.snapAt = hasFx(u, 'snap-at') ? +fxGet(u, 'snap-at')[0].t[1] : 6; }
   const before = totalModels(t);
+  { G.selSnap = G.selSnap || {}; const sk = `${u.id}|${G.phaseNo}|${t.id}`; if (!(sk in G.selSnap)) G.selSnap[sk] = before; p.selModels = G.selSnap[sk]; }   /* Blast and Cleave count the models in the target unit at the Select Targets step, not after earlier weapons have killed some */
   await declareAlloc(u, w, t, shooting);
   const def = defOf(t);
   const rec = { hit: [], wound: [], save: [], dmg: [] };
@@ -5783,7 +5784,7 @@ async function attack(u, w, t, shooting, cover, snap) {
   const svTxt = t.models > 0 || !t.leader ? (t.inv && t.inv < svBody ? `${t.inv}+ invuln` : svBody > 6 ? 'no save' : `${svBody}+`) : 'leader saves';
   const hitTxt = p.torrent ? 'auto' : snap ? '6 (snap shots)' : (h.need >= 7 ? '6' : h.need + '+');
   const rr = x => x === 'all' ? 're-rolling misses' : x === '1s' ? 're-rolling 1s' : '';
-  const hitBits = [p.cover && !snap && 'cover', p.hitMod > 0 && !snap && (p.notes.includes('Plunging Fire') ? '+1 plunging fire' : p.notes.some(n => /protocol/i.test(n)) ? '+1 ' + p.notes.find(n => /protocol/i.test(n)) : '+1 heavy'), rr(p.rrHit)].filter(Boolean);
+  const hitBits = [p.cover && !snap && 'cover', !snap && p.notes.includes('Plunging Fire') && 'BS improved by plunging fire', p.hitMod > 0 && !snap && (p.notes.some(n => /protocol/i.test(n)) ? '+1 ' + p.notes.find(n => /protocol/i.test(n)) : '+1 heavy'), rr(p.rrHit)].filter(Boolean);
   const woundBits = [p.woundMod > 0 && (p.notes.includes('Oath of Moment') ? '+1 Oath' : '+1 lance'), rr(p.twin ? 'all' : p.rrWound)].filter(Boolean);
   const parts = [plural(st.A, 'attack'),
     `${st.hits + st.extra} ${st.hits + st.extra === 1 ? 'hit' : 'hits'} on ${hitTxt}${hitBits.length ? ' (' + hitBits.join(', ') + ')' : ''}${st.extra ? `, ${st.extra} from sustained` : ''}`,
