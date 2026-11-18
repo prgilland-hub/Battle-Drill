@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.17-1948';
+  const VERSION = '2026.11.17-1959';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -2810,8 +2810,8 @@ function quizSpec(key, p, st, count, w, t) {
     const parts = [`${flat} base`, p.bonusA ? `${p.bonusA} from Rapid Fire` : '', bb ? `${bb} from Blast` : ''].filter(Boolean);
     return { label: `How many dice do you roll for the hit rolls?`, count, why: `One hit roll per attack: ${p.models} ${p.models === 1 ? 'model' : 'models'} × ${per} ${per === 1 ? 'attack' : 'attacks'}${parts.length > 1 ? ' (' + parts.join(' + ') + ')' : ''} = ${count}.` };
   }
-  if (key === 'wound') return { label: `How many dice do you roll for the wound rolls?`, count, why: `One wound roll per hit: ${st.hits} ${st.hits === 1 ? 'hit' : 'hits'}${st.extra ? ` + ${st.extra} extra from Sustained Hits` : ''}${st.auto ? ` − ${st.auto} Lethal Hits that wound automatically` : ''} = ${count}.` };
-  if (key === 'save') { const exp = st.wounds - st.dev; return { label: `How many saving throws does ${who} roll?`, count, why: `One save per wound that can be saved: ${st.wounds} ${st.wounds === 1 ? 'wound' : 'wounds'}${st.dev ? ` − ${st.dev} Devastating Wounds (no save allowed)` : ''} = ${exp}${exp !== count ? `, but only ${count} were needed because the unit ran out of models` : ''}.` }; }
+  if (key === 'wound') return { label: `How many dice do you roll for the wound rolls?`, count, why: `One wound roll per hit: ${st.hits} ${st.hits === 1 ? 'hit' : 'hits'}${st.extra ? ` + ${st.extra} extra from Sustained Hits` : ''}${st.auto ? ` − ${st.auto} Lethal Hits that wound automatically` : ''} = ${count}.${st.extra ? ` Sustained Hits ${(w && w.sustained) || p.sustained || ''} comes from ${w && w.sustained ? `the ${w.name} profile itself` : (p.notes && p.notes.length ? `these rules in play: ${p.notes.join(', ')}` : 'a rule on the attacker')}.` : ''}${st.auto ? ` Lethal Hits comes from ${w && w.lethal ? `the ${w.name} profile itself` : (p.notes && p.notes.length ? `these rules in play: ${p.notes.join(', ')}` : 'a rule on the attacker')}.` : ''}` };
+  if (key === 'save') { const exp = st.wounds - st.dev; return { label: `How many saving throws does ${who} roll?`, count, why: `One save per wound that can be saved: ${st.wounds} ${st.wounds === 1 ? 'wound' : 'wounds'}${st.auto ? ` (${st.wounds - st.dev - st.auto} from successful wound rolls + ${st.auto} automatic from Lethal Hits)` : ''}${st.dev ? ` − ${st.dev} Devastating Wounds (no save allowed)` : ''} = ${exp}${exp !== count ? `, but only ${count} were needed because the unit ran out of models` : ''}.` }; }
   return null;
 }
 function newQuiz(spec, sheets) { return spec ? { label: spec.label, count: spec.count, why: spec.why, sheets, res: null, done: false } : null; }
