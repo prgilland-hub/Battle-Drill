@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.17-1801';
+  const VERSION = '2026.11.17-1905';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -3591,6 +3591,7 @@ function modCond(c, ctx, x) {
     case 'within-12': return edge(u, t) <= 12; case 'beyond-12': return edge(u, t) > 12; case 'vs-cmv': return has(t, 'character') || has(t, 'monster') || has(t, 'vehicle'); case 'tgt-below-start': return belowStart(t); case 'vs-character': return has(t, 'character'); case 'w-assault': return !!w.assault || (w.xkw || []).some(k => /^assault/i.test(k));
     case 'within-6': return edge(u, t) <= 6; case 'torrent': return !!w.torrent; case 'self': return x && x.src === 'leader' ? (!!w.leader && (x.lid || 0) === (w.lid || 0)) : !w.leader; case 'if-priest': return leaderUp(u) && /ministorum priest/i.test(u.leader.name || ''); case 'near-flyinf': return aliveSide(u.side).some(v => v !== u && ntIs(v, 'infantry') && has(v, 'fly') && edge(v, t) <= 9); case 'tgt-obj': return OBJ.some(o => objIn(t, o)); case 'vs-fly': return has(t, 'fly');
     case 'near-obj': return OBJ.some(o => objIn(u, o) || objIn(t, o)); case 'within-9': return edge(u, t) <= 9;
+    case 'vs-daemon': return has(t, 'daemon');
     case 'vs-psyker': return has(t, 'psyker'); case 'vs-swarm-inf': return has(t, 'infantry') || has(t, 'swarm');
     case 'if-arrived': return !!u.arrived; case 'if-15': return u.models >= 15;
     case 'psychic': return (w.xkw || []).some(k => /psychic/i.test(k));
@@ -3667,6 +3668,16 @@ amRule(/^attacks that target this unit have -1 d\.?$/, ['damage-minus 1']);
 amRule(/^attacks that target this unit have -1 ap\.?$/, ['dmod ap-1']);
 amRule(/^attacks that target this unit with a s greater than this unit's t have -1 to wound rolls/, ['dmod wound-1-sgt']);
 amRule(/^this unit's attacks have \+1 to hit rolls\.?$/, ['mod hit+1']);
+amRule(/^each time a model in the bearer.s unit makes an attack, re-roll a hit roll of 1\.?$/, ['mod rr-hit-1s']);
+amRule(/^each time this model makes an attack that targets a daemon unit, you can re-roll the hit roll and you can re-roll the wound roll/, ['mod rr-hit-all vs-daemon', 'mod rr-wound-all vs-daemon']);
+amRule(/^models in the bearer.s unit have the feel no pain (\d)\+ ability against mortal wounds and psychic attacks/, m => [`fnp-mortal ${m[1]}`, `fnp-psy ${m[1]}`]);
+amRule(/^each time an attack targets this unit, if the strength characteristic of that attack is greater than the toughness characteristic of this unit, subtract 1 from the wound roll/, ['dmod wound-1-sgt']);
+amRule(/^in your movement phase, at the start or end of this unit.s move, you can select one friendly adeptus astartes vehicle model within 3" of this model/, ['blessings-omni']);
+amRule(/^each time this unit's ranged attacks target a monster or vehicle unit, you can re-roll one hit roll, one wound roll and one damage roll/, ['mod rr-hit-all ranged vs-mv', 'mod rr-wound-all ranged vs-mv', 'mod rr-dmg ranged vs-mv']);
+amRule(/^this unit's ranged attacks that target a monster\/vehicle unit can: - re-roll one hit roll, one wound roll and one damage roll/, ['mod rr-hit-all ranged vs-mv', 'mod rr-wound-all ranged vs-mv', 'mod rr-dmg ranged vs-mv']);
+amRule(/^if this unit made an ingress move this turn, add 1 to hit rolls for this unit's ranged attacks/, ['mod hit+1 ranged if-arrived']);
+amRule(/^in the fight phase, when this unit is selected to fight, you can use this ability\. if you do, until the end of the phase, melee weapons equipped by this model have \+3 attacks and the \[devastating wounds\] ability/, ['deliverance']);
+amRule(/^at the end of your opponent.s fight phase, if this unit is not within engagement range of any enemy units, you can place this unit into strategic reserves/, ['reserve-end 0']);
 amRule(/^this unit's melee attacks have \+1 to hit rolls\.?$/, ['mod hit+1 melee']);
 amRule(/^if this unit is riled up, this unit's ranged attacks have \[sustained hits 1\]/, ['mod sus1 ranged if-riled']);
 amRule(/^this unit's ranged attacks have: - \[ignores cover\]\. - if this unit is riled up, \[sustained hits 1\]/, ['mod ignore-cover ranged', 'mod sus1 ranged if-riled']);
@@ -3742,17 +3753,17 @@ amRule(/^at the start of the battle, select one unit from your opponent's army t
 amRule(/^while an adepta sororitas character is leading this unit, each time an attack targets this unit, subtract 1 from the wound roll/, ['dmod wound-1-led']);
 amRule(/^at the start of your shooting phase, select one enemy unit within 12" of and visible to this unit's ephrael stern model/, ['holy-judgement']);
 amRule(/^once per battle, at the start of any phase, you can select one friendly adepta sororitas unit that is battle-shocked and within 12" of this model/, ['laud']);
-amRule(/^while this model is leading a unit, each time that unit performs an act of faith, the value of one of the miracle dice used in that act of faith is first changed to a 6/, ['stirring']);
+amRule(/^while this model is leading a unit, each time (?:that|this model.s) unit performs an act of faith, the value of one of the miracle dice used in that act of faith is first changed to a 6/, ['stirring']);
 amRule(/^while an enemy unit is within (\d+)" of this model, worsen the leadership characteristic of models in that unit by 1/, m => [`ld-aura ${m[1]} 1`]);
 amRule(/^in your shooting phase, after this model has shot, if one or more of those attacks made with an indirect fire weapon scored a hit against an enemy unit, that unit must take a battle-shock test/, ['refrain']);
 amRule(/^while this model is leading a unit, models in that unit have the feel no pain (\d)\+ ability\.?$/, m => [`lead-fnp ${m[1]}`]);
 amRule(/^while this model is leading a unit, in your command phase, you can return up to 1 destroyed model \(excluding character models\) to that unit/, ['sacred-healing']);
-amRule(/^each time you gain a miracle dice as the result of a friendly adepta sororitas unit or model being destroyed, if that unit or model was destroyed within 12" of this model, you can re-roll the result/, ['litany-deeds']);
+amRule(/^each time you gain a miracle dice as the result of (?:a friendly|an) adepta sororitas unit or model(?: from your army)? being destroyed, if that unit or model was destroyed within 12" of this model, you can re-roll (?:the|that)/, ['litany-deeds']);
 amRule(/^while this model is leading a unit, models in that unit have a save characteristic of 2\+ and a 4\+ invulnerable save/, ['lead-sv 2 4']);
 amRule(/^in your shooting phase, after this model has shot, select one enemy unit hit by one or more of those attacks\. until the end of the phase, that enemy unit cannot have the benefit of cover/, ['burning-spray']);
 amRule(/^at the start of the fight phase, each enemy unit within 6" of this model must take a battle-shock test, subtracting 1/, ['denunciation']);
 amRule(/^at the end of your movement phase, you can select one enemy unit within (\d+)" of and visible to this model\. until the start of your next command phase, each time a friendly adepta sororitas model makes an attack that targets that enemy unit, that attack has the \[lethal hits\] ability/, m => [`judged ${m[1]}`]);
-amRule(/^- this unit has stealth\. - melee attacks that target this unit have -1 to hit rolls/, ['grant-stealth', 'dmod hit-1-melee']);
+amRule(/^(?:- )?this unit has stealth\.? ?(?:- )?melee attacks that target this unit have -1 to hit rolls/, ['grant-stealth', 'dmod hit-1 melee']);
 amRule(/^if this model is on the battlefield at the start of your command phase, you can choose one of the following/, ['fiery']);
 amRule(/^once per battle, in the fight phase, this model can use this ability\. if it does, until the end of the phase, improve the strength and attacks characteristics of melee weapons equipped by this model by 3/, ['zealot']);
 amRule(/^while this model is leading a unit, each time a model in that unit makes an attack, you can re-roll the hit roll and you can re-roll the wound roll/, ['mod rr-hit-all', 'mod rr-wound-all']);
@@ -3763,14 +3774,14 @@ amRule(/^each time a model in this unit makes a ranged attack, re-roll a hit rol
 amRule(/^while this unit contains a ministorum priest, melee weapons equipped by models in this unit have the \[sustained hits 1\] ability/, ['mod sus1 melee if-priest']);
 amRule(/^in your command phase, if the bearer is on the battlefield, you can return up to d3 destroyed models \(excluding character models\) to this unit/, ['cmd-return D3']);
 amRule(/^at the start of your command phase, this model regains 1 lost wound/, ['cmd-heal-self 1']);
-amRule(/^each time you gain 1 miracle dice at the start of the battle round, if this model is on the battlefield, do not roll one d6 to determine the value of that miracle dice; it has a value of 6/, ['solemn']);
+amRule(/^each time you gain 1 miracle dice at the start of (?:the battle round|your turn), if this model is on the battlefield, do not roll one d6 to determine the value of that miracle dice; it has a value of 6/, ['solemn']);
 amRule(/^each time this unit is selected to fight, select one of the following abilities to apply to melee weapons equipped by models in this unit until the end of the phase/, ['mod sus1 melee', 'mod lethal melee if-charged']);
-amRule(/^while a friendly adepta sororitas unit is within 6" of this model, add 2" to that unit's move characteristic and add 1 to the advance and charge rolls made for that unit/, ['relic fiery-heart']);
-amRule(/^while a friendly adepta sororitas unit is within 6" of this model, you can re-roll all battle-shock tests taken for that unit/, ['relic censer']);
+amRule(/^while a friendly adepta sororitas unit is within 6" of this model, add 2" to that unit's move characteristic and add 1 to (?:the )?advance and charge rolls made for that unit/, ['relic fiery-heart']);
+amRule(/^while a friendly adepta sororitas unit is within 6" of this model, you can re-roll (?:all )?battle-shock tests taken for that unit/, ['relic censer']);
 amRule(/^while a friendly adepta sororitas unit is within 6" of this model, that unit can perform up to two acts of faith per phase/, ['relic chalice']);
 amRule(/^while a friendly adepta sororitas unit is within 6" of this model, each time a model in that unit makes a ranged attack, re-roll a wound roll of 1/, ['relic shroud']);
 amRule(/^while a friendly adepta sororitas unit is within 6" of this model, models in that unit have the feel no pain 6\+ ability/, ['relic icon']);
-amRule(/^while a friendly adepta sororitas unit is within 6" of this model, improve the armour penetration characteristic of melee weapons equipped by model in that unit by 1/, ['relic petals']);
+amRule(/^while a friendly adepta sororitas unit is within 6" of this model, improve the armour penetration characteristic of melee weapons equipped by models? in that unit by 1/, ['relic petals']);
 amRule(/while this unit is leading a unit and contains a chaplain grimaldus model, each time a model in that unit makes a melee attack, you can re-roll the hit roll/, ['mod rr-hit-all melee led']);
 amRule(/while this model is leading a unit, that unit is eligible to declare a charge in a turn in which it advanced/, ['perm charge-adv']);
 amRule(/while this model is leading a unit, that unit has the fights first ability/, ['grant-ff']);
@@ -4852,6 +4863,11 @@ amRule(/^in your shooting phase, after this model has shot, select one enemy uni
 amRule(/^at the end of a phase in which this model is destroyed, roll one d6:\s*[\s-]*on a 2\+, set this model back up on the battlefield as close as possible to where it was destroyed, unengaged with 3 wounds remaining/, ['unstoppable-champ']);
 amRule(/^in your shooting phase, each time this model is selected to shoot, select one of the abilities below\. until the end of the phase, this model.s shrieker cannon has that ability\.\s*[\s-]*\[ignores cover\]\s*[\s-]*\[precision\]\s*[\s-]*\[sustained hits 3\]/, ['mod sus3 weapon=shrieker-cannon']);
 amRule(/^enemy units that are set up on the battlefield (?:from reserves|as reinforcements) cannot be set up within 12" (?:horizontally )?of this model/, ['jammer-12']);
+amRule(/^enemy units (?:arriving|that arrive|that are set up|that are arriving) (?:on the battlefield )?(?:from reserves|as reinforcements) cannot be set up within 12" (?:horizontally )?of this model/, ['jammer-12']);
+amRule(/^melee weapons equipped by models in the bearer.s unit have the \[lethal hits\] ability/, ['mod lethal melee']);
+amRule(/^(?:after|each time a unit disembarks from this (?:model|transport) after) this (?:model|transport) (?:makes|has made|made) a normal move, (?:each unit that disembarks from it|that unit) makes an assault disembark move/, ['transport-charge']);
+amRule(/^(?:when|each time) a unit with (?:the )?deep strike(?: ability)? disembarks from this (?:model|transport) after (?:it|this (?:model|transport)) (?:made|has made|makes) a normal move, that unit makes an assault disembark move/, ['transport-charge-ds']);
+amRule(/^while this model is leading a unit,.*ignore any or all modifiers to (?:that attack.s |the )?(?:ballistic|weapon) skill/, ['mod ignore-hit-mods led']);
 amRule(/^while this model is leading a unit, each time a model in that unit makes a ranged attack, add 1 to the wound roll/, ['mod wound+1 ranged led']);
 amRule(/^at the end of your opponent.s fight phase, select one visible enemy unit \(excluding lone operative and monster\/vehicle units\) within (\d+)" of this unit, and roll one d6 for that unit\. on a 2\+:/, m => [`burna-bomb ${m[1]}`]);
 amRule(/^this unit.s melee attacks can re-roll hit rolls\.?$/, ['mod rr-hit-all melee']);
@@ -5731,7 +5747,7 @@ async function attack(u, w, t, shooting, cover, snap) {
   if (!shooting) tyrAfterMaw(u, w, t, st);
   if (!t.alive) return;
   { const lostM = t.models - def.models; const k = (!shooting && lostM > 0) ? fightOnGhosts(u, t, lostM) : 0; if (k) { def.models += k; if (def.models === k) def.cur = mW(def); } }
-  { const m0 = t.models; t.models = def.models; t.cur = def.cur; kitApply(t, m0 - t.models); carrierSync(t); }
+  { const m0 = t.models; t.models = def.models; t.cur = def.cur; kitApply(t, m0 - t.models); carrierSync(t); try { await nurgleKills(u, w, m0 - t.models); } catch (e) { } }
   let leaderDied = false; const diedL = [];
   for (const dl of (def.leaders || [])) { const rf = dl.ref; if (!rf) continue; rf.cur = dl.cur; if (!dl.alive && rf.alive) { rf.alive = false; leaderDied = true; diedL.push(rf); } }
   for (const rf of diedL) { t.leader = rf; asOnLeaderDied(t); }
@@ -5817,6 +5833,8 @@ function setPhase(ph) { try { iconExcessEnd(); } catch (e) { } dgPhaseEnd(); mat
 function discountBy(side, cost, u, key) {
   const out = [];
   if (u && cost > 0 && G.discount && G.discount[side] !== G.round && hasFx(u, 'strat-discount')) out.push({ why: fxGet(u, 'strat-discount')[0].a.name, round: true });
+  if (u && cost - out.length > 0 && abIn(u, /^lord of chaos/i) && u.locRound !== G.round) out.push({ why: 'Lord of Chaos', loc: true });
+  if (u && cost - out.length > 0 && typeof isDGU === 'function' && isDGU(u)) { const fs = aliveSide(side).find(v => abIn(v, /^fevered strategist/i) && v.fsRound !== G.round && edge(u, v) <= 12); if (fs) out.push({ why: 'Fevered Strategist', fev: fs }); }
   if (key === 'heroic' && u && cost - out.length > 0 && instinctive(u)) out.push({ why: 'Instinctive Defence' });
   if (u && cost - out.length > 0 && ((key === 'heroic' && tsDisc(u, 'heroic')) || (key === 'counter' && tsDisc(u, 'counter')) || ((key === 'overwatch' || key === 'heroic') && tsDisc(u, 'overwatch')))) out.push({ why: tsDisc(u, key === 'counter' ? 'counter' : key === 'heroic' ? 'heroic' : 'overwatch') });
   if (key === 'heroic' && u && cost - out.length > 0 && hasFx(u, 'pouncing-leap')) out.push({ why: 'Pouncing Leap' });
@@ -5854,6 +5872,8 @@ function useStrat(side, key, cost, u) {
   if (u && ds.some(d => d.ph)) u.phRound = G.round;
   if (u && ds.some(d => d.homer)) u.homerUsed = true;
   if (u && ds.some(d => d.tact)) u.tactTurn = G.turnNo || 0;
+  if (u && ds.some(d => d.loc)) u.locRound = G.round;
+  for (const d of ds) if (d.fev) d.fev.fsRound = G.round;
   if (u && ds.some(d => d.dfut)) u.destroyerPh = G.phaseNo;
   if (key === 'bravery') G.used[side].bravery = true;
   if (u) smBombast(side, u);
@@ -6584,6 +6604,11 @@ function doCommand(side) {
     G.doctrine[side] = null; G.doctrine.skipped = false;
     if (side === 'ai') { const d = ['assault', 'devastator', 'tactical'].find(x => !G.docUsed.ai.includes(x)); if (d) setDoctrine('ai', d); }
   }
+  /* Blessings of the Omnissiah (Techmarine): heals D3 on a friendly Vehicle within 3" (done at the start of your turn here, in place of the Movement phase choice) */
+  for (const u of aliveSide(side)) if (hasFx(u, 'blessings-omni')) {
+    const v = aliveSide(side).filter(x => x !== u && has(x, 'vehicle') && edge(u, x) <= 3 + 1e-6 && x.cur < mW(x)).sort((a, b) => (mW(b) - b.cur) - (mW(a) - a.cur))[0];
+    if (v) { const r = healUnit(v, d3()); log(`Blessings of the Omnissiah: ${u.name} repairs ${plural(r.wounds + (r.leader || 0), 'wound')} on ${v.name}.`, side); }
+  }
   for (const u of aliveSide(side)) for (const x of fxAll(u)) {
     if (x.t[0] === 'heal-command') { const h = healUnit(u, +x.t[1] || 1); if (h.wounds || h.back || h.leader) log(`${u.name}: ${x.a.name} heals ${plural(h.wounds + (h.leader || 0), 'wound')}${h.back ? ' and returns ' + plural(h.back, 'model') : ''}.`, side); }
     if (x.t[0] === 'return-command' && x.src === 'leader' && u.models < u.start) { u.models++; log(`${u.name}: ${x.a.name} returns a destroyed model.`, side); }
@@ -7110,6 +7135,9 @@ async function startFight(onDone) {
   if (G.stage !== 'battle') return;
   await reactFightStart();
   if (G.stage !== 'battle') return;
+  for (const s of ['player', 'ai']) for (const m of aliveSide(s).filter(x => abIn(x, /^disease of mirth/i))) for (const e of aliveSide(other(s)))
+    if (!e.mirth && !has(e, 'monster') && !has(e, 'vehicle') && edge(m, e) <= 6 + 1e-6) { e.mirth = G.round + ':' + G.active; const sr = shockRoll(e, 0); if (sr.r >= ldOf(e)) log(`Disease of Mirth: ${e.name} passes its Battle-shock test (${sr.txt} vs ${ldOf(e)}+).`, e.side); else { e.shocked = true; log(`Disease of Mirth: ${e.name} fails its Battle-shock test (${sr.txt} vs ${ldOf(e)}+) and is battle-shocked.`, e.side); } }
+  for (const u of G.units) if (u.mirth) u.mirth = null;
   G.closeAuto = false;
   for (const s of [G.active, other(G.active)]) for (const u of aliveSide(s)) if (u.charged || u.heroic || isEngaged(u)) { if (s === 'player') { await manualClose(u, 'pilein', 'pilein'); if (G.stage !== 'battle') return; } else pileIn(u); }
   G.closeAuto = false;
@@ -7176,6 +7204,7 @@ async function resolveFight(u, t, choice) {
   const before = totalModels(t), beforeHalf = belowHalf(t), byAI = u.side === 'ai' && t.side === 'player';
   if (byAI) await reactTargeted(u, t); else await aiReactTargeted(u, t);
   if (byAI) await foPlayerOffer(u, t); else foAiUse(u, t);
+  await dgBoonOffer(u, t);
   const g = meleeGroups(u);
   const use = g.split ? g.body.slice() : [choice && choice.body && g.body.includes(choice.body) ? choice.body : bestMelee(u, g.body, t)];
   { const lids = [...new Set(g.lead.map(w => w.lid || 0))]; for (const li of lids) { const gl = g.lead.filter(w => (w.lid || 0) === li); const pk = choice && ((choice.lw && choice.lw[li]) || choice.leader); use.push(pk && gl.includes(pk) ? pk : bestMelee(u, gl, t)); } }
@@ -9024,6 +9053,7 @@ function dgShockMod(u) {
     if (isPL(u) && aliveSide(u.side).some(v => enhHolder(v, /tome of bounteous blessings/i) && edge(u, v) <= 12)) m += 1;
   }
   if (aliveSide(other(u.side)).some(v => abIn(v, /^fearsome/i) && edge(u, v) <= 6)) m -= 1;
+  if (aliveSide(other(u.side)).some(v => abIn(v, /^feculent despair/i) && edge(u, v) <= 6)) m -= 1;
   return m;
 }
 /* ---- attack modifiers ---- */
@@ -9118,7 +9148,8 @@ function dgBanner(title, lines) {
 /* A roster only lists Lord of the Death Guard; the two abilities it lets Mortarion use come with it */
 const MORT_ABILITIES = [
   ['Diseased Influence', "Lord of the Death Guard ability. Just after an enemy unit ends a Normal, Advance or Fall Back move within 8\" of a friendly DEATH GUARD unit that is within 6\" of this model, if that DEATH GUARD unit is not within Engagement Range of enemy units, it can make a Normal move of up to 5\"."],
-  ['Inflamed Reprisal', "Lord of the Death Guard ability. In your opponent's Shooting phase, when a friendly DEATH GUARD unit within 6\" of this model is selected as the target of an attack, this model can use this ability. If it does, after the attacking unit has finished its attacks, that DEATH GUARD unit can shoot as if it were your Shooting phase, but worsen the BS characteristic of those attacks by 1, and it can only target that enemy unit (if it is an eligible target)."]];
+  ['Inflamed Reprisal', "Lord of the Death Guard ability. In your opponent's Shooting phase, when a friendly DEATH GUARD unit within 6\" of this model is selected as the target of an attack, this model can use this ability. If it does, after the attacking unit has finished its attacks, that DEATH GUARD unit can shoot as if it were your Shooting phase, but worsen the BS characteristic of those attacks by 1, and it can only target that enemy unit (if it is an eligible target)."],
+  ['Boon of Death', "Lord of the Death Guard ability. In the Fight phase, when a friendly DEATH GUARD unit within 6\" of this model is selected as the target of an attack, this model can use this ability. If it does, until the end of the phase, each time a model in that DEATH GUARD unit is destroyed by a melee attack, if that model has not fought this phase, roll one D6. On a 2+, do not remove the destroyed model from play; it can fight after the attacking unit has finished making its attacks, and is then removed."]];
 function dgDoCommand(side) {
   G.iconUsed = G.iconUsed || { player: false, ai: false };
   dgCommandUnits(side);
@@ -9133,6 +9164,7 @@ function dgDoCommand(side) {
     dgBanner(`Deadly Vectors: ${side === 'player' ? 'your' : 'the AI\'s'} Command phase`, lines.length ? lines : ['No enemy unit is Afflicted, so there is nothing to roll for. Units are Afflicted while within Contagion Range of your Death Guard.']);
     checkEnd();
   }
+  if (aliveSide(side).some(u => abIn(u, /^tally of pestilence/i)) && ((G.tally || {})[side] || 0) >= 7) { G.tally[side] = 0; G.cp[side]++; log(`Tally of Pestilence: seven or more enemy models destroyed by Nurgle Daemons. ${side === 'player' ? 'You gain' : 'The AI gains'} 1 CP.`, side); }
   if (!dgFaction(side)) return;
   if (aliveSide(side).some(u => abIn(u, /^seven-?fold chant/i))) { const a = d6(), b = d6(); if (a + b >= 7) { G.cp[side]++; log(`Seven-fold Chant: ${a}+${b}=${a + b}. ${side === 'player' ? 'You gain' : 'The AI gains'} 1 CP.`, side); } else log(`Seven-fold Chant: ${a}+${b}=${a + b}. No CP this time.`, side); const sc = G.cpChant = G.cpChant || {}; dgBanner('Seven-fold Chant (Tallyman)', [`${side === 'player' ? 'You' : 'The AI'} rolled ${a}+${b}=${a + b}: ${a + b >= 7 ? '+1 CP' : 'no CP this time (needs 7+)'}. CP now ${G.cp[side]}.`]); }
   if (dgDetIs(side, 'Shamblerot Vectorium')) {
@@ -9166,7 +9198,7 @@ function dgEndMovement(side) {
 function dgEndTurn() {
   for (const side of ['player', 'ai']) {
     if (!dgFaction(side)) continue;
-    for (const u of aliveSide(side)) if (abIn(u, /^dessication conduit/i)) {
+    for (const u of aliveSide(side)) if (abIn(u, /^des+ic+ation conduit/i)) {
       for (const e of aliveSide(other(side))) if (edge(u, e) <= contRange(u) + 1e-6 && d6() >= 4) { const n = Math.ceil(d6() / 2); log(`Dessication Conduit: ${e.name} suffers ${plural(n, 'mortal wound')}.`, side); applyMortal(e, n); }
     }
   }
@@ -9504,7 +9536,7 @@ function dgAiStrats(u, phase) {
 }
 
 /* ============ DEATH GUARD UNIT ABILITIES ============ */
-const DG_ABILITY_SIM = /^(dessication conduit|death approaches|fearsome|daemon lord of nurgle|diseased malice|gift of poxes|virulent aura|gift of contagion|host of plagues|infused with the blessings|seven-?fold chant|diseased influence|inflamed reprisal|lord of the death guard|inviolable transport|even in death i serve|unholy resilience|rolling fortress|fire support|pestilent familiar|putrescent vitality|grotesque regeneration|extraction of fresh disease|blistering fusillade|metalophagic infection|hail of corrosive disease|lethal ichor|thunderhawk cluster bombs|bomb rack|horrifying visage|enfeebling miasma|death guard defenders|miasma of pestilence|malefic impact|daemonic locus|chaos lord$|infectious bloodshed|silent bodyguard|scuttling walker|barrage of filth|explosive blight|putrefying stink|blinding spray|nurgle.s rot|froth-spattered frenzy|blessed icon of disease|infernal attendants|font of unreality|shroud of disease|blight bombardment|pestilent fallout|mischief makers|tank hunters|sickening vitality|tocsin of misery|death.s heads|tainted narthecium|inflamed infections|infected outbreak|spore-laced shock waves|curse of the walking pox|virulent blessing|deluge of nurgle|ferocious assault|the destroyer hive|eater plague|pinning bombardment|foul infusion|atomantic arc-reactor|grotesque regeneration)/i;
+const DG_ABILITY_SIM = /^(tally of pestilence|disease of mirth|reverberating summons|boon of death|des+ic+ation conduit|feculent despair|interceptor|lord of chaos|fevered strategist|death approaches|fearsome|daemon lord of nurgle|diseased malice|gift of poxes|virulent aura|gift of contagion|host of plagues|infused with the blessings|seven-?fold chant|diseased influence|inflamed reprisal|lord of the death guard|inviolable transport|even in death i serve|unholy resilience|rolling fortress|fire support|pestilent familiar|putrescent vitality|grotesque regeneration|extraction of fresh disease|blistering fusillade|metalophagic infection|hail of corrosive disease|lethal ichor|thunderhawk cluster bombs|bomb rack|horrifying visage|enfeebling miasma|death guard defenders|miasma of pestilence|malefic impact|daemonic locus|chaos lord$|infectious bloodshed|silent bodyguard|scuttling walker|barrage of filth|explosive blight|putrefying stink|blinding spray|nurgle.s rot|froth-spattered frenzy|blessed icon of disease|infernal attendants|font of unreality|shroud of disease|blight bombardment|pestilent fallout|mischief makers|tank hunters|sickening vitality|tocsin of misery|death.s heads|tainted narthecium|inflamed infections|infected outbreak|spore-laced shock waves|curse of the walking pox|virulent blessing|deluge of nurgle|ferocious assault|the destroyer hive|eater plague|pinning bombardment|foul infusion|atomantic arc-reactor|grotesque regeneration)/i;
 const orkLone = t => fxGet(t, 'lone-near').some(x => { const kw = x.t[2], ex = x.t[3] || '-'; return aliveSide(t.side).some(v => v !== t && v.placed && edge(t, v) <= +x.t[1] && (kw === 'orks_infantry' ? (v.faction === 'Orks' && has(v, 'infantry')) : /_infantry$/.test(kw) ? (has(v, 'infantry') && ntIs(v, kw.replace(/_infantry$/, '').replace(/_/g, ' '))) : ntIs(v, kw.replace(/_/g, ' '))) && !(ex.includes('monster') && has(v, 'monster')) && !(ex.includes('wartrakk') && /wartrakks/i.test(v.name)) && !(ex.includes('shokk') && /shokk attack gun/i.test(v.name))); });
 const isLone = t => !t.leader && (has(t, 'lone operative') || orkLone(t) || (hasFx(t, 'tech-lone') && nearFriend(t, v => has(v, 'vehicle'), 3)) || tsLone(t) ||
   (abIn(t, /^death guard defenders/i) && aliveSide(t.side).some(v => v !== t && isDGU(v) && has(v, 'infantry') && edge(t, v) <= 3)) ||
@@ -9534,6 +9566,7 @@ function dgUnitMods(u, w, t, shooting, r, N, rr) {
   if (shooting && u.dg && u.dg.reprisal) { r.skill += 1; N('Inflamed Reprisal'); }
   if (abIn(u, /^pestilent familiar/i) && shooting && u.pfPhase === G.phaseNo && wKw(w).includes('psychic')) { r.s += 2; r.d += 2; N('Pestilent Familiar'); }
   if (leaderUp(t) && !shooting && (t.leader.abilities || []).some(a => /^the destroyer hive/i.test(a.name))) { r.hit -= 1; N('The Destroyer Hive'); }
+  if (shooting && abIn(u, /^interceptor/i) && has(t, 'fly')) { r.hit += 1; N('Interceptor'); }
   if (!dgSide) return;
   if (abIn(u, /^foul infusion/i) && leaderUp(u)) { r.lethal = true; r.crit = Math.min(r.crit, 5); N('Foul Infusion'); }
   if (abIn(u, /^blistering fusillade/i) && shooting && afflicted(t) && (u.start >= 5 || leaderUp(u))) { r.s += 1; r.ap += 1; N('Blistering Fusillade'); }
@@ -9721,6 +9754,31 @@ async function dgReprisalAfter(att, T) {
   const cover = coverFor(att);
   for (const w of ws) { if (!att.alive) break; await attack(T, w, att, true, cover); }
   T.dg.reprisal = false; checkEnd();
+}
+/* Tally of Pestilence (Epidemius) counts models killed by Nurgle Daemons; Reverberating Summons (Doomsday bell) returns a Plaguebearer per kill */
+const isNurgleDaemon = u => (u.kw || []).some(k => /legiones daemonica/i.test(k)) && (u.kw || []).some(k => /nurgle/i.test(k));
+async function nurgleKills(u, w, n) {
+  if (!G || !(n > 0)) return;
+  if (isNurgleDaemon(u) && aliveSide(u.side).some(x => abIn(x, /^tally of pestilence/i))) { G.tally = G.tally || {}; G.tally[u.side] = (G.tally[u.side] || 0) + n; }
+  if (/doomsday bell/i.test(w && w.name || '') || (w && /reverberating summons/i.test(JSON.stringify(w.kw || w.abilities || '')))) {
+    let left = n;
+    for (const x of aliveSide(u.side).filter(v => /plaguebearers/i.test(v.name) && v.models < v.start && edge(u, v) <= 12 + 1e-6).sort((a, b) => edge(u, a) - edge(u, b))) {
+      const back = Math.min(left, x.start - x.models); if (back <= 0) continue; x.models += back; left -= back; if (x.models === back) x.cur = mW(x);
+      log(`Reverberating Summons: ${plural(back, 'Plaguebearer')} return to ${x.name}.`, u.side);
+      if (!left) break;
+    }
+  }
+}
+/* Boon of Death: a Death Guard unit near Mortarion that is attacked in melee keeps models that die (2+) so they can fight before they are removed */
+async function dgBoonOffer(att, t) {
+  if (!G || G.stage !== 'battle' || G.phase !== 'fight' || att.side === t.side || t.fought || !dgFaction(t.side) || !isDGU(t) || fightOnSpec(t) || !lotdgFree(t.side)) return;
+  const m = mortarions(t.side, /^boon of death/i).find(x => edge(t, x) <= 6 + 1e-6); if (!m) return;
+  if (t.side === 'player') {
+    const r = await askPlayer({ kind: 'yesno', strat: 'boon', text: `The AI's ${att.name} is attacking your ${t.name}, which is within 6" of Mortarion. Use Boon of Death? Each of its models that is destroyed before it has fought stays in play on a 2+ and fights before it is removed.`, yes: 'Use Boon of Death', no: 'No' });
+    if (r !== 'yes') return;
+  } else if (expDmg(att, att.melee, t, false, false) < Math.max(1, t.W) * .8) return;
+  lotdgUse(t.side); t.dg = t.dg || {}; t.dg.fightOn = { thr: 2, bonus: 0, src: 'Boon of Death' };
+  log(`Mortarion's Boon of Death: ${t.name} — a destroyed model stays in play on a 2+ and fights before it is removed.`, t.side);
 }
 /* models that come back: Even In Death I Serve, Unholy Resilience */
 function dgPreventDeath(u) {
@@ -10614,7 +10672,7 @@ function asOnLeaderDied(t) {
 function asTurnStart() {
   if (!G || !G.pb) return;
   for (const side of ['player', 'ai']) if (asArmy(side)) {
-    const solemn = G.turnNo % 2 === 1 && aliveSide(side).some(v => v.placed && hasFx(v, 'solemn'));
+    const solemn = (G.active ? G.active === side : G.turnNo % 2 === 1) && aliveSide(side).some(v => v.placed && hasFx(v, 'solemn'));
     asGain(side, 1, solemn ? 'start of the turn; Solemn Procession' : 'start of the turn', solemn ? { fixed: 6 } : {});
   }
 }
@@ -22575,7 +22633,7 @@ const ENH_SIM = new RegExp('^enhancement:\\s*(' + [
   "headwoppa's killchoppa", "da boss is watchin'", "kunnin' but brutal", 'follow me ladz', 'ferocious show-off', "'ardboyz", 'tellyporta boss', 'minefield detail', 'supa-glowy fing', "targetin' squigs", 'kill kommanda', 'throat-slittas', 'supa-snazz dakka', 'glory hog', 'it came from da drops', 'mekwaaagh! mastermind', 'cybork boosta', 'dreadherder', 'competitive streak', 'flyboss', "brutal but kunnin'", 'proper killy', 'da gobshot thunderbuss', 'da krunch', "'eadbanger", 'saintly example', 'through suffering, strength', 'chaplet of sacrifice', 'mantle of ophelia', 'psalm of righteous judgement', 'refrain of enduring faith', 'catechism of divine penitence', 'righteous rage', 'manual of saint griselda', 'fire and fury', 'iron surplice of saint istalela', 'litanies of faith', 'blade of saint ellynor', 'divine aspect', 'triptych of the macharian crusade', 'triptych of judgement', 'mark of devotion', 'eyes of the oracle', 'symphonic payload', 'writ of compunction', 'perfervid haste', 'nether-realm casket', 'phasal subjugator', 'enaegic dermal bond', 'stalker', 'chameleonic', 'adaptive biology', 'synaptoprescience', 'relentless hunger', 'destroyer ankh', 'murdermind', 'ominous presence', 'osteoclave fulcrum', 'enlivened sentinels', 'gauntlet of compression', 'tools of dominion', 'destabilising predation', 'miniaturised nebuloscope', 'mark of the nekrosor', 'arisen tyrant', 'monstrous nemesis', 'elevated might', 'ocular adaptation', 'power of the hive mind', 'synaptic control', 'the dirgeheart of kharis', 'cursed circlet', 'deepening madness', 'eternal conqueror', 'unflinching will', 'incendiary animus', 'oathbound exemplar', 'merciless denunciation', 'zealous vanguard', 'imperialis of the eternal crusade', 'consecrating aura', 'orb of the emperor.s aegis', 'paragon of fury', 'battle-psalm precentor', 'servo-host augury', 'benediction of fury', 'guiding omens', 'artificer armour', 'the honour vehement', 'adept of the codex', 'fire discipline', 'indomitable fury', 'fleet commander', 'stoic defender', 'architect of war', 'target augury web', 'the flesh is weak', 'adept of the omnissiah', 'master of machine war', 'champion of humanity', 'war-tempered artifice', 'forged in battle', 'adamantine mantle', 'fury of the storm', 'portents of wisdom', 'feinting withdrawal', 'hunter.s instincts', 'the blade driven deep', 'ghostweave cloak', 'execute and redeploy', 'shadow war veteran', 'the imperium.s sword', 'fear made manifest', 'rites of war', 'iron resolve', 'eye of the primarch', 'hero of the chapter', 'blades of valour', 'bombast omnivox', 'laurels of thunder', 'veteran of the vanguard', 'honour indefatigable', 'spy-skull data link', 'castellum omnivox', 'liberator', 'tip of the spear', 'shock deployment', 'armoured commander', 'redoubtable machine spirit', 'gunnery honours', 'firestorm coordinators', 'astartes tank ace', 'orksbane', 'bellicose weapon spirits', 'raptorial cogitator core', 'shroud field', 'fusillade',
   'regenerating monstrosity', 'instinctive defence', 'biophagic flow', 'parasitic biomorphology'].join('|') + ')', 'i');
 const NA_AB = /^(travelling players|enslaved star god|shadow assignment|authority of the inquisition|flip belt|embarking|one shot)$/i;
-const isSimAbility = a => !!(/^(fortification|firing deck\b.*|hover|orders|vox-net|master vox|voice of command|striding colossus)$/i.test(String(a.name).trim()) || (/each time you (?:target|select) [^.]*stratagem[^.]*roll one d6/i.test(String(a.text || '')) && /gain 1\s*cp/i.test(String(a.text || ''))) || INV_TXT.test(String(a.text || '').trim()) || (a.fx && a.fx.length) || (typeof autoMods === 'function' && autoMods(a.name, a.text).length) || DG_ABILITY_SIM.test(a.name) || BT_AB_SIM.test(a.name) || /^(attached unit|servitors|singular purpose|protean purpose)$/i.test(a.name) || (/^storm shield$/i.test(a.name) && /wounds characteristic/i.test(a.text || '')) || ENH_SIM.test(String(a.name).trim()) || (/^transport$/i.test(a.name) && !!tcfg({ abilities: [a] })) || /^(leader|support|warlord)$/i.test(a.name) || /^\*?invulnerable save$/i.test(String(a.name).trim()) || autoMods(a.name, a.text || '').length);
+const isSimAbility = a => !!(/^(one shot|fortification|firing deck\b.*|hover|orders|vox-net|master vox|voice of command|striding colossus)$/i.test(String(a.name).trim()) || (/each time you (?:target|select) [^.]*stratagem[^.]*roll one d6/i.test(String(a.text || '')) && /gain 1\s*cp/i.test(String(a.text || ''))) || INV_TXT.test(String(a.text || '').trim()) || (a.fx && a.fx.length) || (typeof autoMods === 'function' && autoMods(a.name, a.text).length) || DG_ABILITY_SIM.test(a.name) || BT_AB_SIM.test(a.name) || /^(attached unit|servitors|singular purpose|protean purpose)$/i.test(a.name) || (/^storm shield$/i.test(a.name) && /wounds characteristic/i.test(a.text || '')) || ENH_SIM.test(String(a.name).trim()) || (/^transport$/i.test(a.name) && !!tcfg({ abilities: [a] })) || /^(leader|support|warlord)$/i.test(a.name) || /^\*?invulnerable save$/i.test(String(a.name).trim()) || autoMods(a.name, a.text || '').length);
 const CORE_GAPS = [
   ['Battlefield and movement', [
     'Models are placed and measured one by one (range, engagement, objective control, cover and line of sight all go model to model), and a unit that ends its turn out of coherency loses the models that are out of it. Models are drawn at an estimated base size, because the datasheets do not list base sizes.',
