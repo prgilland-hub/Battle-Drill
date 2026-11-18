@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.18-0202';
+  const VERSION = '2026.11.18-0928';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -15674,6 +15674,7 @@ void main(){
   c*=1.-wx*(g*.55-.12);
   float low=1.-smoothstep(0.,1.6,vW.y);
   c=mix(c,c*vec3(1.1,1.04,.92)+uDust*.05,low*(1.-abs(n.y))*uDust*.5);
+  if(uQ>.5 && n.y>.9 && vW.y<.6 && wx<.5){ vec3 q=vec3(vW.x*2.2,0.,vW.z*2.2); float h0=vn(q); vec2 g=vec2(vn(q+vec3(.35,0.,0.))-h0, vn(q+vec3(0.,0.,.35))-h0)/.35; n=normalize(n+vec3(-g.x,0.,-g.y)*(uQ>1.5?.2:.12)); }
   float ndl=max(dot(n,uSun),0.);
   if(uQ>.5) ndl=mix(ndl,max((dot(n,uSun)+.3)/1.3,0.),.45);
   float sh=1.;
@@ -15695,9 +15696,9 @@ void main(){
   col=mix(col,uFog,clamp(f,0.,1.));
   float ed=max(abs(vW.x-30.)/88.,abs(vW.z-22.)/80.); col=mix(col,uFog,smoothstep(.78,1.15,ed));
   vec3 vd=normalize(uCam-vW); float rim=pow(1.-max(dot(n,vd),0.),3.)*(1.-abs(n.y))*smoothstep(.0,.7,vW.y+.3); col+=vec3(.05,.12,.26)*rim*(.35+.65*(1.-ndl)); if(uQ>1.5) col+=uAmbT*c*pow(1.-max(dot(n,vd),0.),4.)*.5*(.4+.6*n.y);
-  col=max(col-.018,0.)*1.05;
-  col=col/(1.+col*.55); col=pow(col,vec3(1./2.2));
-  col=mix(col,col*col*(3.-2.*col),.38);
+  col=max(col-.03,0.)*1.14;
+  col=clamp((col*(2.51*col+.03))/(col*(2.43*col+.59)+.14),0.,1.); col=pow(col,vec3(1./2.2));
+  col=mix(col,col*col*(3.-2.*col),.46);
   col*=mix(vec3(.95,1.,1.06),vec3(1.06,1.,.93),smoothstep(.15,.75,dot(col,vec3(.33))));
   o=vec4(col,1.);
 }`;
@@ -15705,7 +15706,7 @@ const VS_Q = `#version 300 es
 void main(){ vec2 p=vec2(float((gl_VertexID<<1)&2),float(gl_VertexID&2)); gl_Position=vec4(p*2.-1.,0.,1.); }`;
 const FS_BRIGHT = `#version 300 es
 precision highp float; uniform sampler2D uT; uniform vec2 uRes; out vec4 o;
-void main(){ vec3 c=texture(uT,gl_FragCoord.xy/uRes).rgb; float l=dot(c,vec3(.3,.59,.11)); o=vec4(c*smoothstep(.97,1.02,l),1.); }`;
+void main(){ vec3 c=texture(uT,gl_FragCoord.xy/uRes).rgb; float l=dot(c,vec3(.3,.59,.11)); o=vec4(c*smoothstep(.992,1.03,l),1.); }`;
 const FS_BLUR = `#version 300 es
 precision highp float; uniform sampler2D uT; uniform vec2 uRes, uDir; out vec4 o;
 void main(){ vec2 uv=gl_FragCoord.xy/uRes, st=uDir/uRes; vec3 s=texture(uT,uv).rgb*.227; s+=(texture(uT,uv+st*1.38).rgb+texture(uT,uv-st*1.38).rgb)*.316; s+=(texture(uT,uv+st*3.23).rgb+texture(uT,uv-st*3.23).rgb)*.0703; o=vec4(s,1.); }`;
@@ -15720,7 +15721,7 @@ void main(){ vec2 uv=gl_FragCoord.xy/uRes; float d0=texture(uD,uv).r; if(d0>=.99
   float ao=clamp(1.-occ/14.*2.2,0.,1.); o=vec4(vec3(ao),1.); }`;
 const FS_COMP = `#version 300 es
 precision highp float; uniform sampler2D uS, uB, uA; uniform vec2 uRes; uniform float uK, uAk; out vec4 o;
-void main(){ vec2 uv=gl_FragCoord.xy/uRes; vec3 sc=texture(uS,uv).rgb*mix(1.,texture(uA,uv).r,uAk); sc+=texture(uB,uv).rgb*uK; sc*=mix(.87,1.,smoothstep(1.25,.5,length(uv-.5)*1.3)); o=vec4(sc,1.); }`;
+void main(){ vec2 uv=gl_FragCoord.xy/uRes; vec3 sc=texture(uS,uv).rgb*mix(1.,texture(uA,uv).r,uAk); sc+=texture(uB,uv).rgb*uK; sc*=mix(.74,1.,smoothstep(1.25,.5,length(uv-.5)*1.3)); o=vec4(sc,1.); }`;
 const FS_FLAT = `#version 300 es
 precision highp float; in vec3 vW, vN, vC; in vec2 vM; in vec4 vL; out vec4 o; void main(){ o=vec4(vC,vM.x); }`;
 const VS_SH = `#version 300 es
@@ -15784,7 +15785,7 @@ class Renderer {
     }
     pass(this.bright, pt.fB[0], pt.hw, pt.hh, U => bind(pt.tRes, U.uT));
     for (let k = 0; k < 1; k++) { pass(this.blur, pt.fB[1], pt.hw, pt.hh, U => { bind(pt.tB[0], U.uT); gl.uniform2f(U.uDir, 1.6, 0); }); pass(this.blur, pt.fB[0], pt.hw, pt.hh, U => { bind(pt.tB[1], U.uT); gl.uniform2f(U.uDir, 0, 1.6); }); }
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, W, H); gl.useProgram(this.comp.p); gl.uniform2f(this.comp.U.uRes, W, H); gl.uniform1f(this.comp.U.uK, .6); gl.uniform1f(this.comp.U.uAk, this.q.ao ? .9 : 0);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, W, H); gl.useProgram(this.comp.p); gl.uniform2f(this.comp.U.uRes, W, H); gl.uniform1f(this.comp.U.uK, .28); gl.uniform1f(this.comp.U.uAk, this.q.ao ? .9 : 0);
     gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, pt.tRes); gl.uniform1i(this.comp.U.uS, 1); gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, pt.tB[0]); gl.uniform1i(this.comp.U.uB, 2); gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, pt.tA); gl.uniform1i(this.comp.U.uA, 3);
     gl.drawArrays(gl.TRIANGLES, 0, 3); gl.bindVertexArray(null); gl.enable(gl.DEPTH_TEST); gl.activeTexture(gl.TEXTURE0);
   }
@@ -15954,7 +15955,7 @@ function scatterMarsh(mb, rng, ok, H) {
 
 const THEMES = {
   desert: { name: 'Ash Waste', sub: 'Sand-worn ruins, dunes and dust', props: propsDesert, scatter: scatterDesert, amp: 1.0, freq: .085, seed: 11,
-    env: { sun: [-.62, .3, .52], sunC: [1.9, .95, .45], ambT: [.1, .11, .17], ambB: [.07, .05, .04], fog: [.12, .075, .055], fogD: .0055, dust: 1 },
+    env: { sun: [-.58, .62, .5], sunC: [1.8, 1.05, .62], ambT: [.1, .125, .19], ambB: [.06, .062, .075], fog: [.095, .082, .08], fogD: .0055, dust: 1 },
     ground: (x, z, h, n) => mixc([.13, .095, .06], [.28, .21, .14], clamp(n * 1.5 + h * .14, 0, 1)) },
   base: { name: 'Forward Base', sub: 'Crates, barricades and floodlights', props: propsBase, scatter: scatterBase, amp: .05, freq: .2, seed: 23,
     env: { sun: [.5, .5, -.45], sunC: [.55, .68, 1.0], ambT: [.07, .09, .14], ambB: [.04, .045, .055], fog: [.02, .03, .045], fogD: .007, dust: 0 },
