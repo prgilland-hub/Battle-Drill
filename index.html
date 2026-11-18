@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.17-1945';
+  const VERSION = '2026.11.17-2005';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -21472,11 +21472,24 @@ async function persistDet(d) {
   if (Store.mode === 'db') await Store.db.collection('detachments').doc(d.id).set(JSON.parse(JSON.stringify(d)));
   try { localStorage.setItem(DET_KEY, JSON.stringify(DETS)); } catch (e) { }
 }
+/* Space Marine chapters: units and detachments tied to one chapter can be hidden when you pick that chapter in the builder */
+const SM_CHAPS = [['Dark Angels', ['dark angels', 'deathwing', 'ravenwing']], ['Blood Angels', ['blood angels', 'death company']], ['Space Wolves', ['space wolves']], ['Deathwatch', ['deathwatch']], ['Black Templars', ['black templars']], ['Ultramarines', ['ultramarines']], ['Imperial Fists', ['imperial fists']], ['White Scars', ['white scars']], ['Raven Guard', ['raven guard']], ['Iron Hands', ['iron hands']], ['Salamanders', ['salamanders']], ['Crimson Fists', ['crimson fists']]];
+const SM_DET_CHAP = { 'angelic inheritors': 'Blood Angels', 'encarmine speartip': 'Blood Angels', 'wrath of the doomed': 'Blood Angels', 'liberator assault group': 'Blood Angels', 'rage-cursed onslaught': 'Blood Angels', 'champions of fenris': 'Space Wolves', 'saga of the beastslayer': 'Space Wolves', 'saga of the great wolf': 'Space Wolves', 'saga of the hunter': 'Space Wolves', 'saga of the bold': 'Space Wolves', 'inner circle task force': 'Dark Angels', 'unforgiven task force': 'Dark Angels', 'company of hunters': 'Dark Angels', "lion's blade task force": 'Dark Angels', 'darkflight pursuit': 'Dark Angels', 'black spear task force': 'Deathwatch', 'deathwatch support': 'Deathwatch', 'blade of ultramar': 'Ultramarines', "forgefather's seekers": 'Salamanders', 'shadowmark talon': 'Raven Guard', 'vow-sworn crusaders': 'Black Templars', 'fist of the god-emperor': 'Black Templars', "marshal's household": 'Black Templars' };
+const unitChaps = u => { const kw = (u.kw || []).map(k => String(k).toLowerCase()); return SM_CHAPS.filter(([, ks]) => ks.some(k => kw.includes(k))).map(c => c[0]); };
+function detChap(d) {
+  const n = String(d.name || '').toLowerCase().replace(/[\u2019]/g, "'"); if (SM_DET_CHAP[n]) return SM_DET_CHAP[n];
+  const txt = [d.name, d.rule, d.ruleText, ...(d.enh || []).map(x => x.name + ' ' + (x.text || '')), ...(d.strats || []).map(x => x.name + ' ' + (x.text || '') + ' ' + (x.when || ''))].join(' ').toLowerCase();
+  const hits = SM_CHAPS.map(([c, ks]) => [c, ks.reduce((a, k) => a + (txt.split(k).length - 1), 0)]).filter(x => x[1] > 0);
+  return hits.length === 1 && hits[0][1] >= 2 ? hits[0][0] : '';
+}
+const curChapter = () => B.faction === 'Salamanders' ? 'Salamanders' : B.faction === 'Black Templars' ? 'Black Templars' : (B.faction === 'Space Marines' ? (B.chapter || '') : '');
+const chapterOk = u => { const c = curChapter(); if (!c) return true; const uc = unitChaps(u); return !uc.length || uc.includes(c); };
+const detChapterOk = d => { if (B.faction !== 'Space Marines' && B.faction !== 'Salamanders') return true; const c = curChapter(); if (!c) return true; const dc = detChap(d); return !dc || dc === c; };
 function detsFor(f) {
   const fs = f === 'Salamanders' ? ['Salamanders', 'Space Marines'] : [f];   /* Salamanders play with the Space Marine detachments */
   const out = SEED_DETACH.filter(d => fs.includes(d.faction) && !DETS.some(x => x.id === d.id));
   const all = [...out, ...DETS.filter(d => fs.includes(d.faction))], seen = new Set();
-  return all.filter(d => { const k = d.name.toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; }).sort((a, b) => a.name.localeCompare(b.name));
+  return all.filter(d => (f !== B.faction || detChapterOk(d)) && (() => { const k = d.name.toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; })()).sort((a, b) => a.name.localeCompare(b.name));
 }
 const dpUsed = () => curDets().reduce((a, d) => a + (+d.dp || 0), 0);
 const curDets = () => (B.dets || []).map(id => detsFor(B.faction).find(d => d.id === id)).filter(Boolean);
@@ -21491,7 +21504,7 @@ const detBlock = (x) => {   /* why this detachment can't be added right now ('' 
   const tag = x.unique && list.find(z => z !== x && z.unique === x.unique); if (tag) return `Same ${x.unique} tag as ${tag.name}`;
   const m = mergeDets(list, B.faction); return dpOver(m, size) ? `Needs ${m.dp} DP, ${size.name} allows ${size.dp}` : '';
 };
-const B = { editId: null, wOpen: new Set(), sort: 'role', dir: 'desc', step: 0, faction: null, name: '', limit: 2000, legends: false, q: '', roster: [], seq: 1, open: new Set(['Battleline']), det: null, dets: [], warlord: null, enh: {}, nameEdited: false };
+const B = { editId: null, wOpen: new Set(), sort: 'role', dir: 'desc', step: 0, faction: null, name: '', limit: 2000, legends: false, q: '', roster: [], seq: 1, open: new Set(['Battleline']), det: null, dets: [], warlord: null, enh: {}, nameEdited: false, chapter: '' };
 const ALL_FACTIONS = ['Adepta Sororitas', 'Adeptus Custodes', 'Adeptus Mechanicus', 'Aeldari', 'Astra Militarum', 'Black Templars', 'Blood Angels', 'Chaos Daemons', 'Chaos Knights', 'Chaos Space Marines', 'Dark Angels', 'Death Guard', 'Deathwatch', 'Drukhari', "Emperor's Children", 'Genestealer Cults', 'Grey Knights', 'Imperial Agents', 'Imperial Knights', 'Leagues of Votann', 'Necrons', 'Orks', 'Space Marines', 'Space Wolves', "T'au Empire", 'Thousand Sons', 'Tyranids', 'World Eaters'];
 const libCount = f => LIB.filter(u => u.faction === f).length;
 function openBuilder() {
@@ -21500,8 +21513,8 @@ function openBuilder() {
   $('#a-editor').hidden = true; $('#composer').hidden = true; $('#builder').hidden = false;
   renderBuilder(); refreshTheme(B.faction);
 }
-function closeBuilder() { if (B.editId) { B.editId = null; Object.assign(B, { step: 0, roster: [], det: null, dets: [], warlord: null, enh: {}, q: '', wOpen: new Set() }); } $('#builder').hidden = true; $('#a-editor').hidden = false; refreshTheme(); }
-function resetBuilder() { Object.assign(B, { step: 0, roster: [], det: null, dets: [], warlord: null, enh: {}, q: '', sort: 'role', dir: 'desc', nameEdited: false, editId: null, wOpen: new Set() }); B.name = `${B.faction} ${B.limit} pts`; renderBuilder(); }
+function closeBuilder() { if (B.editId) { B.editId = null; Object.assign(B, { step: 0, roster: [], det: null, dets: [], warlord: null, enh: {}, q: '', chapter: '', wOpen: new Set() }); } $('#builder').hidden = true; $('#a-editor').hidden = false; refreshTheme(); }
+function resetBuilder() { Object.assign(B, { step: 0, roster: [], det: null, dets: [], warlord: null, enh: {}, q: '', chapter: '', sort: 'role', dir: 'desc', nameEdited: false, editId: null, wOpen: new Set() }); B.name = `${B.faction} ${B.limit} pts`; renderBuilder(); }
 const libOf = e => findLib(e.id);
 const isChar = u => CHAR_ROLES.includes(u.role);
 function enhPts() { const d = curDet(); if (!d) return 0; return Object.keys(B.enh).reduce((a, n) => { const x = d.enh.find(z => z.name === n); return a + (x && B.enh[n] ? (+x.pts || 0) : 0); }, 0); }
@@ -21734,7 +21747,7 @@ const usChips = u => `<span class="us-stats">W${u.W}${u.baseModels > 1 ? '×' + 
 function catalogue(filterFn, openDefault) {
   if (!libCount(B.faction)) return noDatasheets();
   const size = curSize(), toks = usParse(B.q), reasons = new Map();
-  let units = LIB.filter(u => u.faction === B.faction && (B.legends || !u.legends) && filterFn(u));
+  let units = LIB.filter(u => u.faction === B.faction && (B.legends || !u.legends) && chapterOk(u) && filterFn(u));
   const total = units.length;
   if (toks.length) units = units.filter(u => { const w = usMatch(u, toks); if (w) reasons.set(u.id, w); return !!w; });
   const flat = B.sort && B.sort !== 'role';
@@ -21784,7 +21797,7 @@ function setDet(id) {   /* click a detachment card: add it to, or take it out of
 }
 function swapChoices(e) {
   const u = libOf(e); if (!u) return [];
-  return LIB.filter(x => x.faction === B.faction && x.id !== u.id && (B.legends || !x.legends) && isChar(x) === isChar(u)).sort((a, b) => ROLE_ORDER.indexOf(a.role) - ROLE_ORDER.indexOf(b.role) || a.name.localeCompare(b.name));
+  return LIB.filter(x => x.faction === B.faction && x.id !== u.id && (B.legends || !x.legends) && chapterOk(x) && isChar(x) === isChar(u)).sort((a, b) => ROLE_ORDER.indexOf(a.role) - ROLE_ORDER.indexOf(b.role) || a.name.localeCompare(b.name));
 }
 function swapUnit(k, nid) {
   const e = B.roster.find(x => x.key === k), nu = findLib(nid); if (!e || !nu) return;
@@ -21858,8 +21871,10 @@ function stepContent() {
     case 0: return guide('Step 1: Choose your army', 'Pick the faction and the size of game. The points limit caps how much you can spend on units and enhancements. Most tournament games are Strike Force (2000 pts); Incursion (1000 pts) is a good size to learn with.') + `
       <div class="bld-top">
         <label>Faction<select id="bl-fac">${(() => { const all = [...new Set([...ALL_FACTIONS, ...fac])].sort(); const has = all.filter(f => libCount(f)), none = all.filter(f => !libCount(f)); const o = f => `<option value="${escH(f)}"${f === B.faction ? ' selected' : ''}>${escH(f)}${libCount(f) ? ` (${libCount(f)} datasheets)` : ''}</option>`; return (has.length ? `<optgroup label="Datasheets loaded">${has.map(o).join('')}</optgroup>` : '') + `<optgroup label="No datasheets yet">${none.map(o).join('')}</optgroup>`; })()}</select></label>
+        ${B.faction === 'Space Marines' ? `<label>Chapter<select id="bl-chap"><option value="">Any chapter (no restriction)</option>${SM_CHAPS.filter(c => c[0] !== 'Salamanders' && c[0] !== 'Black Templars').map(c => `<option${B.chapter === c[0] ? ' selected' : ''}>${c[0]}</option>`).join('')}</select></label>` : ''}
         <label>Army name<input id="bl-name" value="${escH(B.name)}"></label>
       </div>
+      ${B.faction === 'Space Marines' ? `<p class="muted" style="font-size:.85rem;margin:0 0 6px">${B.chapter ? `Showing generic Space Marine datasheets and ${escH(B.chapter)} units. Detachments for other chapters are hidden.` : 'No chapter picked: every Space Marine datasheet and detachment is listed, including ones that belong to a single chapter.'}${B.chapNote ? ` <b>${escH(B.chapNote)}</b>` : ''}</p>` : ''}
       <div class="det-grid">${SIZES.map(([v, n]) => `<button type="button" class="det-card${B.limit === v ? ' on' : ''}" data-size="${v}"><b>${n}</b><span>${v} points</span></button>`).join('')}
         <label class="det-card" style="cursor:default"><b>Custom</b><input id="bl-limit" type="number" min="100" step="50" value="${B.limit}" style="margin-top:4px;background:var(--raised);border:1px solid var(--line);border-radius:4px;padding:4px 6px;color:var(--ink)"></label></div>
       ${libCount(B.faction) ? `<p class="muted" style="font-size:.85rem">${libCount(B.faction)} ${escH(B.faction)} datasheets available.</p>` : noDatasheets()}`;
@@ -21954,7 +21969,8 @@ function renderBuilder() {
   const next = $('#bl-next'); if (next) next.addEventListener('click', () => { B.step = Math.min(STEPS.length - 1, B.step + 1); B.q = ''; renderBuilder(); });
   const cat = box.querySelector('.bld-cat'); if (cat) cat.scrollTop = scrollCat;
   on('.bld-cat details', 'toggle', e => { const d = e.currentTarget; if (!B.q) { d.open ? B.open.add(d.dataset.role) : B.open.delete(d.dataset.role); } });
-  const fac = $('#bl-fac'); if (fac) fac.addEventListener('change', e => { B.faction = e.target.value; B.roster = []; B.det = null; B.dets = []; B.enh = {}; B.warlord = null; if (!B.nameEdited) B.name = `${B.faction} ${B.limit} pts`; renderBuilder(); refreshTheme(B.faction); });
+  const chp = $('#bl-chap'); if (chp) chp.addEventListener('change', e => { B.chapter = e.target.value; const before = B.roster.length; B.roster = B.roster.filter(r => { const l = libOf(r); return !l || chapterOk(l); }); syncDet(); B.chapNote = B.roster.length < before ? `${before - B.roster.length} unit(s) from other chapters were removed from your roster.` : ''; renderBuilder(); });
+  const fac = $('#bl-fac'); if (fac) fac.addEventListener('change', e => { B.faction = e.target.value; B.chapter = ''; B.roster = []; B.det = null; B.dets = []; B.enh = {}; B.warlord = null; if (!B.nameEdited) B.name = `${B.faction} ${B.limit} pts`; renderBuilder(); refreshTheme(B.faction); });
   const nm = $('#bl-name'); if (nm) nm.addEventListener('input', e => { B.name = e.target.value; B.nameEdited = true; });
   on('[data-size]', 'click', e => { B.limit = +e.currentTarget.dataset.size; if (!B.nameEdited) B.name = `${B.faction} ${B.limit} pts`; renderBuilder(); });
   const lim = $('#bl-limit'); if (lim) lim.addEventListener('change', e => { B.limit = Math.max(100, +e.target.value || 1000); if (!B.nameEdited) B.name = `${B.faction} ${B.limit} pts`; renderBuilder(); });
@@ -22138,8 +22154,9 @@ function rosterToUnits() {
 /* open a saved army in the builder, so its detachment, leaders, enhancements and weapons can be swapped */
 function loadBuildIntoBuilder(b) {
   if (!b || !libCount(b.faction)) return false;
+  B.faction = b.faction; B.chapter = b.chapter || '';
   const dnames = b.detachments && b.detachments.length ? b.detachments.map(x => x.name) : (b.detachment ? (b.detachment.names || [b.detachment.name]) : []), dds = dnames.map(n => detsFor(b.faction).find(d => d.name === n)).filter(Boolean), lim = b.limit || ((b.points || 0) <= 1000 ? 1000 : (b.points || 0) <= 2000 ? 2000 : 3000);
-  Object.assign(B, { step: 1, faction: b.faction, name: b.name, nameEdited: true, limit: lim, roster: [], seq: 1, det: null, dets: dds.map(d => d.id), warlord: null, enh: {}, q: '', editId: b.id, wOpen: new Set(), sort: 'role', dir: 'desc' });
+  Object.assign(B, { step: 1, faction: b.faction, chapter: b.chapter || '', name: b.name, nameEdited: true, limit: lim, roster: [], seq: 1, det: null, dets: dds.map(d => d.id), warlord: null, enh: {}, q: '', editId: b.id, wOpen: new Set(), sort: 'role', dir: 'desc' });
   syncDet();
   const skipped = [], libFor = (ds, name) => LIB.find(x => x.faction === b.faction && x.name.toLowerCase() === String(ds || name).toLowerCase()) || LIB.find(x => x.faction === b.faction && x.name.toLowerCase() === inferDs(name, b.faction).toLowerCase());
   const enhOf = (abil, key) => { for (const a of (abil || [])) { const m = /^Enhancement:\s*(.+)$/i.exec(a.name || ''); if (m && dds.some(dd => dd.enh.some(z => z.name === m[1]))) B.enh[m[1]] = key; } };
@@ -22176,7 +22193,7 @@ const snapDet = d => d.names ? { name: d.name, names: d.names, rule: d.rule, rul
   : { name: d.name, rule: d.rule, ruleText: d.ruleText, strats: d.strats, effects: d.effects || [], dp: d.dp || 0, disposition: d.disposition || '' };
 async function saveRoster() {
   const units = rosterToUnits(), d = curDet();
-  const b = { id: 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), faction: B.faction, name: (B.name || 'New army').trim(), rules: [], units, points: rosterPts(), limit: B.limit, updated: Date.now(),
+  const b = { id: 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), faction: B.faction, chapter: B.chapter || undefined, name: (B.name || 'New army').trim(), rules: [], units, points: rosterPts(), limit: B.limit, updated: Date.now(),
     detachment: d ? snapDet(d) : null, detachments: curDets().length > 1 ? curDets().map(snapDet) : undefined };
   const prev = B.editId ? findBuild(B.editId) : null;
   if (prev) { b.id = prev.id; for (const nu of b.units) { const ou = (prev.units || []).find(x => x.ds === nu.ds && (x.leader ? x.leader.name : '') === (nu.leader ? nu.leader.name : '') && (x.imgId || x.imgData)); if (ou) { if (ou.imgId) nu.imgId = ou.imgId; if (ou.imgData) nu.imgData = ou.imgData; } } const ix = userBuilds.findIndex(x => x.id === prev.id); if (ix >= 0) userBuilds[ix] = b; else userBuilds.push(b); } else userBuilds.push(b);
