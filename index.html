@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.17-1933';
+  const VERSION = '2026.11.17-1948';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -17432,6 +17432,7 @@ function schBegin(spec) {
   me.x = spec.x; me.y = spec.y; me.placed = !spec.reserve; me.reserve = !!spec.reserve;
   const al = G.units.filter(u => u.side === 'player' && u.lessonRole === 'ally');
   al.forEach((a, i) => { const sp = (spec.allies || [])[i] || {}; a.x = me.x + (sp.dx || 0); a.y = me.y + (sp.dy || 0); a.placed = true; a.reserve = false; if ((spec.allies || [])[i] && spec.allies[i].embarked) embarkInto(me, a); if (sp.reserve) { a.placed = false; a.reserve = true; a.x = -50; a.y = -50; } });
+  if (spec.heroIn) { const car = al.find(x => x.campId === spec.heroIn); if (car) { embarkInto(car, me); me.x = car.x; me.y = car.y; } }
   al.forEach((a, i) => { const sp = (spec.allies || [])[i] || {}; if (sp.inId) { const car = [me].concat(al).find(x => x.campId === sp.inId); if (car && car !== a) embarkInto(car, a); } });
   fu.forEach((f, i) => { f.lessonAi = foes[i].ai || 'still'; f.placed = true; f.reserve = false; f.role = f.lessonAi === 'active' ? 'assault' : 'hold'; schPlaceEdge(foes[i].from === 'ally' && al[0] ? al[0] : me, f, foes[i].d, foes[i].ang || 0); if (f.x > BW - f.r - 1) f.x = BW - f.r - 1; });
   if (spec.hurtSelf) me.cur = spec.hurtSelf;
@@ -19591,7 +19592,7 @@ function crLoadState(ch) {
 function crLoadHtml(ch) {
   const { force, val } = crLoadState(ch), lead = force[0];
   const trs = force.filter(f => crIsTransport(f.id));
-  const res = force.slice(1).filter(f => { const l = crLib(f.id); return l && !crIsTransport(f.id) && !((l.kw || []).includes('vehicle') && !(l.kw || []).includes('transport')); });
+  const res = force.filter(f => { const l = crLib(f.id); return l && !crIsTransport(f.id) && !((l.kw || []).includes('vehicle') && !(l.kw || []).includes('transport')); });
   if (!trs.length && !res.length) return '';
   const used = {}; for (const f of force) if (val[f.id] && val[f.id] !== 'reserve') { const t = trs.find(x => x.id === val[f.id]); if (t) used[t.id] = (used[t.id] || 0) + crSpace(f, crLib(f.id), crTcap(crLib(t.id))); }
   const rows = res.map(f => {
@@ -19646,7 +19647,7 @@ function campBuildSpec(ch) {
     else if (hk === 'mud') u.M = Math.max(1, (+u.M || 0) - 1);
   }
   const extraT = (hk === 'mud' || hk === 'cover') ? [[30, 14], [30, 30], [18, 22]] : [];
-  return { hero: { faction: lead.fac || CAMP_FAC, unit: hero }, foes, x: lead.pos[0], y: lead.pos[1], terrain: ch.terrain.concat(extraT).map(([x, y]) => SCH_RUIN(x, y)), allies, detachment: ch.det ? tutDetSnap(ch.det) : (CAMP_ID === 'tut' ? null : crDetSnap()), cp: ch.cp, cpAi: ch.cpAi };
+  return { hero: { faction: lead.fac || CAMP_FAC, unit: hero }, heroIn: lead.embarkIn || '', reserve: !!lead.reserve && !lead.embarkIn, foes, x: lead.pos[0], y: lead.pos[1], terrain: ch.terrain.concat(extraT).map(([x, y]) => SCH_RUIN(x, y)), allies, detachment: ch.det ? tutDetSnap(ch.det) : (CAMP_ID === 'tut' ? null : crDetSnap()), cp: ch.cp, cpAi: ch.cpAi };
 }
 const tutDetSnap = name => { try { const d = detsFor(TUT_FAC).find(x => x.name === name); return d ? JSON.parse(JSON.stringify({ name: d.name, rule: d.rule, ruleText: d.ruleText, strats: d.strats, effects: d.effects || [], dp: d.dp, disposition: d.disposition })) : null; } catch (e) { return null; } };
 function campCtxExtra(c) {
