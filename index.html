@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.18-0139';
+  const VERSION = '2026.11.18-0142';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -1746,6 +1746,45 @@ html[data-look="cog"][data-tone="amber"] .panel,html[data-look="cog"][data-tone=
 html[data-look="cog"][data-tone="amber"] .purity-seal{bottom:-66px;right:-26px;transform:rotate(-4deg) scale(1.55);transform-origin:top center}
 html[data-look="cog"][data-tone="amber"] .wax-stamp{box-shadow:0 4px 8px rgba(0,0,0,.85),inset 0 2px 4px rgba(255,120,120,.35),inset 0 -3px 5px rgba(0,0,0,.4)}
 html[data-look="cog"][data-tone="amber"] .ribbon{font-size:5.5px}
+/* ---- amber tone: Cogitator specification (palette, Cinzel + Share Tech Mono, chamfered double-framed setup card, seal) ---- */
+html[data-look="cog"][data-tone="amber"]{--bg:#0c0c0a !important;--surface:#171714 !important;--raised:#1d1c17 !important;--ink:#d6cbb5 !important;--muted:#8a8372 !important;--line:#4f3d22 !important;--field:#0a0a08 !important;--cg-mono:"Share Tech Mono","Courier New",monospace;--cg-glow:rgba(229,154,36,.25)}
+html[data-look="cog"][data-tone="amber"] body{font-family:var(--cg-mono);background:linear-gradient(rgba(18,16,16,0) 50%,rgba(0,0,0,.45) 50%) 0 0/100% 3px,radial-gradient(circle at 60% 40%,#1d1c17 0%,#090907 100%) #0c0c0a !important}
+html[data-look="cog"][data-tone="amber"] h1,html[data-look="cog"][data-tone="amber"] h2,html[data-look="cog"][data-tone="amber"] .sb-title{font-family:"Cinzel",Georgia,serif !important;font-weight:700;letter-spacing:.1em;color:#c59b57;text-shadow:0 2px 4px rgba(0,0,0,.9)}
+html[data-look="cog"][data-tone="amber"] h3,html[data-look="cog"][data-tone="amber"] h4{font-family:var(--cg-mono);font-weight:400;letter-spacing:.1em;color:#e59a24}
+html[data-look="cog"][data-tone="amber"] .sb-title{font-size:.9rem !important;font-weight:800}
+html[data-look="cog"][data-tone="amber"] .sb-title[data-sub]::after{font:400 .66rem var(--cg-mono);letter-spacing:.08em;color:#8a8372}
+html[data-look="cog"][data-tone="amber"] .sidebar{background:#131310 !important;border-right:2px solid #8c6d3f !important;box-shadow:4px 0 15px rgba(0,0,0,.8)}
+html[data-look="cog"][data-tone="amber"] .sidebar .tabs button .lbl{font:400 .86rem/1.15 var(--cg-mono) !important;letter-spacing:.05em !important;color:#d6cbb5}
+html[data-look="cog"][data-tone="amber"] .sidebar .tabs button .lbl[data-sub]::after{font:400 .66rem var(--cg-mono);letter-spacing:.05em;color:#8a8372}
+html[data-look="cog"][data-tone="amber"] .sidebar .tabs button .ico-v{color:#c59b57;filter:none;width:26px;height:26px}
+html[data-look="cog"][data-tone="amber"] .sidebar .tabs button .ico-v svg{width:18px;height:18px}
+html[data-look="cog"][data-tone="amber"] .sidebar .tabs button:hover,html[data-look="cog"][data-tone="amber"] .sidebar .tabs button[aria-selected="true"]{background:linear-gradient(90deg,rgba(197,155,87,.18),rgba(197,155,87,.02)) !important;border-left:3px solid #e59a24 !important}
+html[data-look="cog"][data-tone="amber"] .sidebar .tabs button:hover .lbl,html[data-look="cog"][data-tone="amber"] .sidebar .tabs button[aria-selected="true"] .lbl,html[data-look="cog"][data-tone="amber"] .sidebar .tabs button:hover .ico-v,html[data-look="cog"][data-tone="amber"] .sidebar .tabs button[aria-selected="true"] .ico-v{color:#e59a24}
+html[data-look="cog"][data-tone="amber"] .sidebar .tabs button:hover .ico-v,html[data-look="cog"][data-tone="amber"] .sidebar .tabs button[aria-selected="true"] .ico-v{filter:drop-shadow(0 0 5px rgba(229,154,36,.25))}
+html[data-look="cog"][data-tone="amber"] .sidebar #sb-settings .lbl{font:400 .86rem var(--cg-mono) !important;letter-spacing:.05em !important}
+/* setup card: chamfered double frame painted by pseudo-elements so the seal is not clipped */
+html[data-look="cog"][data-tone="amber"] #b-setup{position:relative;isolation:isolate;background:none !important;border:0 !important;box-shadow:none !important;clip-path:none !important;padding:24px 28px;margin:10px 10px 14px;filter:drop-shadow(0 10px 18px rgba(0,0,0,.85))}
+html[data-look="cog"][data-tone="amber"] #b-setup::before{content:"";position:absolute;inset:0;z-index:-1;background:#8c6d3f;clip-path:polygon(14px 0,calc(100% - 14px) 0,100% 14px,100% calc(100% - 14px),calc(100% - 14px) 100%,14px 100%,0 calc(100% - 14px),0 14px)}
+html[data-look="cog"][data-tone="amber"] #b-setup::after{content:"";position:absolute;inset:2px;z-index:-1;clip-path:polygon(13px 0,calc(100% - 13px) 0,100% 13px,100% calc(100% - 13px),calc(100% - 13px) 100%,13px 100%,0 calc(100% - 13px),0 13px);pointer-events:none;
+  background:radial-gradient(circle,#c59b57 0 2px,#4f3d22 3px,transparent 4px) top 9px left 14px/8px 8px no-repeat,radial-gradient(circle,#c59b57 0 2px,#4f3d22 3px,transparent 4px) top 9px right 14px/8px 8px no-repeat,radial-gradient(circle,#c59b57 0 2px,#4f3d22 3px,transparent 4px) bottom 9px left 14px/8px 8px no-repeat,radial-gradient(circle,#c59b57 0 2px,#4f3d22 3px,transparent 4px) bottom 9px right 14px/8px 8px no-repeat,radial-gradient(circle at top right,rgba(197,155,87,.05),transparent 60%),#171714;
+  box-shadow:inset 0 0 0 3px #171714,inset 0 0 0 4px #4f3d22,inset 0 0 25px rgba(0,0,0,.9)}
+html[data-look="cog"][data-tone="amber"] select,html[data-look="cog"][data-tone="amber"] input[type=text],html[data-look="cog"][data-tone="amber"] input[type=number],html[data-look="cog"][data-tone="amber"] input[type=search],html[data-look="cog"][data-tone="amber"] textarea{font-family:var(--cg-mono) !important;font-weight:400;font-size:.92rem;background:#0a0a08 !important;color:#e59a24 !important;border:1px solid #4f3d22 !important;border-left:3px solid #c59b57 !important;box-shadow:none !important}
+html[data-look="cog"][data-tone="amber"] select:focus,html[data-look="cog"][data-tone="amber"] input:focus,html[data-look="cog"][data-tone="amber"] textarea:focus{border-color:#e59a24 !important;box-shadow:0 0 8px rgba(229,154,36,.25) !important;outline:none}
+html[data-look="cog"][data-tone="amber"] input[type=checkbox]{width:16px;height:16px;border:1px solid #c59b57 !important;border-left:1px solid #c59b57 !important;background:#0a0a08 !important;box-shadow:none !important;border-radius:0 !important}
+html[data-look="cog"][data-tone="amber"] input[type=checkbox]:checked{background:rgba(229,154,36,.18) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23e59a24' d='M12 2C7.58 2 4 5.58 4 10c0 2.85 1.5 5.35 3.75 6.75V20c0 .55.45 1 1 1h6.5c.55 0 1-.45 1-1v-3.25C18.5 15.35 20 12.85 20 10c0-4.42-3.58-8-8-8zm-3 9.5c-.83 0-1.5-.67-1.5-1.5S8.17 8.5 9 8.5s1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm6 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z'/%3E%3C/svg%3E") center/11px no-repeat !important;border-color:#e59a24 !important}
+html[data-look="cog"][data-tone="amber"] .btn,html[data-look="cog"][data-tone="amber"] .chip-btn,html[data-look="cog"][data-tone="amber"] button.tabbtn{font-family:var(--cg-mono) !important;font-weight:400;font-size:.9rem;letter-spacing:.08em !important}
+html[data-look="cog"][data-tone="amber"] .btn.primary{font-family:"Cinzel",Georgia,serif !important;font-weight:900;font-size:.95rem;letter-spacing:.08em;background:linear-gradient(180deg,#b88b44 0%,#825f26 50%,#6b4d1d 100%) !important;color:#0c0c0a !important;border:1px solid #e6be7a !important;box-shadow:inset 0 1px 0 rgba(255,240,200,.4),0 0 14px rgba(229,154,36,.25) !important}
+html[data-look="cog"][data-tone="amber"] .btn.primary:hover:not(:disabled){background:linear-gradient(180deg,#cfa053,#966e2d) !important;box-shadow:0 0 20px rgba(229,154,36,.45) !important}
+html[data-look="cog"][data-tone="amber"] #b-new .sub{font:400 .72rem var(--cg-mono);color:#1c1306;opacity:.8}
+html[data-look="cog"][data-tone="amber"] #b-guided{font-family:"Cinzel",Georgia,serif !important;font-weight:700;font-size:.85rem;letter-spacing:.08em;background:linear-gradient(180deg,#2b2419,#1a150e) !important;color:#d6cbb5 !important;border:1px solid #8c6d3f !important}
+html[data-look="cog"][data-tone="amber"] #b-guided:hover{border-color:#e59a24 !important;color:#e59a24 !important}
+html[data-look="cog"][data-tone="amber"] #b-guided+p{padding-right:56px}
+html[data-look="cog"][data-tone="amber"] .purity-seal{bottom:-44px;right:-12px;transform:rotate(-2deg);z-index:25}
+html[data-look="cog"][data-tone="amber"] .wax-stamp{width:48px;height:48px;background:radial-gradient(circle at 35% 30%,#bd2b2b,#8f1d1d 60%,#4a0b0b 100%);border:3px dashed #631010;box-shadow:0 5px 10px rgba(0,0,0,.9),inset 0 2px 3px rgba(255,140,140,.35);color:#420808}
+html[data-look="cog"][data-tone="amber"] .parchment-ribbons{gap:2px}
+html[data-look="cog"][data-tone="amber"] .ribbon{width:19px;height:64px;font-size:4.5px;line-height:1.25;color:#362e22;font-weight:700;box-shadow:2px 4px 8px rgba(0,0,0,.85)}
+html[data-look="cog"][data-tone="amber"] .ribbon:nth-child(2){height:55px;transform:rotate(3.5deg)}
+html[data-look="cog"][data-tone="amber"] footer{border-top:1px solid #4f3d22;color:#8f8877;font-size:.78rem;line-height:1.45;padding-top:14px;margin-top:28px}
 /* ===== Kill Team mode ===== */
 #kt-root{max-width:1240px;margin:0 auto}
 #kt-root .kt-sub{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}
@@ -26780,7 +26819,7 @@ HOW YOU ANSWER
     const gb = document.createElement('button'); gb.className = 'btn'; gb.id = 'b-guided'; gb.type = 'button'; gb.textContent = 'Start a guided battle with a coach';
     gb.title = 'A complete game with goals, hints and a live Claude coach you can ask questions';
     nb.parentNode.insertBefore(gb, nb.nextSibling);
-    { const host = nb.parentNode; if (!host.querySelector('.purity-seal')) { if (getComputedStyle(host).position === 'static') host.style.position = 'relative'; const ps = document.createElement('div'); ps.className = 'purity-seal'; ps.setAttribute('aria-hidden', 'true'); ps.innerHTML = '<div class="wax-stamp"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C7.58 2 4 5.58 4 10c0 2.85 1.5 5.35 3.75 6.75V20c0 .55.45 1 1 1h6.5c.55 0 1-.45 1-1v-3.25C18.5 15.35 20 12.85 20 10c0-4.42-3.58-8-8-8zm-3 9.5c-.83 0-1.5-.67-1.5-1.5S8.17 8.5 9 8.5s1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm6 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg></div><div class="parchment-ribbons"><div class="ribbon">++ LITANY OF ACCURACY ++ AVE IMPERATOR ++</div><div class="ribbon">++ OMNISSIAH BLESS THIS COGITATOR ++</div></div>'; host.appendChild(ps); } }
+    { const host = nb.parentNode; if (!host.querySelector('.purity-seal')) { if (getComputedStyle(host).position === 'static') host.style.position = 'relative'; const ps = document.createElement('div'); ps.className = 'purity-seal'; ps.setAttribute('aria-hidden', 'true'); ps.innerHTML = '<div class="wax-stamp"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C7.58 2 4 5.58 4 10c0 2.85 1.5 5.35 3.75 6.75V20c0 .55.45 1 1 1h6.5c.55 0 1-.45 1-1v-3.25C18.5 15.35 20 12.85 20 10c0-4.42-3.58-8-8-8zm-3 9.5c-.83 0-1.5-.67-1.5-1.5S8.17 8.5 9 8.5s1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm6 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg></div><div class="parchment-ribbons"><div class="ribbon">++ LITANY OF PRECISION ++ AVE IMPERATOR ++</div><div class="ribbon">++ OMNISSIAH BLESS THIS COGITATOR ++</div></div>'; host.appendChild(ps); } }
     const note = document.createElement('p'); note.className = 'muted'; note.style.cssText = 'margin:4px 0 0;font-size:.85rem';
     note.textContent = 'Tip for a first guided game: pick small armies. The coach adds goals, hints and a chat (live Claude on claude.ai; it uses your Claude usage when you ask).';
     gb.parentNode.insertBefore(note, gb.nextSibling);
