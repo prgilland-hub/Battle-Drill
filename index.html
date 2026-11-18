@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.18-0158';
+  const VERSION = '2026.11.18-0202';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -15682,8 +15682,10 @@ void main(){
     sh/=cnt; if(p.x<0.||p.x>1.||p.y<0.||p.y>1.) sh=1.; }
   vec3 vd0=normalize(uCam-vW);
   vec3 amb=mix(uAmbB,uAmbT,n.y*.5+.5);
+  vec3 sunC=uSunC;
+  if(uQ>.5){ amb*=vec3(.9,.98,1.14); sunC*=vec3(1.1,1.,.86); float gr=step(.9,n.y)*(1.-smoothstep(.2,.6,vW.y))*(1.-wx*2.); c*=1.+gr*((vn(vW*.22)-.5)*.34+(vn(vW*1.7)-.5)*.16+(vn(vW*7.)-.5)*.08); }
   float ao=mix(.62,1.,smoothstep(0.,1.4,vW.y)); ao=mix(1.,ao,1.-abs(n.y)*.6);
-  vec3 col=c*(amb*ao+uSunC*ndl*sh);
+  vec3 col=c*(amb*ao+sunC*ndl*sh);
   col+=c*vM.y*2.2;
   if(leaf>.5) col+=c*uSunC*max(dot(-n,uSun),0.)*.35*sh;
   if(gls>.5){ vec3 hh=normalize(uSun+vd0); float sp=pow(max(dot(n,hh),0.),6.+gls*34.)*ndl*sh*gls*(.22+.18*gls); col+=uSunC*sp; if(gls>1.5) col=mix(col,uFog*1.6+.05,pow(1.-max(dot(n,vd0),0.),4.)*.38); }
