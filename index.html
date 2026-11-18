@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.17-1925';
+  const VERSION = '2026.11.17-1945';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -3229,7 +3229,7 @@ function sightCover(a, t) {
   const pa = (MODELS.on && isUnitObj(a) && isUnitObj(t)) ? repPoints(a, t)[0] : { x: a.x, y: a.y }, qs = (MODELS.on && isUnitObj(a) && isUnitObj(t)) ? repPoints(t, a) : [{ x: t.x, y: t.y }];
   return qs.every(q => (cvKw(t) && TERRAIN.some(r => coversT(r) && inRect(q, r))) || !ptVisible(pa, q));
 }
-const coverFor = (t, a) => !(t.dg && t.dg.noCover) && !(typeof G !== 'undefined' && G && t.tsNoCover === G.turnNo) && (inCover(t) || (!!a && sightCover(a, t)) || tsGlamour(t) || has(t, 'stealth') || ledFx(t, 'grant-stealth').length > 0 || !!t.smoked || (hasFx(t, 'cadia-cover') && OBJ.some(o => objIn(t, o) && controller(o) === t.side)));
+const coverFor = (t, a) => !(t.dg && t.dg.noCover) && !(typeof G !== 'undefined' && G && t.tsNoCover === G.turnNo) && (inCover(t) || (!!a && sightCover(a, t)) || tsGlamour(t) || has(t, 'stealth') || ledFx(t, 'grant-stealth').length > 0 || (typeof G !== 'undefined' && G && t.side && t.placed && auraFor(t).some(x => x.t[3] === 'stealth')) || !!t.smoked || (hasFx(t, 'cadia-cover') && OBJ.some(o => objIn(t, o) && controller(o) === t.side)));
 const sideName = s => s === 'player' ? 'You' : 'The AI';
 const nearEnemy = (u, x, y, d) => aliveSide(other(u.side)).some(e => Math.hypot(e.x - x, e.y - y) - e.r - u.r <= d);
 function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
@@ -3679,6 +3679,15 @@ amRule(/^while this model is leading a unit, each time that unit advances, do no
 amRule(/^while this model is leading a unit, you can re-roll advance rolls made for that unit, and you can re-roll any rolls made for that unit while it is performing an agile manoeuvre/, ['reroll-advance']);
 amRule(/^while an enemy unit is within 6" of this model, each time that unit takes a battle-shock or leadership test, subtract 1 from that test/, ['shock-aura 6']);
 amRule(/^each time a model in the bearer.s unit makes an attack, re-roll a hit roll of 1\.?$/, ['mod rr-hit-1s']);
+amRule(/^while this (?:model|unit) is within 3" of (?:one or more |a )?(?:other )?friendly (.+?) units?(?: \([^)]*\))?(?:, unless it is leading a unit)?, this (?:model|unit) has (?:the )?lone operative(?: ability)?\.?$/, m => ['lone-near ' + m[1].replace(/,/g, '')]);
+amRule(/^each time this unit advances, do not make an advance roll for it\. instead, until the end of the phase, add 6" to the move characteristic of models in this unit/, ['advance6']);
+amRule(/^if this unit made a charge move this turn, this unit.s melee attacks have \[lethal hits\]/, ['mod lethal melee if-charged']);
+amRule(/^each time a model in this unit makes a charge move, until the end of the turn, melee weapons equipped by models in this unit have the \[lethal hits\] ability/, ['mod lethal melee if-charged']);
+amRule(/^in a turn this unit remained stationary, ranged attacks that have \[heavy\] also have \[lethal hits\]/, ['mod lethal ranged if-stationary heavy']);
+amRule(/^each time a model in this unit makes a ranged attack that targets the closest eligible target, that attack has the \[sustained hits 1\] and \[ignores cover\] abilities/, ['mod sus1 ranged closest', 'mod ignore-cover ranged closest']);
+amRule(/^while a friendly war dog model is within 6" of this model, ranged weapons equipped by that war dog model have the \[sustained hits 1\] ability/, ['aura 6 war-dog sus1 ranged']);
+amRule(/^while a friendly war dog model is within 6" of this model, ranged weapons equipped by that war dog model have the \[ignores cover\] ability/, ['aura 6 war-dog ignore-cover ranged']);
+amRule(/^while a friendly (adeptus mechanicus|legiones daemonica|nurgle legiones daemonica) unit is within 6" of this (?:model|fortification), (?:that unit has|models in that unit have) the stealth ability/, m => [`aura 6 ${m[1].split(' ').pop() === 'mechanicus' ? 'adeptus-mechanicus' : m[1].includes('nurgle') ? 'nurgle' : 'legiones-daemonica'} stealth`]);
 amRule(/^each time a ranged attack targets this model, worsen the armour penetration characteristic of that attack by 1\.?$/, ['dmod ap-1-r']);
 amRule(/^ranged weapons equipped by this model have the \[ignores cover\] ability while targeting an enemy unit within half range/, ['mod ignore-cover ranged half-range']);
 amRule(/^the bearer.s unit has the feel no pain (\d)\+ ability against mortal wounds\.?$/, m => [`fnp-mortal-self ${m[1]}`]);
@@ -9558,7 +9567,9 @@ function dgAiStrats(u, phase) {
 /* ============ DEATH GUARD UNIT ABILITIES ============ */
 const DG_ABILITY_SIM = /^(tally of pestilence|disease of mirth|reverberating summons|boon of death|des+ic+ation conduit|feculent despair|interceptor|lord of chaos|fevered strategist|death approaches|fearsome|daemon lord of nurgle|diseased malice|gift of poxes|virulent aura|gift of contagion|host of plagues|infused with the blessings|seven-?fold chant|diseased influence|inflamed reprisal|lord of the death guard|inviolable transport|even in death i serve|unholy resilience|rolling fortress|fire support|pestilent familiar|putrescent vitality|grotesque regeneration|extraction of fresh disease|blistering fusillade|metalophagic infection|hail of corrosive disease|lethal ichor|thunderhawk cluster bombs|bomb rack|horrifying visage|enfeebling miasma|death guard defenders|miasma of pestilence|malefic impact|daemonic locus|chaos lord$|infectious bloodshed|silent bodyguard|scuttling walker|barrage of filth|explosive blight|putrefying stink|blinding spray|nurgle.s rot|froth-spattered frenzy|blessed icon of disease|infernal attendants|font of unreality|shroud of disease|blight bombardment|pestilent fallout|mischief makers|tank hunters|sickening vitality|tocsin of misery|death.s heads|tainted narthecium|inflamed infections|infected outbreak|spore-laced shock waves|curse of the walking pox|virulent blessing|deluge of nurgle|ferocious assault|the destroyer hive|eater plague|pinning bombardment|foul infusion|atomantic arc-reactor|grotesque regeneration)/i;
 const orkLone = t => fxGet(t, 'lone-near').some(x => { const kw = x.t[2], ex = x.t[3] || '-'; return aliveSide(t.side).some(v => v !== t && v.placed && edge(t, v) <= +x.t[1] && (kw === 'orks_infantry' ? (v.faction === 'Orks' && has(v, 'infantry')) : /_infantry$/.test(kw) ? (has(v, 'infantry') && ntIs(v, kw.replace(/_infantry$/, '').replace(/_/g, ' '))) : ntIs(v, kw.replace(/_/g, ' '))) && !(ex.includes('monster') && has(v, 'monster')) && !(ex.includes('wartrakk') && /wartrakks/i.test(v.name)) && !(ex.includes('shokk') && /shokk attack gun/i.test(v.name))); });
-const isLone = t => !t.leader && (has(t, 'lone operative') || orkLone(t) || (hasFx(t, 'tech-lone') && nearFriend(t, v => has(v, 'vehicle'), 3)) || tsLone(t) ||
+const descMatch = (v, w) => !w.length || [...w.keys()].map(i => w.length - i).some(k => { const ph = w.slice(0, k).join(' '); return (has(v, ph) || unitHas(v, ph)) && descMatch(v, w.slice(k)); });
+const loneNear = t => fxGet(t, 'lone-near').some(x => nearFriend(t, v => x.t.slice(1).join(' ').split(' or ').some(a => descMatch(v, a.trim().split(/\s+/))), 3));
+const isLone = t => !t.leader && (has(t, 'lone operative') || loneNear(t) || orkLone(t) || (hasFx(t, 'tech-lone') && nearFriend(t, v => has(v, 'vehicle'), 3)) || tsLone(t) ||
   (abIn(t, /^death guard defenders/i) && aliveSide(t.side).some(v => v !== t && isDGU(v) && has(v, 'infantry') && edge(t, v) <= 3)) ||
   (abIn(t, /^infernal attendants/i) && aliveSide(t.side).some(v => v !== t && has(v, 'daemon') && has(v, 'infantry') && edge(t, v) <= 3)) ||
   (enhHolder(t, /tendrilous emissions/i) && aliveSide(t.side).some(v => v !== t && isDGU(v) && has(v, 'vehicle') && edge(t, v) <= 3)));
