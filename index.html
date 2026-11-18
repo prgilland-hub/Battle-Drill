@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.17-1905';
+  const VERSION = '2026.11.17-1925';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -3523,9 +3523,10 @@ const auraKwOk = (u, spec) => spec === 'slaanesh-daemon' ? (has(u, 'slaanesh') &
 const auraFor = u => aliveSide(u.side).filter(v => v !== u).flatMap(v => fxGet(v, 'aura').filter(x => auraKwOk(u, x.t[2]) && edge(u, v) <= +x.t[1]));
 const freeChargeReroll = u => hasFx(u, 'reroll-charge') || (typeof btVow === 'function' && btVow(u, 'abhor') && aliveSide(other(u.side)).some(e => has(e, 'psyker') && edge(u, e) <= 12)) || auraFor(u).some(x => x.t[3] === 'reroll-charge') || !!(typeof isSM === 'function' && isSM(u) && enhHolder(u, /laurels of thunder/i) && (u.arrived || u.disembarked)) || !!(typeof dgFaction === 'function' && dgFaction(u.side) && abIn(u, /^sickening vitality/i) && leaderUp(u));
 const ntAuraCharge = u => (!G || !u.side) ? 0 : (aliveSide(u.side).some(v => v !== u && fxGet(v, 'aura-charge').some(x => edge(u, v) <= +x.t[1] && ntIs(u, x.t.slice(2).join(' ')))) ? 1 : 0);
-const chargeBonus = u => -((typeof G !== 'undefined' && G && u.pinnedUntil && G.turnNo <= u.pinnedUntil) ? 2 : 0) - (tsSnared(u) ? 2 : 0) - (isShaken(u) ? 2 : 0) + fxGet(u, 'charge+1').length + ledFx(u, 'charge+1-led').length + ntSurging(u) + ntAuraCharge(u) + (asRelic(u, 'fiery-heart') ? 1 : 0);
+const chargeBonus = u => -((typeof G !== 'undefined' && G && u.pinnedUntil && G.turnNo <= u.pinnedUntil) ? 2 : 0) - (tsSnared(u) ? 2 : 0) - (isShaken(u) ? 2 : 0) + fxGet(u, 'charge+1').length + ledFx(u, 'charge+1-led').length + ntSurging(u) + ntAuraCharge(u) + auraAC(u) + (asRelic(u, 'fiery-heart') ? 1 : 0);
+const auraAC = u => (!G || !u.side) ? 0 : (aliveSide(u.side).some(v => v !== u && fxGet(v, 'aura-ac').some(x => edge(u, v) <= +x.t[1] && auraKwOk(u, x.t[2]))) ? 1 : 0);
 const chargePen = t => fxGet(t, 'charge-penalty').reduce((m, x) => Math.max(m, +x.t[1] || 2), 0);
-const advBonus = u => -(isShaken(u) ? 2 : 0) + fxGet(u, 'advance+1').length + ledFx(u, 'advance+1-led').length + ntSurging(u) + ((u.dg && u.dg.advPlus) || 0) + (orkBonusAdv(u));
+const advBonus = u => -(isShaken(u) ? 2 : 0) + fxGet(u, 'advance+1').length + ledFx(u, 'advance+1-led').length + ntSurging(u) + ((u.dg && u.dg.advPlus) || 0) + (orkBonusAdv(u)) + auraAC(u);
 const addFlat = (e, n) => e && n ? Object.assign({}, e, { flat: e.flat + n }) : e;
 const ledFx = (u, k) => fxGet(u, k).filter(x => x.src === 'leader');
 const permHas = (u, k) => fxGet(u, 'perm').some(x => x.t.includes(k)) || (k === 'charge-adv' && ((typeof isRiled === 'function' && isRiled(u)) || (G && u.advChargeTurn === G.turnNo)));
@@ -3592,6 +3593,7 @@ function modCond(c, ctx, x) {
     case 'within-6': return edge(u, t) <= 6; case 'torrent': return !!w.torrent; case 'self': return x && x.src === 'leader' ? (!!w.leader && (x.lid || 0) === (w.lid || 0)) : !w.leader; case 'if-priest': return leaderUp(u) && /ministorum priest/i.test(u.leader.name || ''); case 'near-flyinf': return aliveSide(u.side).some(v => v !== u && ntIs(v, 'infantry') && has(v, 'fly') && edge(v, t) <= 9); case 'tgt-obj': return OBJ.some(o => objIn(t, o)); case 'vs-fly': return has(t, 'fly');
     case 'near-obj': return OBJ.some(o => objIn(u, o) || objIn(t, o)); case 'within-9': return edge(u, t) <= 9;
     case 'vs-daemon': return has(t, 'daemon');
+    case 'vs-not-titanic': return !has(t, 'titanic');
     case 'vs-psyker': return has(t, 'psyker'); case 'vs-swarm-inf': return has(t, 'infantry') || has(t, 'swarm');
     case 'if-arrived': return !!u.arrived; case 'if-15': return u.models >= 15;
     case 'psychic': return (w.xkw || []).some(k => /psychic/i.test(k));
@@ -3668,7 +3670,23 @@ amRule(/^attacks that target this unit have -1 d\.?$/, ['damage-minus 1']);
 amRule(/^attacks that target this unit have -1 ap\.?$/, ['dmod ap-1']);
 amRule(/^attacks that target this unit with a s greater than this unit's t have -1 to wound rolls/, ['dmod wound-1-sgt']);
 amRule(/^this unit's attacks have \+1 to hit rolls\.?$/, ['mod hit+1']);
+amRule(/^each time this model makes a melee attack, if it made a charge move this turn, a successful unmodified hit roll of 4\+ scores a critical hit/, ['mod crit4 melee if-charged self']);
+amRule(/^the bearer.s melee weapons have the \[lance\] ability\.?$/, ['mod lance melee']);
+amRule(/^melee weapons equipped by the bearer have the \[devastating wounds\] ability when targeting units without the titanic keyword/, ['mod dev melee vs-not-titanic']);
+amRule(/^while a friendly aeldari unit is within 6" of this model, add 1 to advance and charge rolls made for that unit/, ['aura-ac 6 aeldari']);
+amRule(/^each time this model advances, do not make an advance roll for it\. instead, until the end of the phase, add 9" to the move characteristic of this model/, ['adv-fixed 9']);
+amRule(/^while this model is leading a unit, each time that unit advances, do not make an advance roll(?: for it)?\. instead, until the end of the phase, add 6" to the move characteristic of models in that unit/, ['advance6']);
+amRule(/^while this model is leading a unit, you can re-roll advance rolls made for that unit, and you can re-roll any rolls made for that unit while it is performing an agile manoeuvre/, ['reroll-advance']);
+amRule(/^while an enemy unit is within 6" of this model, each time that unit takes a battle-shock or leadership test, subtract 1 from that test/, ['shock-aura 6']);
 amRule(/^each time a model in the bearer.s unit makes an attack, re-roll a hit roll of 1\.?$/, ['mod rr-hit-1s']);
+amRule(/^each time a ranged attack targets this model, worsen the armour penetration characteristic of that attack by 1\.?$/, ['dmod ap-1-r']);
+amRule(/^ranged weapons equipped by this model have the \[ignores cover\] ability while targeting an enemy unit within half range/, ['mod ignore-cover ranged half-range']);
+amRule(/^the bearer.s unit has the feel no pain (\d)\+ ability against mortal wounds\.?$/, m => [`fnp-mortal-self ${m[1]}`]);
+amRule(/^this model has feel no pain (\d)\+ against psychic attacks and mortal wounds\.?$/, m => [`fnp-psy ${m[1]}`, `fnp-mortal-self ${m[1]}`]);
+amRule(/^each time this model makes a ranged attack with its stormblade plasma blastgun that targets a unit within half range, you can re-roll the hit roll/, ['mod rr-hit-all ranged half-range wn:stormblade_plasma_blastgun']);
+amRule(/^each time this model makes a ranged attack with its macharius twin vanquisher cannon that targets a monster or vehicle unit, you can re-roll the hit roll/, ['mod rr-hit-all ranged vs-mv wn:macharius_twin_vanquisher_cannon']);
+amRule(/^while this unit.s minka lesk model is on the battlefield, each time a model in this unit makes an attack, you can re-roll the hit roll/, ['mod rr-hit-all']);
+amRule(/^while a friendly astra militarum unit is within 6" of this model, (?:that unit can re-roll battle-shock rolls|you can re-roll battle-shock and leadership tests taken for that unit)/, ['shock-rr 6 astra-militarum']);
 amRule(/^each time this model makes an attack that targets a daemon unit, you can re-roll the hit roll and you can re-roll the wound roll/, ['mod rr-hit-all vs-daemon', 'mod rr-wound-all vs-daemon']);
 amRule(/^models in the bearer.s unit have the feel no pain (\d)\+ ability against mortal wounds and psychic attacks/, m => [`fnp-mortal ${m[1]}`, `fnp-psy ${m[1]}`]);
 amRule(/^each time an attack targets this unit, if the strength characteristic of that attack is greater than the toughness characteristic of this unit, subtract 1 from the wound roll/, ['dmod wound-1-sgt']);
@@ -4680,7 +4698,7 @@ const isShaken = u => !!G && u.shakenTurn !== undefined && (G.turnNo || 0) - u.s
 amRule(/^each time an attack is allocated to this model, halve the damage characteristic of that attack/, ['half-dmg']);
 amRule(/^while this unit is within range of an objective(?: marker)?, this unit has \+1 sv against ranged attacks/, ['sv-ranged-obj']);
 amRule(/^(?:the bearer has|this unit has|this model has|while this model is leading a unit, models in that unit have) the feel no pain (\d)\+ ability against psychic attacks\.?$|^this unit has feel no pain (\d)\+ against psychic attacks\.?$/, m => [`fnp-psy ${m[1] || m[2]}`]);
-amRule(/^this unit can only be selected as the target of a ranged attack if the attacking model is within (\d+)"/, m => [`poly-camo ${m[1]}`]);
+amRule(/^(?:this unit|this model.s unit) can only be selected as the target of a ranged attack if the attacking model is within (\d+)"/, m => [`poly-camo ${m[1]}`]);
 amRule(/^while this model is leading a unit, that unit is eligible to shoot in a turn in which it fell back/, ['perm shoot-fb']);
 amRule(/^while this model is being affected by an order, provided it remained stationary this turn, ranged weapons equipped by this model have the \[sustained hits 1\] ability/, ['mod sus1 ranged if-stationary if-ordered']);
 amRule(/^while this unit is being affected by an order, provided it remained stationary this turn, all heavy weapons equipped by models in this unit have the \[sustained hits 1\] ability/, ['mod sus1 ranged heavy if-stationary if-ordered']);
@@ -8683,6 +8701,7 @@ function shockRoll(u, mod) {
   const afV = asShockSub(u, mm, ldOf(u)); if (afV !== null) dice[0] = asUse(u, afV, 'a Battle-shock test');
   let r = dice.reduce((a, b) => a + b, 0) + mm;
   if (u.faction === 'Adepta Sororitas' && asRelic(u, 'censer') && r < ldOf(u)) { const d2 = dice.map(() => d6()); const r2 = d2.reduce((a, b) => a + b, 0) + mm; log(`Censer of the Sacred Rose: ${u.name} re-rolls its Battle-shock test (${dice.join('+')} then ${d2.join('+')}).`, u.side); if (r2 > r) { dice.splice(0, dice.length, ...d2); r = r2; } }
+  if (G && r < ldOf(u) && aliveSide(u.side).some(v => v.placed && !v.reserve && fxGet(v, 'shock-rr').some(x => edge(u, v) <= (+x.t[1] || 6) && auraKwOk(u, x.t[2] || 'any')))) { const d2 = dice.map(() => d6()); const r2 = d2.reduce((a, b) => a + b, 0) + mm; log(`Inspiring aura: ${u.name} re-rolls its Battle-shock test (${dice.join('+')} then ${d2.join('+')}).`, u.side); if (r2 > r) { dice.splice(0, dice.length, ...d2); r = r2; } }
   if (rrLd && r < ldOf(u) && !syn) { const d2 = [d6(), d6()]; const r2 = d2.reduce((a, b) => a + b, 0) + mm; log(`Fiery Faith: ${u.name} re-rolls its Leadership test (${dice.join('+')} then ${d2.join('+')}).`, u.side); if (r2 > r) { dice.splice(0, dice.length, ...d2); r = r2; } }
   if (r < ldOf(u)) { try { tsLeech(u); } catch (e) { } }
   return { dice, r, syn, txt: `${dice.join('+')}${mm ? (mm > 0 ? '+' : '') + mm : ''}=${r}${syn ? ', Synapse 3D6' : ''}` };
@@ -9054,6 +9073,7 @@ function dgShockMod(u) {
   }
   if (aliveSide(other(u.side)).some(v => abIn(v, /^fearsome/i) && edge(u, v) <= 6)) m -= 1;
   if (aliveSide(other(u.side)).some(v => abIn(v, /^feculent despair/i) && edge(u, v) <= 6)) m -= 1;
+  if (aliveSide(other(u.side)).some(v => v.placed && !v.reserve && hasFx(v, 'shock-aura') && edge(u, v) <= (+fxGet(v, 'shock-aura')[0].t[1] || 6))) m -= 1;
   return m;
 }
 /* ---- attack modifiers ---- */
@@ -10088,6 +10108,7 @@ function advRoll(u) {
   let r = d6();
   if ((hasFx(u, 'reroll-advance') || orkWaaagh(u)) && r <= 3) { const r2 = d6(); log(`${u.name} re-rolls its Advance roll (${r}, then ${r2}).`, u.side); r = r2; }
   if (hasFx(u, 'advance6')) r = 6;
+  { const af = fxGet(u, 'adv-fixed')[0]; if (af) r = +af.t[1] || r; }
   if (hasFx(u, 'flank-speed')) r = 8;
   if (hasFx(u, 'shokk-boosta')) { r = 6; u.pendHaz = (u.pendHaz || 0) + totalModels(u); }
   return r + advBonus(u);
@@ -10376,7 +10397,7 @@ function orkProfile(r, N, u, w, t, shooting, S, T) {
   if (t.dg && t.dg.woundm) { r.wound -= t.dg.woundm; N('Wound penalty'); }
   if (u.blessedUntil === G.turnNo && !asIs(u)) { r.ignoreMods = true; N('Ignores modifiers'); }
   if (!shooting && u.dg && u.dg.lance && u.charged && !asIs(u)) { r.wound += 1; N('Lance'); }
-  for (const x of fxAll(t)) if (x.t[0] === 'dmod') { if (x.t[1] === 'ap-1') { r.ap -= 1; N(x.a.name); } else if (x.t[1] === 'wound-1-sgt' && S > T) { r.wound -= 1; N(x.a.name); } else if (x.t[1] === 'wound-1-sgt-led' && S > T && leaderUp(t) && t.leader.kw && t.leader.kw.includes('character')) { r.wound -= 1; N(x.a.name); } else if (x.t[1] === 'wound-1-r' && shooting) { r.wound -= 1; N(x.a.name); } else if (x.t[1] === 'wound-1-sgt-r' && shooting && S > T) { r.wound -= 1; N(x.a.name); } else if (x.t[1] === 'wound-1-sgt-obj' && S > T && OBJ.some(o => objIn(t, o))) { r.wound -= 1; N(x.a.name); } else if (x.t[1] === 'ap-1-led-r' && shooting && leaderUp(t) && x.src === 'leader') { r.ap -= 1; N(x.a.name); } else if (x.t[1] === 'hit-1-melee' && !shooting) { r.hit -= 1; N(x.a.name); } else if (x.t[1] === 'wound-1-led' && leaderUp(t) && t.leader.kw && t.leader.kw.includes('character')) { r.wound -= 1; N(x.a.name); } }
+  for (const x of fxAll(t)) if (x.t[0] === 'dmod') { if (x.t[1] === 'ap-1') { r.ap -= 1; N(x.a.name); } else if (x.t[1] === 'ap-1-r' && shooting) { r.ap -= 1; N(x.a.name); } else if (x.t[1] === 'wound-1-sgt' && S > T) { r.wound -= 1; N(x.a.name); } else if (x.t[1] === 'wound-1-sgt-led' && S > T && leaderUp(t) && t.leader.kw && t.leader.kw.includes('character')) { r.wound -= 1; N(x.a.name); } else if (x.t[1] === 'wound-1-r' && shooting) { r.wound -= 1; N(x.a.name); } else if (x.t[1] === 'wound-1-sgt-r' && shooting && S > T) { r.wound -= 1; N(x.a.name); } else if (x.t[1] === 'wound-1-sgt-obj' && S > T && OBJ.some(o => objIn(t, o))) { r.wound -= 1; N(x.a.name); } else if (x.t[1] === 'ap-1-led-r' && shooting && leaderUp(t) && x.src === 'leader') { r.ap -= 1; N(x.a.name); } else if (x.t[1] === 'hit-1-melee' && !shooting) { r.hit -= 1; N(x.a.name); } else if (x.t[1] === 'wound-1-led' && leaderUp(t) && t.leader.kw && t.leader.kw.includes('character')) { r.wound -= 1; N(x.a.name); } }
   if (t.burnedUntil && G.turnNo <= t.burnedUntil && shooting) { r.noCover = true; N('Burna Bomb'); }
   if (t.wobbledUntil && false) { }
   if (u.wobbledUntil && G.turnNo <= u.wobbledUntil && shooting) { r.cover = true; N('Wobbled'); }
