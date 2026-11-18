@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.18-0136';
+  const VERSION = '2026.11.18-0139';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -1724,6 +1724,28 @@ html[data-look="cog"][data-tone="amber"] select,html[data-look="cog"][data-tone=
 html[data-look="cog"][data-tone="amber"] input[type=checkbox]{appearance:none;-webkit-appearance:none;width:20px;height:20px;flex:none;vertical-align:middle;background:#0f1418 !important;border:1px solid #8c6d3f !important;border-left:1px solid #8c6d3f !important;border-radius:2px !important;box-shadow:inset 0 0 0 1px #000 !important;cursor:pointer}
 html[data-look="cog"][data-tone="amber"] input[type=checkbox]:checked{background:#0f1418 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23e59a24' fill-rule='evenodd' d='M12 2C7 2 4 5.5 4 10c0 2.6 1.2 4.3 3 5.4V19h2v-2h2v2h2v-2h2v2h2v-3.4c1.8-1.1 3-2.8 3-5.4 0-4.5-3-8-8-8zM8.5 8a2 2 0 100 4 2 2 0 000-4zM15.5 8a2 2 0 100 4 2 2 0 000-4z'/%3E%3C/svg%3E") center/14px no-repeat !important}
 html[data-look="cog"][data-tone="amber"] input[type=checkbox]:focus-visible{outline:2px solid #e59a24;outline-offset:1px}
+/* ---- amber tone: closer match to the mockup (heavy frame, big plates, thick panel frame, large seal) ---- */
+html[data-look="cog"][data-tone="amber"]:not([data-3d]) body::before{
+  box-shadow:inset 0 0 0 2px #1b1409,inset 0 0 0 7px #7a5f30,inset 0 0 0 9px #d8bd82,inset 0 0 0 13px #5b4620,inset 0 0 0 15px #1b1409,inset 0 0 50px rgba(0,0,0,.75);
+  background:
+   radial-gradient(circle at 24px 24px,#e6d29c 0 3px,#4a3a1c 4px 7px,transparent 8px),radial-gradient(circle at calc(100% - 24px) 24px,#e6d29c 0 3px,#4a3a1c 4px 7px,transparent 8px),
+   radial-gradient(circle at 24px calc(100% - 24px),#e6d29c 0 3px,#4a3a1c 4px 7px,transparent 8px),radial-gradient(circle at calc(100% - 24px) calc(100% - 24px),#e6d29c 0 3px,#4a3a1c 4px 7px,transparent 8px),
+   linear-gradient(135deg,#b9b6ac,#6a6860 55%,#3d3c37) top left/58px 58px no-repeat,linear-gradient(225deg,#b9b6ac,#6a6860 55%,#3d3c37) top right/58px 58px no-repeat,
+   linear-gradient(45deg,#b9b6ac,#6a6860 55%,#3d3c37) bottom left/58px 58px no-repeat,linear-gradient(315deg,#b9b6ac,#6a6860 55%,#3d3c37) bottom right/58px 58px no-repeat}
+html[data-look="cog"][data-tone="amber"] .sidebar{padding-left:18px;padding-top:14px}
+html[data-look="cog"][data-tone="amber"] .sb-top{padding-left:34px}
+html[data-look="cog"][data-tone="amber"] .wrap{padding-left:22px;padding-right:22px}
+html[data-look="cog"][data-tone="amber"] .sidebar .tabs button .ico-v{width:30px;height:30px}
+html[data-look="cog"][data-tone="amber"] .sidebar .tabs button .ico-v svg{width:26px;height:26px}
+html[data-look="cog"][data-tone="amber"] .sidebar .tabs button{padding-top:9px;padding-bottom:9px}
+html[data-look="cog"][data-tone="amber"] .panel,html[data-look="cog"][data-tone="amber"] .set-sec{border:0 !important;
+  background:radial-gradient(circle,#e6d29c 0 1.6px,#4a3a1c 2px 4px,transparent 4.5px) top 7px left 7px/12px 12px no-repeat,radial-gradient(circle,#e6d29c 0 1.6px,#4a3a1c 2px 4px,transparent 4.5px) top 7px right 7px/12px 12px no-repeat,
+   radial-gradient(circle,#e6d29c 0 1.6px,#4a3a1c 2px 4px,transparent 4.5px) bottom 7px left 7px/12px 12px no-repeat,radial-gradient(circle,#e6d29c 0 1.6px,#4a3a1c 2px 4px,transparent 4.5px) bottom 7px right 7px/12px 12px no-repeat,
+   repeating-linear-gradient(0deg,rgba(0,0,0,.16) 0 1px,transparent 1px 3px),linear-gradient(180deg,#1f2830,#161d23) !important;
+  box-shadow:0 0 0 1px #000,0 0 0 3px #8a6d38,0 0 0 5px #d3b877,0 0 0 8px #6a5326,0 0 0 9px #000,inset 0 0 0 2px #1a1409,inset 0 0 40px rgba(0,0,0,.6),0 8px 24px rgba(0,0,0,.6) !important;margin:10px 10px 14px}
+html[data-look="cog"][data-tone="amber"] .purity-seal{bottom:-66px;right:-26px;transform:rotate(-4deg) scale(1.55);transform-origin:top center}
+html[data-look="cog"][data-tone="amber"] .wax-stamp{box-shadow:0 4px 8px rgba(0,0,0,.85),inset 0 2px 4px rgba(255,120,120,.35),inset 0 -3px 5px rgba(0,0,0,.4)}
+html[data-look="cog"][data-tone="amber"] .ribbon{font-size:5.5px}
 /* ===== Kill Team mode ===== */
 #kt-root{max-width:1240px;margin:0 auto}
 #kt-root .kt-sub{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}
