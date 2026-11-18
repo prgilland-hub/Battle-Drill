@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.17-2009';
+  const VERSION = '2026.11.17-2016';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -2371,7 +2371,7 @@ function resolve(p, def, rec) {
   const precPick = () => { if (precL && precL.alive) return precL; const live = Ls.filter(x => x.alive); return (precL = live.sort((a, b) => (a.cur - b.cur) || (b.W - a.W))[0] || null); };
   const who = () => {
     if (p.precision) { const L = precPick(); if (L) return L; }
-    if (def.models > 0) { if (def.bodies && def.cls) { const c = def.bodies[def.cls[Math.max(0, Math.min(def.cls.length - 1, (def.start || def.cls.length) - def.models))]]; if (c) { body.Sv = c.Sv; body.inv = c.inv; } } return body; }
+    if (def.models > 0) { if (def.bodies && def.cls) { const c = def.bodies[def.cls[Math.max(0, Math.min(def.cls.length - 1, (def.start || def.cls.length) - def.models))]]; if (c) { body.Sv = c.Sv; body.inv = c.inv; body.imp = c.imp || 0; } } return body; }
     return front();
   };
   const hurt = (P, dmg) => {
@@ -2388,7 +2388,7 @@ function resolve(p, def, rec) {
     const P = who(); if (!P) break;
     if (def.wall && def.wall.models > 0) { const dd = rollDmg(p), n = Math.min(dd, def.wall.models); def.wall.models -= n; st.wallKilled = (st.wallKilled || 0) + n; if (rec) rec.save.push({ r: '—', ok: true }); continue; }
     const pinv = (p.shooting && P.invR && (!P.inv || P.invR < P.inv)) ? P.invR : P.inv;
-    const armour = P.Sv - ((p.shooting && P.svR && P.Sv > 2) ? 1 : 0) + p.AP, need = pinv && pinv < armour ? pinv : armour;
+    const armour = P.Sv - ((p.shooting && P.svR && P.Sv > 2 && !P.imp) ? 1 : 0) + p.AP, need = pinv && pinv < armour ? pinv : armour;
     let r = (afD && !afD.done && asCan(def.afU)) ? (afD.done = true, afD.used = true, asUse(def.afU, afD.V, 'a saving throw', st)) : saveDice[i], saved = need <= 6 && r !== 1 && r >= need;
     if (!saved && def.cmd && def.cmd.kind === 'save' && !def.cmd.used) { def.cmd.used = true; r = d6(); saved = need <= 6 && r !== 1 && r >= need; }
     if (afD && afD.used && !afD.tripDone) { afD.tripDone = true; if (enhHolder(def.afU, /triptych of the macharian/i)) saved = true; }
@@ -5690,7 +5690,7 @@ function profile(u, w, t, shooting, cover) {
   if (t.crystalPh && t.crystalPh === G.phaseNo && t.crystalSide === u.side && has(u, 'aeldari')) { apAdd += 1; note('Crystalline Targeting'); }
   if (shooting && hasFx(t, 'urban-warfare') && cover && !w.ignoresCover && !noCover && !ignoreMods) { dAdd -= 1; note('Urban Warfare'); }
   if (dgOn && dgFaction(t.side) && enhHolder(t, /rejuvenating swarm/i) && (w.S + (hv ? 1 : 0) + sAdd) > tT) { woundMod -= 1; note('Rejuvenating Swarm'); }
-  return { psy: isPsyW(w), shooting, models: nModels, Aexpr: addFlat((u.vengeful && !shooting && hasFx(u, 'vengeance') && /axe/i.test(w.name || '')) ? parseDice('6') : (!shooting && hasFx(u, 'extremis') && /arco-flail/i.test(w.name || '')) ? parseDice('6') : parseDice(w.A), aAdd), skill: w.torrent ? w.skill : clamp(w.skill + (ignoreHit ? Math.min(skillAdj, 0) : skillAdj), 2, 6), S: w.S + (hv ? 1 : 0) + sAdd, AP: w.AP + (hv && leaderUp(u) ? 1 : 0) + apAdd, Dexpr: addFlat(parseDice(w.D), dAdd),
+  return { psy: isPsyW(w), shooting, models: nModels, Aexpr: addFlat((u.vengeful && !shooting && hasFx(u, 'vengeance') && /axe/i.test(w.name || '')) ? parseDice('6') : (!shooting && hasFx(u, 'extremis') && /arco-flail/i.test(w.name || '')) ? parseDice('6') : parseDice(w.A), aAdd), skill: w.torrent ? w.skill : clamp(w.skill + ((ignoreHit || ignoreMods) ? Math.min(skillAdj, 0) : skillAdj), 2, 6), S: w.S + (hv ? 1 : 0) + sAdd, AP: w.AP + (hv && leaderUp(u) ? 1 : 0) + apAdd, Dexpr: addFlat(parseDice(w.D), dAdd),
     melta: half && w.melta ? w.melta : 0, meltaP: attackers && nModels ? attackers.nHalf / nModels : undefined, halfN: attackers ? attackers.nHalf : undefined, bonusA: half && ((w.rapid || 0) + rapAdd) ? (w.rapid || 0) + rapAdd : 0,
     allWoundCrit: !shooting && hasFx(u, 'swallow-whole') && /gaping maw/i.test(w.name) && (has(t, 'infantry') || has(t, 'mounted') || has(t, 'beast')), afU: (inG && u && u.placed && asIs(u)) ? u : null, cleave: (() => { const m = wKw(w).map(k => /^cleave\s*(\d+)/.exec(k)).find(Boolean); const base = m ? +m[1] : 0; return (!shooting || true) && (base || cleaveAdd) ? base + cleaveAdd : 0; })(), torrent: !!w.torrent, lethal, useLethal: true, dev, twin: !!w.twin, blast: !!w.blast, sustained: Math.max(w.sustained || 0, grantSus, susMod), susD3: (w.xkw || []).some(k => /sustained hits d3/i.test(k)) && Math.max(grantSus, susMod) <= 2,
     rrHit, rrWound, hitMod, woundMod, cover: shooting && (cover || indirectCover) && !w.ignoresCover && !noCover && !ignoreMods, notes,
@@ -5742,7 +5742,7 @@ function defOf(t) {
   if (t.cdefs && t.cls) {
     const c0 = t.cdefs[0], ctrl = hasFx(t, 'sv-ctrl') && OBJ.some(o => objIn(t, o) && controller(o) === t.side), cov = orderOf(t) === 'cover', tInvChg = t.inv !== c0.inv;
     R.cls = t.cls;
-    R.bodies = t.cdefs.map((cd, i) => { const s = cd.Sv + (t.Sv - c0.Sv), base = i === 0 ? t.inv : (tInvChg ? (cd.inv ? Math.min(cd.inv, t.inv || 9) : t.inv) : cd.inv); return { Sv: s + dgSvWorse(t) - ((cov && s > 3) ? 1 : 0) - ((ctrl && s > 2) ? 1 : 0), inv: invBoost(t, tsInvAll(t, invMerge(ntInv(t, base)))), W: cd.W }; });
+    R.bodies = t.cdefs.map((cd, i) => { const s = cd.Sv + (t.Sv - c0.Sv), base = i === 0 ? t.inv : (tInvChg ? (cd.inv ? Math.min(cd.inv, t.inv || 9) : t.inv) : cd.inv); return { imp: ((cov && s > 3) || (ctrl && s > 2)) ? 1 : 0, Sv: s + dgSvWorse(t) - ((cov && s > 3) ? 1 : 0) - ((!(cov && s > 3) && ctrl && s > 2) ? 1 : 0), inv: invBoost(t, tsInvAll(t, invMerge(ntInv(t, base)))), W: cd.W }; });
   }
   return R;
 }
@@ -5752,6 +5752,21 @@ function crStanceOf(side) {
   if (G.cp[side] < 3) return null;
   const k = ['save', 'wound', 'hit'][(G.turnNo || 0) % 3]; return k;
 }
+/* expected unsaved wounds per Critical Hit for Lethal Hits (auto-wound, then a save) against Devastating Wounds (roll to wound; a Critical Wound is unsavable mortal damage) */
+function lethalDevOdds(p) {
+  const need = woundNeed(p.S, p.T), wm = clamp(p.woundMod, -1, 1), antiN = p.antiN || 0;
+  let pw = 0, pc = 0; for (let r = 2; r <= 6; r++) { const crit = r === 6 || (antiN && r >= antiN); if (crit || r + wm >= need) pw++; if (crit) pc++; } pw /= 6; pc /= 6;
+  const armour = p.Sv + p.AP, nd = p.inv && p.inv < armour ? p.inv : armour, pass = nd <= 6 ? (7 - Math.max(nd, 2)) / 6 : 0, f = 1 - pass;
+  return { lethal: f, dev: pc + (pw - pc) * f, pw, pc, f };
+}
+async function lethalOrDev(u, w, t, p) {
+  const o = lethalDevOdds(p), best = o.dev > o.lethal ? 'dev' : 'lethal';
+  if (u.side !== 'player') return best === 'lethal';
+  const antiTxt = p.antiN ? ` or ${p.antiN}+ against this target (Anti)` : '';
+  const r = await askPlayer({ kind: 'yesno', strat: 'lethal-dev', yes: 'Lethal Hits', no: 'Devastating Wounds',
+    text: `${w.name} has both Lethal Hits and Devastating Wounds. Pick one for this attack. LETHAL HITS: each Critical Hit (unmodified 6 to hit) automatically wounds, with no wound roll, and ${t.name} then makes a normal saving throw; about ${o.lethal.toFixed(2)} unsaved wounds per Critical Hit. DEVASTATING WOUNDS: you still roll to wound, and each Critical Wound (unmodified 6${antiTxt}) inflicts mortal wounds equal to the weapon's Damage with no saving throw at all; about ${o.dev.toFixed(2)} unsaved wounds per Critical Hit. The app suggests ${best === 'lethal' ? 'Lethal Hits' : 'Devastating Wounds'} against this target.` });
+  return r === 'yes';
+}
 async function attack(u, w, t, shooting, cover, snap) {
   if (!t.alive) return;
   G.curAtt = u; t.hitFrom = { x: u.x, y: u.y }; schAtt(u, w, t, shooting); if (shooting) t.shotAt = { by: u.id, turn: G.turnNo || 0 }; if (shooting) u.rngTurn = G.turnNo || 0;
@@ -5759,6 +5774,7 @@ async function attack(u, w, t, shooting, cover, snap) {
   const p = profile(u, w, t, shooting, cover);
   if (!p.models) { if (MODELS.on && u.placed && t.placed) log(`${u.name}: no model with ${w.name} ${shooting ? 'is in range of and can see' : 'is engaged with'} ${t.name}, so it makes no attacks.`, u.side); return; }
   if (snap) { p.snap = true; p.rrHit = 'none'; p.snapAt = hasFx(u, 'snap-at') ? +fxGet(u, 'snap-at')[0].t[1] : 6; }
+  if (p.lethal && p.dev && !p.torrent) p.useLethal = await lethalOrDev(u, w, t, { S: p.S, T: p.T, woundMod: p.woundMod, antiN: p.antiN, Sv: p.Sv, AP: p.AP, inv: p.inv });
   const before = totalModels(t);
   { G.selSnap = G.selSnap || {}; const sk = `${u.id}|${G.phaseNo}|${t.id}`; if (!(sk in G.selSnap)) G.selSnap[sk] = before; p.selModels = G.selSnap[sk]; }   /* Blast and Cleave count the models in the target unit at the Select Targets step, not after earlier weapons have killed some */
   await declareAlloc(u, w, t, shooting);
