@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.18-0928';
+  const VERSION = '2026.11.18-0938';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -15603,6 +15603,11 @@ class MB {
     this.I.push(i, i + 1, i + 2);
   }
   quad(a, b, c, d, col, m, ref) { this.tri(a, b, c, col, m, ref); this.tri(a, c, d, col, m, ref); }
+  /* a strip piece that carries its distance along the zone edge (10 + 0..1) in the second material value, so the pulse shader can run a wave around the boundary */
+  quadU(a, b, c, d, col, al, u0, u1) {
+    const m0 = [al, 10 + u0], m1 = [al, 10 + u1], t2 = (A, B, C, ms) => { const nn = v3.cross(v3.sub(B, A), v3.sub(C, A)), l = v3.len(nn); if (l < 1e-9) return; const i = this.n; [A, B, C].forEach((q, k) => { this.P.push(q[0], q[1], q[2]); this.N.push(nn[0] / l, nn[1] / l, nn[2] / l); this.C.push(col[0], col[1], col[2]); this.M.push(ms[k][0], ms[k][1]); }); this.I.push(i, i + 1, i + 2); };
+    t2(a, b, c, [m0, m1, m1]); t2(a, c, d, [m0, m1, m0]);
+  }
 }
 const shade = (c, k) => [c[0] * k, c[1] * k, c[2] * k], mixc = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
 const vary = (c, rng, amt) => { const k = 1 + (rng() - .5) * 2 * amt; return [c[0] * k, c[1] * k * (1 + (rng() - .5) * amt * .4), c[2] * k]; };
@@ -15723,7 +15728,11 @@ const FS_COMP = `#version 300 es
 precision highp float; uniform sampler2D uS, uB, uA; uniform vec2 uRes; uniform float uK, uAk; out vec4 o;
 void main(){ vec2 uv=gl_FragCoord.xy/uRes; vec3 sc=texture(uS,uv).rgb*mix(1.,texture(uA,uv).r,uAk); sc+=texture(uB,uv).rgb*uK; sc*=mix(.74,1.,smoothstep(1.25,.5,length(uv-.5)*1.3)); o=vec4(sc,1.); }`;
 const FS_FLAT = `#version 300 es
-precision highp float; in vec3 vW, vN, vC; in vec2 vM; in vec4 vL; out vec4 o; void main(){ o=vec4(vC,vM.x); }`;
+precision highp float; in vec3 vW, vN, vC; in vec2 vM; in vec4 vL; out vec4 o; uniform float uPh, uPI;
+void main(){ vec3 c=vC; float a=vM.x;
+  if(vM.y>5. && uPI>0.){ float d=fract(uPh-(vM.y-10.)); float w=exp(-d*8.)*(1.-smoothstep(.96,1.,d)); w*=uPI;
+    c=mix(c,vec3(1.,.97,.92),min(.78,w*1.0)); a=min(1.,a+w*(.3+a*.6)); }
+  o=vec4(c,a); }`;
 const VS_SH = `#version 300 es
 layout(location=0) in vec3 aP; uniform mat4 uLVP; void main(){ gl_Position=uLVP*vec4(aP,1.); }`;
 const FS_SH = `#version 300 es
@@ -15812,7 +15821,7 @@ class Renderer {
     { const fd = this.fades || [], n = Math.min(40, fd.length / 4 | 0), arr = new Float32Array(160); arr.set(fd.slice(0, n * 4)); gl.uniform1i(U.uFN, n); if (U['uFd[0]']) gl.uniform4fv(U['uFd[0]'], arr); }
     for (const m of this.meshes) if (m.kind === 'solid' && !m.hidden) { gl.uniform1f(U.uFadeOn, m.fade ? 1 : 0); gl.bindVertexArray(m.vao); gl.drawElements(gl.TRIANGLES, m.count, gl.UNSIGNED_INT, 0); }
     gl.uniform1f(U.uFadeOn, 0);
-    const fp = this.flat; gl.useProgram(fp.p); gl.uniformMatrix4fv(fp.U.uVP, false, VP); gl.uniformMatrix4fv(fp.U.uLVP, false, LVP);
+    const fp = this.flat; gl.useProgram(fp.p); gl.uniformMatrix4fv(fp.U.uVP, false, VP); gl.uniformMatrix4fv(fp.U.uLVP, false, LVP); gl.uniform1f(fp.U.uPh, this.pulse ? this.pulse.ph : 0); gl.uniform1f(fp.U.uPI, this.pulse ? this.pulse.k : 0);
     gl.enable(gl.BLEND); gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ZERO, gl.ONE); gl.depthMask(false);
     for (const m of this.meshes) if (m.kind === 'decal' && m.on !== false) { gl.bindVertexArray(m.vao); gl.drawElements(gl.TRIANGLES, m.count, gl.UNSIGNED_INT, 0); }
     gl.depthMask(true); gl.disable(gl.BLEND); gl.bindVertexArray(null);
@@ -16208,8 +16217,8 @@ function buildMap(spec) {
   rects.forEach((r, i) => { if (r.poly) return; const rr = mulberry(seed * 211 + i * 7 + th.seed), ex = [[r.x - .6, r.y - .6, r.w + 1.2, .9], [r.x - .6, r.y + r.h - .3, r.w + 1.2, .9], [r.x - .6, r.y - .6, .9, r.h + 1.2], [r.x + r.w - .3, r.y - .6, .9, r.h + 1.2]]; for (const [x, z, w, d] of ex) decal.quad([x, .066, z], [x, .066, z + d], [x + w, .066, z + d], [x + w, .066, z], [.01, .01, .01], [.32, 0]); for (let k = 0; k < 4; k++) { const x = r.x + rr() * r.w, z = rr() < .5 ? r.y - .3 : r.y + r.h + .3; rubbleAt(solid, rr, H, x, z, (th.poly && th.poly.wall && th.poly.wall.col) || [.3, .3, .3], .5 + rr() * .5); } });
   rects.forEach(r => { if (r.poly) return; const heavy = (r.walls || []).length >= 2, c = heavy ? [.56, .53, .47] : [.2, .16, .1]; decal.quad([r.x, .068, r.y], [r.x, .068, r.y + r.h], [r.x + r.w, .068, r.y + r.h], [r.x + r.w, .068, r.y], c, [heavy ? .22 : .3, 0]); });
   /* zones, as flat tint over the ground */
-  const zoneTint = (z, col) => { if (!z) return; const s = 1, b = z.pts ? z.pts.reduce((m, p) => [Math.min(m[0], p[0]), Math.min(m[1], p[1]), Math.max(m[2], p[0]), Math.max(m[3], p[1])], [1e9, 1e9, -1e9, -1e9]) : [z.x, z.y, z.x + z.w, z.y + z.h]; for (let x = Math.floor(b[0]); x < b[2]; x += s) for (let y = Math.floor(b[1]); y < b[3]; y += s) { if (!zoneHas(z, x + .5, y + .5)) continue; const p = (X, Z) => [X, H(X, Z) + .07, Z]; zdec.quad(p(x, y), p(x, y + s), p(x + s, y + s), p(x + s, y), col, [.045, 0]); } const E = z.pts || (z.kind === 'quarter' ? null : [[z.x, z.y], [z.x + z.w, z.y], [z.x + z.w, z.y + z.h], [z.x, z.y + z.h]]); if (E) for (let k = 0; k < E.length; k++) { const a = E[k], c = E[(k + 1) % E.length], L = Math.hypot(c[0] - a[0], c[1] - a[1]), n = Math.max(1, Math.ceil(L / 1.5)), nn = [-(c[1] - a[1]) / L * .09, (c[0] - a[0]) / L * .09]; for (let q = 0; q < n; q++) { const t0 = q / n, t1 = (q + 1) / n, f = (t, s) => { const X = a[0] + (c[0] - a[0]) * t + nn[0] * s, Z = a[1] + (c[1] - a[1]) * t + nn[1] * s; return [X, H(X, Z) + .08, Z]; }; zdec.quad(f(t0, -4.5), f(t1, -4.5), f(t1, 4.5), f(t0, 4.5), col, [.11, 0]); const tm = t0 + (t1 - t0) * .68; zdec.quad(f(t0, -1), f(tm, -1), f(tm, 1), f(t0, 1), col, [.62, 0]); } } };
-  if (spec.zones) { zoneTint(spec.zones.ai, [.95, .25, .2]); zoneTint(spec.zones.player, [.3, .55, 1]); }
+  const zoneTint = (z, col, off) => { if (!z) return; const s = 1, b = z.pts ? z.pts.reduce((m, p) => [Math.min(m[0], p[0]), Math.min(m[1], p[1]), Math.max(m[2], p[0]), Math.max(m[3], p[1])], [1e9, 1e9, -1e9, -1e9]) : [z.x, z.y, z.x + z.w, z.y + z.h]; for (let x = Math.floor(b[0]); x < b[2]; x += s) for (let y = Math.floor(b[1]); y < b[3]; y += s) { if (!zoneHas(z, x + .5, y + .5)) continue; const p = (X, Z) => [X, H(X, Z) + .07, Z]; zdec.quad(p(x, y), p(x, y + s), p(x + s, y + s), p(x + s, y), col, [.045, 0]); } const E = z.pts || (z.kind === 'quarter' ? null : [[z.x, z.y], [z.x + z.w, z.y], [z.x + z.w, z.y + z.h], [z.x, z.y + z.h]]); const Lt = E ? E.reduce((sum, e, k) => { const c = E[(k + 1) % E.length]; return sum + Math.hypot(c[0] - e[0], c[1] - e[1]); }, 0) || 1 : 1; let acc = 0; if (E) for (let k = 0; k < E.length; k++) { const a = E[k], c = E[(k + 1) % E.length], L = Math.hypot(c[0] - a[0], c[1] - a[1]), n = Math.max(1, Math.ceil(L / 1.5)), nn = [-(c[1] - a[1]) / L * .09, (c[0] - a[0]) / L * .09], k0 = acc; acc += L; for (let q = 0; q < n; q++) { const t0 = q / n, t1 = (q + 1) / n, f = (t, s) => { const X = a[0] + (c[0] - a[0]) * t + nn[0] * s, Z = a[1] + (c[1] - a[1]) * t + nn[1] * s; return [X, H(X, Z) + .08, Z]; }; const u = t => (k0 + L * t) / Lt + (off || 0); zdec.quadU(f(t0, -4.5), f(t1, -4.5), f(t1, 4.5), f(t0, 4.5), col, .11, u(t0), u(t1)); const tm = t0 + (t1 - t0) * .68; zdec.quadU(f(t0, -1), f(tm, -1), f(tm, 1), f(t0, 1), col, .62, u(t0), u(tm)); } } };
+  if (spec.zones) { zoneTint(spec.zones.ai, [.95, .25, .2]); zoneTint(spec.zones.player, [.3, .55, 1], .5); }
   /* objectives: the ring (or the terrain-area outline), a faint fill and a flat marker */
   for (const o of OB) {
     const ring = (pts) => { for (let k = 0; k < pts.length; k++) { const a = pts[k], c = pts[(k + 1) % pts.length], L = Math.hypot(c[0] - a[0], c[1] - a[1]) || 1, n = Math.max(1, Math.ceil(L / 1.2)), nn = [-(c[1] - a[1]) / L * .1, (c[0] - a[0]) / L * .1]; for (let q = 0; q < n; q++) { const t0 = q / n, t1 = (q + 1) / n, f = (t, s) => { const X = a[0] + (c[0] - a[0]) * t + nn[0] * s, Z = a[1] + (c[1] - a[1]) * t + nn[1] * s; return [X, H(X, Z) + .1, Z]; }; odec.quad(f(t0, -4), f(t1, -4), f(t1, 4), f(t0, 4), GOLD, [.12, 0]); odec.quad(f(t0, -1), f(t1, -1), f(t1, 1), f(t0, 1), GOLD, [.6, 0]); } } };
@@ -16657,11 +16666,18 @@ function gfxStatsEl() {
   if (!el) { el = document.createElement('pre'); el.id = 'b-3dstats'; el.style.cssText = 'position:absolute;left:8px;bottom:8px;margin:0;padding:6px 9px;background:rgba(10,12,16,.78);color:#cfe;font:11px/1.4 ui-monospace,monospace;border-radius:6px;pointer-events:none;z-index:6;white-space:pre'; R.cv.parentNode.appendChild(el); if (getComputedStyle(R.cv.parentNode).position === 'static') R.cv.parentNode.style.position = 'relative'; }
   el.textContent = gfxStatsText(R);
 }
+/* deployment-zone pulse: a slow light wave (5 s per lap) runs round each zone edge while units are being set up, then the edges settle to the steady dashed line.
+   Off on the Low preset and for people who ask their system for reduced motion. */
+function gfxPulse(Rn) {
+  const t = performance.now() / 1000, still = (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches) || document.hidden || (Rn.q.level === 0);
+  const on = !still && G && G.stage === 'pre' && BF3D.opt.zones;
+  Rn.pulse = { ph: (t / 5) % 1, k: on ? 1 : 0 }; return on;
+}
 function gfxStatsText(Rn) {
   const q = Rn.q, fr = q.fr || [], avg = fr.length ? fr.reduce((a, b) => a + b, 0) / fr.length : 0, mx = fr.length ? Math.max(...fr) : 0;
   return (avg ? Math.round(1000 / avg) + ' fps \u00b7 ' + avg.toFixed(1) + ' ms (worst ' + mx.toFixed(0) + ')' : 'move the view to measure') + '\n' + Rn.cv.width + '\u00d7' + Rn.cv.height + ' \u00b7 scale ' + q.dpr.toFixed(2) + ' \u00b7 shadow ' + q.shadow + (q.ao ? ' \u00b7 AO' : '') + (q.bloom ? ' \u00b7 bloom' : '') + '\n' + ['low', 'standard', 'high'][q.level] + (q.auto ? ' (auto)' : '');
 }
-function kick() { if (BF3D.raf || !BF3D.on) return; BF3D.raf = requestAnimationFrame(() => { BF3D.raf = 0; if (!BF3D.on || !BF3D.map || !BF3D.dirty) return; BF3D.dirty = false; place(); try { BF3D.R.fades = bfFades(); } catch (e) { BF3D.R.fades = []; } BF3D.R.draw(BF3D.cam, BF3D.map.th.env); try { gfxSample(BF3D.R, performance.now()); gfxStatsEl(); } catch (e) { } try { overlay(); } catch (e) { console.error(e); } }); }
+function kick() { if (BF3D.raf || !BF3D.on) return; BF3D.raf = requestAnimationFrame(() => { BF3D.raf = 0; if (!BF3D.on || !BF3D.map || !BF3D.dirty) return; BF3D.dirty = false; place(); try { BF3D.R.fades = bfFades(); } catch (e) { BF3D.R.fades = []; } try { BF3D.pulseOn = gfxPulse(BF3D.R); } catch (e) { BF3D.pulseOn = false; } BF3D.R.draw(BF3D.cam, BF3D.map.th.env); try { gfxSample(BF3D.R, performance.now()); gfxStatsEl(); } catch (e) { } try { overlay(); } catch (e) { console.error(e); } try { if (BF3D.pulseOn) { BF3D.dirty = true; kick(); } } catch (e) { } }); }
   /* ---- dice trays and rolling: the game decides every result, the table only shows it ---- */
   const TRAY = { player: { x: 30, z: BH + 7, w: 26, d: 9 }, ai: { x: 30, z: -7, w: 26, d: 9 } };
   const FELT = [.03, .1, .05], WOOD = [.14, .08, .04];
