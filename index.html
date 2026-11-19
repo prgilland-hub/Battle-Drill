@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.19-0054';
+  const VERSION = '2026.11.19-0128';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -16245,6 +16245,7 @@ THEMES.jungle.poly = { wall: { h: [3.2, 5], th: .55, col: [.52, .5, .42], floor:
 const HIVEC = [.25, .26, .3];
 function sign(mb, x, y, z, ry, rng) { const c = [[.1, .9, 1], [1, .2, .7], [1, .75, .1]][Math.floor(rng() * 3)]; box(mb, x, y, z, 1.1 + rng() * .8, .32, .06, ry, c, [0, .95], 0, rng); }
 function propsHive(mb, r, rng, i) {
+  if (!r.walls) r = Object.assign({}, r, { walls: ['top', 'left'] });
   box(mb, r.x + r.w / 2, 0, r.y + r.h / 2, r.w - .2, .09, r.h - .2, 0, [.14, .145, .17], [.5, 0], .01, rng);
   for (const s of r.walls) { const [a2, b2] = sideIn(r, s, .26); hiveOverhead(mb, a2, b2, inward(r, s), i % 2 === 1, rng, 4.6, .5); }
   for (const s of r.walls) { const [a, b] = sideIn(r, s, .26); wallRun(mb, a, b, { h: 4.6 + rng() * 2.4, th: .5, col: HIVEC, windows: 2 + Math.floor(rng() * 2), sill: 1.1, lintel: true, var: .06, panel: true }, rng); if (rng() < .7) { const t = .25 + rng() * .5, n = inward(r, s); sign(mb, a[0] + (b[0] - a[0]) * t + n[0] * .36, 2.6 + rng() * 1.8, a[1] + (b[1] - a[1]) * t + n[1] * .36, Math.atan2(b[1] - a[1], b[0] - a[0]), rng); } }
@@ -16631,6 +16632,7 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
   }
   function set3D(on) {
     if (on && !ensure()) { (typeof flash === 'function' && G) ? flash('3D view needs WebGL 2, which this browser does not offer.') : 0; return; }
+    try { if (G && G.school && G.school.spec && G.school.spec.camp) localStorage.setItem('bd.camp3d', on ? '1' : '0'); } catch (e) { }
     BF3D.on = on; document.documentElement.toggleAttribute('data-3d', !!on); const cv = document.getElementById('b-3d'), bar = document.getElementById('b-3dbar'), b = document.getElementById('b-3dbtn'), s = $b();
     if (!cv) return; cv.hidden = !on; bar.hidden = !on; { const ov = document.getElementById('b-3dov'); if (ov) ov.hidden = !on; } b.setAttribute('aria-pressed', on); b.textContent = on ? '2D' : '3D'; s.style.visibility = on ? 'hidden' : '';
     document.getElementById('b-map').classList.toggle('is3d', on);
@@ -17729,6 +17731,13 @@ function schBegin(spec) {
   if (spec.heroIn) { const car = al.find(x => x.campId === spec.heroIn); if (car) { embarkInto(car, me); me.x = car.x; me.y = car.y; } }
   al.forEach((a, i) => { const sp = (spec.allies || [])[i] || {}; if (sp.inId) { const car = [me].concat(al).find(x => x.campId === sp.inId); if (car && car !== a) embarkInto(car, a); } });
   fu.forEach((f, i) => { f.lessonAi = foes[i].ai || 'still'; f.placed = true; f.reserve = false; f.role = f.lessonAi === 'active' ? 'assault' : 'hold'; schPlaceEdge(foes[i].from === 'ally' && al[0] ? al[0] : me, f, foes[i].d, foes[i].ang || 0); if (f.x > BW - f.r - 1) f.x = BW - f.r - 1; });
+  if (spec.camp) {
+    try { G.env3d = campEnv(spec.camp.ch.n); } catch (e) { }
+    try {
+      const lt = campLayoutTerr(spec.camp.ch), pl = G.units.filter(u => u.placed && u.x > -10), keep = lt.filter(t => !pl.some(u => distPointPoly(u.x, u.y, t.poly) < (u.r || 1) + 1.2));
+      if (keep.length >= 3) TERRAIN = keep.concat((spec.extraT || []).map(t => Object.assign({}, t)));
+    } catch (e) { console.warn('Crusade layout', e); }
+  }
   if (spec.hurtSelf) me.cur = spec.hurtSelf;
   if (spec.hurtLeader && me.leader) me.leader.cur = spec.hurtLeader;
   if (spec.hurt) me.models = Math.max(1, me.models - spec.hurt);
@@ -17739,6 +17748,7 @@ function schBegin(spec) {
   if (spec.cp) G.cp.player = Math.max(G.cp.player, spec.cp);
   if (spec.cpAi) G.cp.ai = Math.max(G.cp.ai, spec.cpAi);
   showTab('battle'); render();
+  if (spec.camp) setTimeout(() => { try { if (localStorage.getItem('bd.camp3d') !== '0' && typeof BF3D !== 'undefined' && BF3D.set && !BF3D.on) BF3D.set(true); } catch (e) { } }, 250);
 }
 function schTotalW(u) { return (u.models - 1) * u.W + Math.max(u.cur, 0) + (leaderUp(u) ? liveLeaders(u).reduce((a, l) => a + l.cur, 0) : 0); }
 function schCtx() {
@@ -19923,6 +19933,25 @@ function campForce(ch) {
   }
   return out;
 }
+/* ---- Crusade maps: each chapter gets a 3D setting that suits its place, and one of the official layouts' terrain ---- */
+const CAMP_ENV = {
+  dg: ['hive', 'marsh', 'hive', 'marsh', 'hive', 'marsh', 'hive', 'base', 'marsh'],
+  bt: ['hive', 'hive', 'hive', 'hive', 'hive', 'hive', 'marsh', 'base', 'hive'],
+  or: ['base', 'forge', 'hive', 'desert', 'hive', 'forge', 'hive', 'base', 'hive'],
+  as: ['desert', 'desert', 'hive', 'desert', 'hive', 'hive', 'hive', 'base', 'hive'],
+  sa: ['forge', 'forge', 'forge', 'desert', 'forge', 'forge', 'forge', 'base', 'forge'],
+  ts: ['desert', 'hive', 'hive', 'hive', 'hive', 'hive', 'desert', 'marsh', 'hive'],
+  ny: ['jungle', 'marsh', 'base', 'jungle', 'base', 'hive', 'forge', 'hive', 'hive'],
+  nc: ['desert', 'desert', 'desert', 'desert', 'desert', 'desert', 'desert', 'desert', 'desert'],
+  tut: ['base', 'base', 'base', 'base', 'base', 'base', 'base', 'base']
+};
+const campEnv = n => (CAMP_ENV[CAMP_ID] || [])[n - 1] || 'base';
+function campLayoutTerr(ch) {
+  const kind = ch.win && ch.win.kind, pair = kind === 'boss' ? ['purge the foe', 'take and hold'] : kind === 'kill' ? ['purge the foe', 'purge the foe'] : ['take and hold', 'take and hold'];
+  let ls = layoutsFor(pair[0], pair[1]); if (!ls.length) ls = layoutsFor('take and hold', 'take and hold'); if (!ls.length) return [];
+  const h = [...String(CAMP_ID)].reduce((a, c) => a + c.charCodeAt(0), 0), L = ls[(h + ch.n) % ls.length];
+  return layoutDep(L, true).terr;
+}
 function campBuildSpec(ch) {
   const force = campForce(ch), lead = force[0];
   const mk = f => { const u = schUnitFor(f.fac || CAMP_FAC, f.name, f.models, f.leader || ''); if (u) { u.campId = f.id; try { const nk = crNick(f.id); if (nk) { u.baseName = u.name; u.name = `${u.name} \u201c${nk}\u201d`; } } catch (e) { } try { campApplyCard(u, f.id); } catch (e) { } } return u; };
@@ -19941,7 +19970,7 @@ function campBuildSpec(ch) {
     else if (hk === 'mud') u.M = Math.max(1, (+u.M || 0) - 1);
   }
   const extraT = (hk === 'mud' || hk === 'cover') ? [[30, 14], [30, 30], [18, 22]] : [];
-  return { hero: { faction: lead.fac || CAMP_FAC, unit: hero }, heroIn: lead.embarkIn || '', reserve: !!lead.reserve && !lead.embarkIn, foes, x: lead.pos[0], y: lead.pos[1], terrain: ch.terrain.concat(extraT).map(([x, y]) => SCH_RUIN(x, y)), allies, detachment: ch.det ? tutDetSnap(ch.det) : (CAMP_ID === 'tut' ? null : crDetSnap()), cp: ch.cp, cpAi: ch.cpAi };
+  return { hero: { faction: lead.fac || CAMP_FAC, unit: hero }, heroIn: lead.embarkIn || '', reserve: !!lead.reserve && !lead.embarkIn, foes, x: lead.pos[0], y: lead.pos[1], terrain: ch.terrain.concat(extraT).map(([x, y]) => SCH_RUIN(x, y)), allies, detachment: ch.det ? tutDetSnap(ch.det) : (CAMP_ID === 'tut' ? null : crDetSnap()), cp: ch.cp, cpAi: ch.cpAi, extraT: extraT.map(([x, y]) => SCH_RUIN(x, y)) };
 }
 const tutDetSnap = name => { try { const d = detsFor(TUT_FAC).find(x => x.name === name); return d ? JSON.parse(JSON.stringify({ name: d.name, rule: d.rule, ruleText: d.ruleText, strats: d.strats, effects: d.effects || [], dp: d.dp, disposition: d.disposition })) : null; } catch (e) { return null; } };
 function campCtxExtra(c) {
@@ -20370,6 +20399,8 @@ function crDiffHtml() {
   return crCanDiff() ? `<div class="cru-box"><h4>Difficulty</h4><p class="muted" style="margin:0 0 6px">Requisition Points are your only way to grow beyond the story units, so they set how hard the campaign is. Choose before your first battle.</p>${Object.entries(CR_DIFF).map(([k, v]) => `<button type="button" class="btn${S.diff === k ? ' primary' : ''}" data-cr="diff" data-d="${k}">${v[0]}: ${v[1]} RP</button>`).join(' ')}</div>` : (S.leg ? '' : `<p class="muted" style="margin:0 0 6px">Difficulty: <b>${escH((CR_DIFF[S.diff] || ['Standard'])[0])}</b>.</p>`);
 }
 /* a live datasheet under the Add a unit list, so a faction you don't know well can be read before you pick */
+let CR_PREV_OPEN = true;
+document.addEventListener('toggle', e => { const t = e.target; if (t && t.classList && t.classList.contains('cr-prev')) CR_PREV_OPEN = t.open; }, true);
 function crBuyPreview(name) {
   const l = LIB.find(x => x.faction === CAMP_FAC && x.name === name); if (!l) return '<p class="muted">Pick a unit to read its datasheet.</p>';
   try { return datasheetCard(Object.assign({}, l, { models: l.baseModels || l.models }), l.faction, { narrow: true }); } catch (e) { return '<p class="muted">No datasheet available for this unit.</p>'; }
@@ -20383,7 +20414,7 @@ function crBuyHtml(used, lim) {
   return crDetHtml() + `<div class="cru-box"><h4>Reinforcements and Supply</h4><p class="muted" style="margin:0 0 6px">Supply used <b>${used}</b> of <b>${lim}</b> pts (${room >= 0 ? room + ' free' : -room + ' over'}). Your story units set the base; any extra headroom is bought with RP: Increase Supply Limit costs 1 RP for +200 pts, up to +${cap} at this point in the campaign. Units you can add now cost up to <b>${crUnitCap() >= 9999 ? 'any' : crUnitCap()}</b> pts each (characters from chapter 3, epic heroes from chapter 7); heavier units unlock as you advance. Up to 3 of one unit (6 for Battleline and Dedicated Transports).</p>
     <label>Add a unit <select id="cr-buy">${opts.map(x => `<option value="${escH(x.l.name)}"${x.pts > room ? ' disabled' : ''}>${escH(x.l.name)}${x.ch === 'epic' ? ' (epic hero)' : x.ch ? ' (character)' : ' ×' + x.n}: ${x.pts} pts</option>`).join('')}</select></label>
     <button type="button" class="btn primary" data-cr="buy"${crPendingOpen() || !opts.length ? ' disabled' : ''}>Add to Order of Battle</button>
-    <details class="cr-prev" open style="margin:8px 0"><summary><b>Datasheet preview</b> <small class="muted">(updates as you change the unit above)</small></summary><div id="cr-buy-prev" style="max-height:440px;overflow:auto;margin-top:6px">${opts.length ? crBuyPreview(((opts.find(x => x.pts <= room) || opts[0]).l).name) : ''}</div></details>
+    <details class="cr-prev"${CR_PREV_OPEN ? ' open' : ''} style="margin:8px 0"><summary><b>Datasheet preview</b> <small class="muted">(updates as you change the unit above)</small></summary><div id="cr-buy-prev" style="max-height:440px;overflow:auto;margin-top:6px">${opts.length ? crBuyPreview(((opts.find(x => x.pts <= room) || opts[0]).l).name) : ''}</div></details>
     <button type="button" class="btn" data-cr="supply"${S.rp < 1 || supMax ? ' disabled' : ''}>Increase Supply Limit (1 RP, +200)${supMax ? ' (max for now)' : ''}</button>
     ${(S.undo || []).length ? `<button type="button" class="btn" data-cr="undo" title="Restores the points, units and cards from before it">&#8630; Undo: ${escH(S.undo[S.undo.length - 1].lab)}</button>` : ''}</div>`;
 }
