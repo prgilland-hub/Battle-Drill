@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.18-0952';
+  const VERSION = '2026.11.19-0010';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -15993,7 +15993,7 @@ function propsLowPoly(mb, r, rng, th) {
 function propsPoly(mb, r, rng, i, th) {
   const P = r.poly, c = polyCen(P), area = polyArea(P), W = th.wall;
   for (let k = 0; k < P.length; k++) { const a = P[k], b = P[(k + 1) % P.length]; mb.tri([c[0], .07, c[1]], [a[0], .07, a[1]], [b[0], .07, b[1]], W.floor, [.9, 0], [c[0], -10, c[1]]); }
-  if (r.wseg) for (const w of r.wseg) wallRun(mb, w.a, w.b, { h: w.h, th: W.th, col: W.col, windows: w.win ? 1 : 0, sill: .95, lintel: true, moss: W.moss, var: .1 }, rng);
+  if (r.wseg) for (const w of r.wseg) { wallRun(mb, w.a, w.b, { h: w.h, th: W.th, col: W.col, windows: w.win ? 1 : 0, sill: .95, lintel: true, moss: W.moss, var: .1 }, rng); if (th.overhead) { const L2 = Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]) || 1, ux = (w.b[0] - w.a[0]) / L2, uz = (w.b[1] - w.a[1]) / L2, mx = (w.a[0] + w.b[0]) / 2, mz = (w.a[1] + w.b[1]) / 2; let nx = -uz, nz = ux; if (!inPoly(mx + nx * 1.2, mz + nz * 1.2, P) && inPoly(mx - nx * 1.2, mz - nz * 1.2, P)) { nx = -nx; nz = -nz; } th.overhead(mb, w.a, w.b, [nx, nz], rng, w.h, W.th); } }
   let used = r.wseg ? 1e9 : 0; const per = P.reduce((s, p, k) => s + Math.hypot(P[(k + 1) % P.length][0] - p[0], P[(k + 1) % P.length][1] - p[1]), 0);
   for (let k = 0; k < P.length; k++) {
     const a = P[k], b = P[(k + 1) % P.length], L = Math.hypot(b[0] - a[0], b[1] - a[1]); if (L < 2.4) continue;
@@ -16001,8 +16001,8 @@ function propsPoly(mb, r, rng, i, th) {
     let t = 0; while (t < L - 1.5) { const seg = Math.min(L - t, 3 + rng() * 3.5); if (seg > 1.6 && used < per * .5 && rng() < .55) { const d = W.th / 2 + .05, p0 = [a[0] + ux * t + nx * d, a[1] + uz * t + nz * d], p1 = [a[0] + ux * (t + seg) + nx * d, a[1] + uz * (t + seg) + nz * d]; wallRun(mb, p0, p1, { h: W.h[0] + rng() * (W.h[1] - W.h[0]), th: W.th, col: W.col, windows: seg > 3.6 && rng() < .5 ? 1 : 0, sill: .95, lintel: rng() < .5, moss: W.moss, var: .1 }, rng); used += seg; } t += seg + .9 + rng() * 1.6; }
   }
   for (let k = 0; k < P.length; k++) if (rng() < .5) { const a = P[k], d = [c[0] - a[0], c[1] - a[1]], l = Math.hypot(d[0], d[1]) || 1; if (th.pillar) th.pillar(mb, a[0] + d[0] / l * .7, a[1] + d[1] / l * .7, rng); }
-  const n = Math.max(1, Math.min(3, Math.round(area / 30))); let placed = 0;
-  for (let tries = 0; tries < 80 && placed < n; tries++) { const bb = r, x = bb.x + rng() * bb.w, z = bb.y + rng() * bb.h; if (!inPoly(x, z, P) || edgeD(x, z, P) < 1.3) continue; th.clutter(mb, x, z, rng, placed++); }
+  const n = Math.min(th.clutterMax || 3, Math.max(1, Math.min(3, Math.round(area / 30)))); let placed = 0;
+  for (let tries = 0; tries < 80 && placed < n; tries++) { const bb = r, x = bb.x + rng() * bb.w, z = bb.y + rng() * bb.h; if (!inPoly(x, z, P) || edgeD(x, z, P) < 1.3 || (th.hug && edgeD(x, z, P) > th.hug)) continue; th.clutter(mb, x, z, rng, placed++); }
 }
 
 /* ---------- open-ground dressing: visual only, nothing taller than an ankle, so models never stand inside it ---------- */
@@ -16047,11 +16047,13 @@ function surround(solid, decal, rng, H, key, th) {
     const k = rng();
     if (key === 'jungle') { if (k < .55) jungleTree(solid, x, z, 5 + rng() * 3.5, rng); else fern(solid, x, H(x, z), z, rng); }
     else if (key === 'marsh') { if (k < .4) deadTree(solid, x, z, 3.8 + rng() * 2.4, rng); else rubbleAt(solid, rng, H, x, z, rock, 1.4 + rng()); }
-    else if (key === 'base' || key === 'hive') { if (k < .45) pillar(solid, x, z, 5 + rng() * 4, .8, rock, rng); else rubbleAt(solid, rng, H, x, z, rock, 1.6 + rng()); }
+    else if (key === 'hive') rubbleAt(solid, rng, H, x, z, rock, 1.4 + rng());
+    else if (key === 'base') { if (k < .45) pillar(solid, x, z, 5 + rng() * 4, .8, rock, rng); else rubbleAt(solid, rng, H, x, z, rock, 1.6 + rng()); }
     else if (key === 'forge') { if (k < .5) rubbleAt(solid, rng, H, x, z, rock, 1.6 + rng()); else cogDebris(solid, x, H(x, z) + .02, z, .25 + rng() * .3, rng); }
     else if (k < .35) pillar(solid, x, z, 3 + rng() * 3.5, .6, rock, rng); else rubbleAt(solid, rng, H, x, z, rock, 1.8 + rng() * 1.2);
   }
   if (key === 'forge') forgeSkyline(solid, rng, H);
+  if (key === 'hive') hiveSkyline(solid, rng, H);
   void decal;
 }
 function dressing(solid, decal, rng, ok, H, th, key) {
@@ -16193,18 +16195,157 @@ const HIVEC = [.25, .26, .3];
 function sign(mb, x, y, z, ry, rng) { const c = [[.1, .9, 1], [1, .2, .7], [1, .75, .1]][Math.floor(rng() * 3)]; box(mb, x, y, z, 1.1 + rng() * .8, .32, .06, ry, c, [0, .95], 0, rng); }
 function propsHive(mb, r, rng, i) {
   box(mb, r.x + r.w / 2, 0, r.y + r.h / 2, r.w - .2, .09, r.h - .2, 0, [.14, .145, .17], [.5, 0], .01, rng);
+  for (const s of r.walls) { const [a2, b2] = sideIn(r, s, .26); hiveOverhead(mb, a2, b2, inward(r, s), i % 2 === 1, rng, 4.6, .5); }
   for (const s of r.walls) { const [a, b] = sideIn(r, s, .26); wallRun(mb, a, b, { h: 4.6 + rng() * 2.4, th: .5, col: HIVEC, windows: 2 + Math.floor(rng() * 2), sill: 1.1, lintel: true, var: .06 }, rng); if (rng() < .7) { const t = .25 + rng() * .5, n = inward(r, s); sign(mb, a[0] + (b[0] - a[0]) * t + n[0] * .36, 2.6 + rng() * 1.8, a[1] + (b[1] - a[1]) * t + n[1] * .36, Math.atan2(b[1] - a[1], b[0] - a[0]), rng); } }
-  const nC = 2 + Math.floor(rng() * 3); for (let k = 0; k < nC; k++) { const x = r.x + 1 + rng() * (r.w - 2), z = r.y + 1 + rng() * (r.h - 2), s = .8 + rng() * .6, ry = (rng() - .5) * .5; crate(mb, x, 0, z, s, ry, CRATE[Math.floor(rng() * 4)], rng); }
+  hiveEdgeProps(mb, r, rng);
   if (r.w >= 6 || r.h >= 6) container(mb, r.walls.includes('left') ? r.x + r.w - 2.3 : r.x + 2.3, r.walls.includes('top') ? r.y + r.h - 1.1 : r.y + 1.1, 0, rng);
-  const px = r.walls.includes('left') ? r.x + .45 : r.x + r.w - .45, pz = r.walls.includes('top') ? r.y + .45 : r.y + r.h - .45; tube(mb, [px, 0, pz], [px, 6, pz], .16, .12, 6, [.2, .2, .23], [.4, 0]);
+  const px = r.walls.includes('left') ? r.x + .45 : r.x + r.w - .45, pz = r.walls.includes('top') ? r.y + .45 : r.y + r.h - .45; hiveLamp(mb, px, 0, pz, 0, 6, rng, false);
   rubble(mb, r.x + r.w / 2, r.y + r.h / 2, rng, shade(HIVEC, 1.1), 5, Math.min(r.w, r.h) * .4, .33);
   if (i % 2 === 0) upperDeck(mb, r, rng, HIVEC, [.16, .17, .2], 3);
 }
+
+/* ---------- Hive City dressing: Imperial industrial scatter, overhead infrastructure, lamps, skyline ---------- */
+const HI_IRON = [.075, .07, .066], HI_RUST = [.22, .105, .06], HI_HZ = [.62, .48, .05];
+function hiveLamp(mb, x, y, z, a, hgt, rng, lit) {
+  tube(mb, [x, y, z], [x, y + hgt, z], .14, .095, 8, HI_IRON, [.7, 0]);
+  box(mb, x, y, z, .56, .6, .56, a, [.06, .06, .065], [.7, 0], 0, rng);
+  for (let k = 0; k < 3; k++) box(mb, x, y + .08 + k * .17, z, .6, .075, .6, a, HI_HZ, [.5, 0], 0, rng);
+  const hy = y + hgt, cs = Math.cos(a), sn = Math.sin(a);
+  box(mb, x, hy - .02, z, .46, .52, .46, a, [1, .6, .18], [.2, lit ? .38 : .22], 0, rng);
+  for (const [sx, sz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) box(mb, x + (sx * .27) * cs - (sz * .27) * sn, hy - .06, z + (sx * .27) * sn + (sz * .27) * cs, .06, .66, .06, a, HI_IRON, [.7, 0], 0, rng);
+  for (let k = 0; k < 4; k++) box(mb, x, hy - .04 + k * .15, z, .58, .035, .58, a, HI_IRON, [.7, 0], 0, rng);
+  box(mb, x, hy + .62, z, .74, .09, .74, a, HI_IRON, [.7, 0], 0, rng);
+  tube(mb, [x, hy + .7, z], [x, hy + 1.05, z], .1, .02, 6, HI_IRON, [.7, 0]);
+}
+/* a faint cone of lit smog under a lamp, fading toward the ground; drawn with the translucent decals */
+function lampCone(mb, x, y, z, hgt, R) {
+  const seg = 14, top = [x, y + hgt - .2, z], i0 = mb.n;
+  mb.P.push(top[0], top[1], top[2]); mb.N.push(0, 1, 0); mb.C.push(1, .66, .26); mb.M.push(.085, 0);
+  for (let k = 0; k < seg; k++) { const t = k / seg * 6.2832; mb.P.push(x + Math.cos(t) * R, y + .08, z + Math.sin(t) * R); mb.N.push(0, 1, 0); mb.C.push(1, .66, .26); mb.M.push(0, 0); }
+  for (let k = 0; k < seg; k++) { const a = i0 + 1 + k, b = i0 + 1 + (k + 1) % seg; mb.I.push(i0, a, b, i0, b, a); }
+}
+function munitorum(mb, x, z, ry, rng) {
+  const L = 1.6, W = .95, Hh = .9, cs = Math.cos(ry), sn = Math.sin(ry), col = vary([.15, .17, .14], rng, .15);
+  box(mb, x, 0, z, L, Hh, W, ry, col, [.7, 0], .01, rng);
+  for (let k = -2; k <= 2; k++) box(mb, x + k * .31 * cs, 0, z + k * .31 * sn, .07, Hh * .92, W + .06, ry, shade(col, .72), [.6, 0], 0, rng);
+  box(mb, x, .52, z, L + .02, .08, W + .02, ry, HI_HZ, [.5, 0], 0, rng);
+  box(mb, x, Hh, z, L + .08, .06, W + .08, ry, shade(col, 1.25), [.6, 0], 0, rng);
+  for (const e of [-1, 1]) box(mb, x + e * (L / 2 + .03) * cs, .3, z + e * (L / 2 + .03) * sn, .04, .3, .34, ry, [.5, .4, .12], [.4, 0], 0, rng);
+}
+function ammoCrate(mb, x, z, ry, rng) {
+  const cs = Math.cos(ry), sn = Math.sin(ry), col = vary([.2, .22, .15], rng, .12);
+  box(mb, x, 0, z, .9, .5, .56, ry, col, [.7, 0], .01, rng); box(mb, x, .5, z, .96, .06, .62, ry, shade(col, 1.2), [.6, 0], 0, rng);
+  box(mb, x, .56, z, .5, .012, .1, ry, [.7, .6, .1], [.4, 0], 0, rng);
+  for (const e of [-1, 1]) box(mb, x + e * .46 * cs, .22, z + e * .46 * sn, .04, .14, .16, ry, HI_IRON, [.7, 0], 0, rng);
+}
+function promBarrel(mb, x, z, rng) {
+  const col = rng() < .55 ? [.3, .085, .055] : [.12, .14, .12];
+  tube(mb, [x, 0, z], [x, .95, z], .3, .3, 10, col, [.7, 0], true);
+  for (const h of [.14, .47, .8]) tube(mb, [x, h, z], [x, h + .06, z], .335, .335, 10, HI_IRON, [.7, 0], true);
+  tube(mb, [x, .95, z], [x, 1.01, z], .2, .2, 10, HI_HZ, [.5, 0], true); tube(mb, [x, 1.01, z], [x, 1.13, z], .05, .05, 6, HI_IRON, [.7, 0], true);
+}
+function genCoil(mb, x, z, ry, rng) {
+  const cs = Math.cos(ry), sn = Math.sin(ry);
+  box(mb, x, 0, z, 1.1, .3, .8, ry, [.1, .1, .11], [.7, 0], .01, rng);
+  tube(mb, [x, .3, z], [x, 1.05, z], .3, .3, 10, [.32, .18, .09], [.7, 0], true);
+  for (let k = 0; k < 5; k++) tube(mb, [x, .36 + k * .14, z], [x, .4 + k * .14, z], .34, .34, 10, [.55, .3, .1], [.6, 0], true);
+  box(mb, x, 1.05, z, .56, .12, .56, ry, HI_IRON, [.7, 0], 0, rng);
+  box(mb, x + .42 * cs, .2, z + .42 * sn, .1, .1, .1, ry, [.1, .9, 1], [0, .5], 0, rng);
+}
+/* clutter stays hard against the walls so the middle of every ruin is open floor */
+function hiveEdgeProps(mb, r, rng) {
+  const spots = [];
+  for (const s of (r.walls && r.walls.length ? r.walls : ['top'])) {
+    const [a, b] = sideIn(r, s, .95 + rng() * .3), L = Math.hypot(b[0] - a[0], b[1] - a[1]), ang = Math.atan2(b[1] - a[1], b[0] - a[0]);
+    const ts = L > 7 ? [.1 + rng() * .25, .62 + rng() * .25] : [.15 + rng() * .65];
+    for (const t of ts) spots.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, ang]);
+  }
+  spots.slice(0, 4).forEach(([x, z, ang], k) => {
+    const kind = (k + Math.floor(rng() * 4)) % 4;
+    if (kind === 0) munitorum(mb, x, z, ang + (rng() - .5) * .15, rng);
+    else if (kind === 1) { for (const [dx, dz] of [[0, 0], [.7, .1], [.35, .62]]) promBarrel(mb, x + dx, z + dz, rng); }
+    else if (kind === 2) genCoil(mb, x, z, ang, rng);
+    else { ammoCrate(mb, x, z, ang, rng); ammoCrate(mb, x + .1, z, ang + .1, rng); box(mb, x, .62, z, .8, .5, .5, ang + .2, [.19, .21, .14], [.7, 0], .01, rng); }
+  });
+}
+/* pipe bundles, cables and a catwalk run along the high inner face of a wall */
+function hiveOverhead(mb, a, b, n, catwalk, rng, hh, th) {
+  hh = hh || 4.6; th = th || .5; if (hh < 3.4) return;
+  const L = Math.hypot(b[0] - a[0], b[1] - a[1]); if (L < 3) return;
+  const u = [(b[0] - a[0]) / L, (b[1] - a[1]) / L], ry = Math.atan2(u[1], u[0]), P = (t, off, y) => [a[0] + u[0] * t + n[0] * off, y, a[1] + u[1] * t + n[1] * off], o = th / 2;
+  const t0 = .4 + rng() * .8, t1 = L - .4 - rng() * .8; if (t1 - t0 < 2) return;
+  [[o + .2, hh - .55, .13, HI_RUST], [o + .5, hh - .7, .09, [.12, .13, .14]], [o + .22, hh - .95, .15, [.3, .22, .09]]].forEach(([off, y, rad, col]) => {
+    tube(mb, P(t0, off, y), P(t1, off, y), rad, rad, 8, col, [.7, 0]);
+    for (let t = t0 + .9 + rng(); t < t1; t += 2.3 + rng() * 1.2) { tube(mb, P(t - .09, off, y), P(t + .09, off, y), rad + .045, rad + .045, 8, HI_IRON, [.7, 0], true); tube(mb, P(t, o, y), P(t, off, y), .03, .03, 4, HI_IRON, [.7, 0]); }
+  });
+  { const t = t0 + (t1 - t0) * (.2 + rng() * .6); tube(mb, P(t, o + .2, hh - .55), P(t, o + .2, Math.max(2.4, hh - 2)), .08, .08, 6, HI_RUST, [.7, 0]); }
+  for (const [off, y, sg] of [[o + .1, hh - .12, .4], [o + .3, hh - .2, .3]]) {
+    const n2 = Math.max(2, Math.ceil((t1 - t0) / 1.5));
+    for (let k = 0; k < n2; k++) { const f0 = k / n2, f1 = (k + 1) / n2, y0 = y - sg * 4 * f0 * (1 - f0), y1 = y - sg * 4 * f1 * (1 - f1); tube(mb, P(t0 + (t1 - t0) * f0, off, y0), P(t0 + (t1 - t0) * f1, off, y1), .035, .035, 4, [.03, .03, .035], [.5, 0]); }
+  }
+  if (catwalk && hh >= 4) {
+    const cy = Math.max(2.4, hh * .56), cl = t1 - t0, cc = P((t0 + t1) / 2, o + .45, cy);
+    box(mb, cc[0], cy, cc[2], cl, .06, .8, ry, [.1, .1, .11], [.7, 0], 0, rng);
+    for (let t = t0 + .2; t < t1; t += .45) { const q = P(t, o + .45, cy + .06); box(mb, q[0], q[1], q[2], .05, .04, .82, ry, [.17, .17, .19], [.7, 0], 0, rng); }
+    for (let t = t0 + .3; t < t1; t += 2.4) { tube(mb, P(t, o + .83, cy), P(t, o + .83, cy + .9), .035, .035, 4, HI_IRON, [.7, 0]); tube(mb, P(t, o, cy - .7), P(t, o + .8, cy), .05, .05, 4, HI_IRON, [.7, 0]); }
+    for (const h of [.9, .45]) tube(mb, P(t0 + .3, o + .83, cy + h), P(t1 - .3, o + .83, cy + h), .04, .04, 4, HI_IRON, [.7, 0]);
+  }
+}
+/* silhouetted hive spires, hab-block towers and buttresses, with scattered lit windows, in the dark beyond the table */
+function hiveWindows(mb, cx, y0, cz, face, w, h, rng, density) {
+  const cs = Math.cos(face), sn = Math.sin(face), nc = Math.max(1, Math.floor(w / 1.1)), nr = Math.max(1, Math.floor(h / 1.7));
+  for (let r = 0; r < nr; r++) for (let c = 0; c < nc; c++) {
+    if (rng() > density) continue; const lx = (c - (nc - 1) / 2) * 1.1, col = rng() < .7 ? [1, .62, .22] : rng() < .5 ? [.4, .85, 1] : [1, .85, .5];
+    box(mb, cx + cs * 0 - lx * sn, y0 + .9 + r * 1.7, cz + lx * cs, .1, .75, .55, face, col, [0, .42], 0, rng);
+  }
+}
+function hiveSkyline(mb, rng, H) {
+  const pts = [];
+  for (let i = 0; i < 30; i++) { const side = i % 4, t = rng(); let x, z; if (side === 0) { x = -34 + t * (BW + 68); z = -(24 + rng() * 24); } else if (side === 1) { x = -34 + t * (BW + 68); z = BH + 24 + rng() * 24; } else if (side === 2) { x = -(18 + rng() * 28); z = -10 + t * (BH + 20); } else { x = BW + 18 + rng() * 28; z = -10 + t * (BH + 20); } pts.push([x, z]); }
+  pts.forEach(([x, z], i) => {
+    const y = H(x, z), kind = i % 3, dark = vary([.055, .06, .085], rng, .14), face = Math.atan2(BH / 2 - z, BW / 2 - x), cs = Math.cos(face), sn = Math.sin(face);
+    if (kind === 0) {
+      let h0 = 0, r0 = 2.6 + rng() * 1.2; const tiers = 3 + Math.floor(rng() * 2), tot = 24 + rng() * 18;
+      for (let k = 0; k < tiers; k++) { const th = tot / tiers, r1 = r0 * .68; tube(mb, [x, y + h0, z], [x, y + h0 + th, z], r0, r1, 10, dark, [.6, 0], k === tiers - 1); if (rng() < .8) hiveWindows(mb, x + cs * r0 * .9, y + h0, z + sn * r0 * .9, face, r0 * 1.3, th * .8, rng, .3); box(mb, x, y + h0 + th - .2, z, r0 * 2.2, .5, r0 * 2.2, 0, shade(dark, 1.15), [.6, 0], 0, rng); h0 += th; r0 = r1; }
+      tube(mb, [x, y + h0, z], [x, y + h0 + 5, z], .18, .03, 5, dark, [.6, 0]); box(mb, x, y + h0 + 4.6, z, .22, .22, .22, 0, [1, .12, .08], [0, .6], 0, rng);
+    } else if (kind === 1) {
+      const w = 5 + rng() * 4, d = 4 + rng() * 3, h = 15 + rng() * 12;
+      box(mb, x, y, z, w, h, d, face, dark, [.6, 0], .01, rng); box(mb, x, y + h, z, w + .8, .7, d + .8, face, shade(dark, 1.2), [.6, 0], 0, rng);
+      hiveWindows(mb, x + cs * (d / 2 + .05), y, z + sn * (d / 2 + .05), face + Math.PI, w - 1.4, h - 1.6, rng, .34);
+      if (rng() < .6) tube(mb, [x, y + h + .7, z], [x, y + h + 6, z], .12, .03, 5, dark, [.6, 0]);
+    } else {
+      const h = 13 + rng() * 9, w = 6 + rng() * 4, ang = rng() < .5 ? 0 : 1.5708;
+      for (const sg of [-1, 1]) { const dx = Math.cos(ang) * w * .5 * sg, dz = Math.sin(ang) * w * .5 * sg; tube(mb, [x + dx * 1.5, y, z + dz * 1.5], [x + dx * .35, y + h, z + dz * .35], 1, .6, 7, dark, [.6, 0]); }
+      box(mb, x, y + h - .3, z, ang ? 1.4 : w * .7, 1.1, ang ? w * .7 : 1.4, 0, shade(dark, 1.1), [.6, 0], 0, rng);
+      box(mb, x, y + h * .5, z, ang ? .6 : w * .8, .5, ang ? w * .8 : .6, 0, dark, [.6, 0], 0, rng);
+    }
+  });
+}
+function hiveDecals(decal, solid, rects, OB, ok, H, rng) {
+  /* hazard dashes just outside each ruin's footprint */
+  for (const r of rects) { const HZ = [.6, .47, .05];
+    const edges = r.poly ? r.poly.map((q, k) => { const c = r.poly[(k + 1) % r.poly.length], l = Math.hypot(c[0] - q[0], c[1] - q[1]) || 1; let nx = -(c[1] - q[1]) / l, nz = (c[0] - q[0]) / l; if (inPoly((q[0] + c[0]) / 2 + nx * .3, (q[1] + c[1]) / 2 + nz * .3, r.poly)) { nx = -nx; nz = -nz; } return [q[0], q[1], c[0], c[1], nx, nz]; }) : [[r.x, r.y, r.x + r.w, r.y, 0, -1], [r.x, r.y + r.h, r.x + r.w, r.y + r.h, 0, 1], [r.x, r.y, r.x, r.y + r.h, -1, 0], [r.x + r.w, r.y, r.x + r.w, r.y + r.h, 1, 0]];
+    for (const [ax, az, bx, bz, nx, nz] of edges) {
+      const L = Math.hypot(bx - ax, bz - az), ux = (bx - ax) / L, uz = (bz - az) / L;
+      for (let t = .3; t < L - 1; t += 1.9) { const o0 = .12, o1 = .42, p = (tt, o) => [ax + ux * tt + nx * o, .072, az + uz * tt + nz * o]; decal.quad(p(t, o0), p(t + 1, o0), p(t + 1, o1), p(t, o1), HZ, [.55, 0]); }
+    } }
+  /* cracked ferrocrete seams */
+  for (let i = 0; i < 26; i++) { let x = 2 + rng() * (BW - 4), z = 2 + rng() * (BH - 4), a = rng() * 6.28; if (!ok(x, z, 1.2)) continue;
+    for (let k = 0; k < 6; k++) { const L = .9 + rng() * .8, nx2 = x + Math.cos(a) * L, nz2 = z + Math.sin(a) * L, w = .035; decal.quad([x - Math.sin(a) * w, .066, z + Math.cos(a) * w], [nx2 - Math.sin(a) * w, .066, nz2 + Math.cos(a) * w], [nx2 + Math.sin(a) * w, .066, nz2 - Math.cos(a) * w], [x + Math.sin(a) * w, .066, z - Math.cos(a) * w], [.005, .005, .008], [.6, 0]); x = nx2; z = nz2; a += (rng() - .5) * 1.1; } }
+  /* manhole grates */
+  for (let i = 0, n = 0; i < 80 && n < 6; i++) { const x = 4 + rng() * (BW - 8), z = 4 + rng() * (BH - 8); if (!ok(x, z, 2.2)) continue; n++;
+    ground(decal, x, z, .95, .95, 18, [.2, .2, .22], [.55, 0], .071, H, rng, 0); ground(decal, x, z, .8, .8, 18, [.012, .012, .016], [.85, 0], .073, H, rng, 0);
+    for (let k = -2; k <= 2; k++) decal.quad([x + k * .27 - .03, .075, z - .72 + Math.abs(k) * .06], [x + k * .27 + .03, .075, z - .72 + Math.abs(k) * .06], [x + k * .27 + .03, .075, z + .72 - Math.abs(k) * .06], [x + k * .27 - .03, .075, z + .72 - Math.abs(k) * .06], [.2, .2, .22], [.8, 0]); }
+  /* low rubble spilled beside the ruins (ankle height, never inside them) */
+  rects.forEach((r, i) => { if (i % 2) return; const side = Math.floor(rng() * 4), t = .15 + rng() * .7; const x = side < 2 ? r.x + r.w * t : (side === 2 ? r.x - 1.5 : r.x + r.w + 1.5), z = side < 2 ? (side === 0 ? r.y - 1.5 : r.y + r.h + 1.5) : r.y + r.h * t; if (x < 1 || z < 1 || x > BW - 1 || z > BH - 1 || !ok(x, z, .2)) return; rubbleAt(solid, rng, H, x, z, shade(HIVEC, 1.05), .9 + rng() * .4); });
+}
 function scatterHive(mb, rng, ok, H) { for (let i = 0; i < 70; i++) { const x = rng() * BW, z = rng() * BH; if (!ok(x, z, .6)) continue; const s = .03 + rng() * .06; box(mb, x, 0, z, s * 2, s, s * 1.4, rng() * 3, vary([.2, .2, .24], rng, .2), [.8, 0], .01, rng); } for (let i = 0; i < 12; i++) { const x = rng() * BW, z = rng() * BH; if (!ok(x, z, 1)) continue; box(mb, x, 0, z, .5, .9, .3, rng() * 3, [.22, .24, .28], [.7, 0], .02, rng); box(mb, x, .55, z, .3, .05, .02, 0, [.1, .9, 1], [0, .9], 0, rng); } }
 THEMES.hive = { name: 'Hive City', sub: 'Dark streets, neon signs and tall ruins', props: propsHive, scatter: scatterHive, amp: .05, freq: .2, seed: 79,
-  env: { sun: [.4, .38, -.5], sunC: [.8, .98, 1.5], ambT: [.045, .07, .12], ambB: [.025, .035, .06], fog: [.03, .04, .09], fogD: .009, dust: 0 },
+  env: { sun: [.4, .38, -.5], sunC: [.62, .92, 1.75], ambT: [.035, .065, .15], ambB: [.02, .032, .068], fog: [.03, .04, .09], fogD: .009, dust: 0 },
   ground: (x, z, h, n) => { let c = mixc([.055, .07, .09], [.17, .17, .18], n); const m = fbm(x * .13 + 9, z * .13); c = mixc(c, m > .52 ? [.26, .14, .08] : [.05, .17, .2], clamp(Math.abs(m - .5) * 3, 0, .7)); const gx = Math.abs(((x / 8) % 1 + 1) % 1 - .5); if (gx > .494) c = shade(c, .55); const gz = Math.abs(((z / 6) % 1 + 1) % 1 - .5); if (gz > .488) c = shade(c, .6); return c; } };
-THEMES.hive.poly = { wall: { h: [1, 1.3], th: .6, col: HIVEC, floor: [.12, .125, .15] }, pillar: null, clutter: (mb, x, z, rng, k) => { if (k % 2) container(mb, x, z, rng() * 3, rng); else crate(mb, x, 0, z, .9 + rng() * .5, rng() * 1.5, CRATE[Math.floor(rng() * 4)], rng); } };
+THEMES.hive.poly = { wall: { h: [1, 1.3], th: .6, col: HIVEC, floor: [.12, .125, .15] }, pillar: null, hug: 2.7, clutterMax: 2,
+  overhead: (mb, a, b, n, rng, hh, wth) => hiveOverhead(mb, a, b, n, hh >= 4 && rng() < .4, rng, hh, wth),
+  clutter: (mb, x, z, rng, k) => { const kind = (k + Math.floor(rng() * 4)) % 4, ry = rng() * 6.28; if (kind === 0) munitorum(mb, x, z, ry, rng); else if (kind === 1) { for (const [dx, dz] of [[0, 0], [.7, .1], [.35, .62]]) promBarrel(mb, x + dx, z + dz, rng); } else if (kind === 2) genCoil(mb, x, z, ry, rng); else { ammoCrate(mb, x, z, ry, rng); ammoCrate(mb, x + .1, z, ry + .1, rng); } } };
 
 /* the original three get the same two-storey ruins now and then */
 { const wrap = (th, col, fl) => { const p = th.props; th.props = (mb, r, rng, i) => { p(mb, r, rng, i); if (i % 3 === 1) upperDeck(mb, r, rng, col, fl, 3); }; };
@@ -16225,13 +16366,13 @@ function buildMap(spec) {
   for (let i = 0; i < nx; i++) for (let j = 0; j < nz; j++) { const a = base + idx(i, j), b = base + idx(i + 1, j), c = base + idx(i + 1, j + 1), d = base + idx(i, j + 1); solid.I.push(a, d, c, a, c, b); }
   const tv0 = solid.n;
   rects.forEach((r, i) => { const rr = mulberry(seed * 101 + i * 17 + th.seed); if (r.poly && r.cat === 'light') propsLowPoly(solid, r, rr, th.poly); else if (r.poly) propsPoly(solid, r, rr, i, th.poly); else if (r.cat && r.cat !== 'dense') propsLow(solid, r, rr, i); else th.props(solid, r, rr, i); });
-  { const warm = !(spec.theme === 'desert' || spec.theme === 'forge'), tn = warm ? [1.14, 1.02, .84] : [.86, .98, 1.16]; for (let v = tv0; v < solid.n; v++) for (let k = 0; k < 3; k++) solid.C[v * 3 + k] = Math.min(1, solid.C[v * 3 + k] * tn[k]); }
+  { const warm = !(spec.theme === 'desert' || spec.theme === 'forge' || spec.theme === 'hive'), tn = warm ? [1.14, 1.02, .84] : [.86, .98, 1.16]; for (let v = tv0; v < solid.n; v++) for (let k = 0; k < 3; k++) solid.C[v * 3 + k] = Math.min(1, solid.C[v * 3 + k] * tn[k]); }
   /* no random open-ground scatter or dressing: the table shows only the layout's own terrain */
   surround(solid, decal, mulberry(seed * 53 + th.seed), H, spec.theme, th);
   const floodT = spec.theme === 'base' || spec.theme === 'hive', floods = [];
   if (floodT) {
     const fr = mulberry(seed * 71 + th.seed), IRN = [.06, .06, .07];
-    OB.slice(0, 5).forEach((o, k) => { const a = k * 1.9 + fr() * .5, fx = o.x + Math.cos(a) * (OR + .9), fz = o.y + Math.sin(a) * (OR + .9), y = H(fx, fz); if (fx < 1 || fz < 1 || fx > BW - 1 || fz > BH - 1) return; tube(solid, [fx, y, fz], [fx, y + 3.6, fz], .1, .08, 6, IRN, [.6, 0]); box(solid, fx, y + 3.7, fz, .7, .3, .45, a, [1, .78, .4], [.2, 1], 0, fr); floods.push({ x: fx - Math.cos(a) * .6, y: y + 3.2, z: fz - Math.sin(a) * .6, r: 17, c: [2.3, 1.2, .45] }); ground(decal, o.x, o.y, OR + 1.2, OR + 1.2, 28, [1, .7, .3], [.07, 0], .069, H, fr, .1); });
+    OB.slice(0, 5).forEach((o, k) => { const a = k * 1.9 + fr() * .5, fx = o.x + Math.cos(a) * (OR + .9), fz = o.y + Math.sin(a) * (OR + .9), y = H(fx, fz); if (fx < 1 || fz < 1 || fx > BW - 1 || fz > BH - 1) return; if (spec.theme === 'hive') { hiveLamp(solid, fx, y, fz, a, 3.6, fr, true); lampCone(decal, fx, y, fz, 3.6, 2.9); } else { tube(solid, [fx, y, fz], [fx, y + 3.6, fz], .1, .08, 6, IRN, [.6, 0]); box(solid, fx, y + 3.7, fz, .7, .3, .45, a, [1, .78, .4], [.2, 1], 0, fr); } floods.push({ x: fx - Math.cos(a) * .6, y: y + 3.2, z: fz - Math.sin(a) * .6, r: 17, c: [2.3, 1.2, .45] }); ground(decal, o.x, o.y, OR + 1.2, OR + 1.2, 28, [1, .7, .3], [.07, 0], .069, H, fr, .1); });
     for (let i = 0; i < 0; i++) { const px = 3 + fr() * (BW - 6), pz = 3 + fr() * (BH - 6); if (!ok(px, pz, 2)) continue; const red = pz < BH / 2; ground(solid, px, pz, 1 + fr() * 1.4, .7 + fr() * .9, 16, [.012, .02, .035], [6, 0], .067, H, fr, .3); ground(decal, px, pz, .55, .4, 12, red ? [.9, .2, .15] : [.2, .45, 1], [.16, 0], .068, H, fr, .3); }
     for (let i = 0; i < 0; i++) { const px = 3 + fr() * (BW - 6), pz = 3 + fr() * (BH - 6); if (ok(px, pz, 2)) ground(decal, px, pz, .9 + fr() * .8, .7 + fr() * .6, 14, [.01, .01, .014], [.5, 0], .066, H, fr, .4); }
   }
@@ -16240,6 +16381,7 @@ function buildMap(spec) {
   /* what kind of cover each footprint is: heavy ruins read cold and pale, light cover reads warm and dark */
   rects.forEach((r, i) => { if (r.poly) return; const rr = mulberry(seed * 211 + i * 7 + th.seed), ex = [[r.x - .6, r.y - .6, r.w + 1.2, .9], [r.x - .6, r.y + r.h - .3, r.w + 1.2, .9], [r.x - .6, r.y - .6, .9, r.h + 1.2], [r.x + r.w - .3, r.y - .6, .9, r.h + 1.2]]; for (const [x, z, w, d] of ex) decal.quad([x, .066, z], [x, .066, z + d], [x + w, .066, z + d], [x + w, .066, z], [.01, .01, .01], [.32, 0]); for (let k = 0; k < 4; k++) { const x = r.x + rr() * r.w, z = rr() < .5 ? r.y - .3 : r.y + r.h + .3; rubbleAt(solid, rr, H, x, z, (th.poly && th.poly.wall && th.poly.wall.col) || [.3, .3, .3], .5 + rr() * .5); } });
   rects.forEach(r => { if (r.poly) return; const heavy = (r.walls || []).length >= 2, c = heavy ? [.56, .53, .47] : [.2, .16, .1]; decal.quad([r.x, .068, r.y], [r.x, .068, r.y + r.h], [r.x + r.w, .068, r.y + r.h], [r.x + r.w, .068, r.y], c, [heavy ? .22 : .3, 0]); });
+  if (spec.theme === 'hive') hiveDecals(decal, solid, rects, OB, ok, H, mulberry(seed * 131 + th.seed));
   /* zones, as flat tint over the ground */
   const zoneTint = (z, col, off) => { if (!z) return; const s = 1, b = z.pts ? z.pts.reduce((m, p) => [Math.min(m[0], p[0]), Math.min(m[1], p[1]), Math.max(m[2], p[0]), Math.max(m[3], p[1])], [1e9, 1e9, -1e9, -1e9]) : [z.x, z.y, z.x + z.w, z.y + z.h]; for (let x = Math.floor(b[0]); x < b[2]; x += s) for (let y = Math.floor(b[1]); y < b[3]; y += s) { if (!zoneHas(z, x + .5, y + .5)) continue; const p = (X, Z) => [X, H(X, Z) + .07, Z]; zdec.quad(p(x, y), p(x, y + s), p(x + s, y + s), p(x + s, y), col, [.045, 0]); } const E = z.pts || (z.kind === 'quarter' ? null : [[z.x, z.y], [z.x + z.w, z.y], [z.x + z.w, z.y + z.h], [z.x, z.y + z.h]]); const Lt = E ? E.reduce((sum, e, k) => { const c = E[(k + 1) % E.length]; return sum + Math.hypot(c[0] - e[0], c[1] - e[1]); }, 0) || 1 : 1; let acc = 0; if (E) for (let k = 0; k < E.length; k++) { const a = E[k], c = E[(k + 1) % E.length], L = Math.hypot(c[0] - a[0], c[1] - a[1]), n = Math.max(1, Math.ceil(L / 1.5)), nn = [-(c[1] - a[1]) / L * .09, (c[0] - a[0]) / L * .09], k0 = acc; acc += L; for (let q = 0; q < n; q++) { const t0 = q / n, t1 = (q + 1) / n, f = (t, s) => { const X = a[0] + (c[0] - a[0]) * t + nn[0] * s, Z = a[1] + (c[1] - a[1]) * t + nn[1] * s; return [X, H(X, Z) + .08, Z]; }; const u = t => (k0 + L * t) / Lt + (off || 0); zdec.quadU(f(t0, -4.5), f(t1, -4.5), f(t1, 4.5), f(t0, 4.5), col, .11, u(t0), u(t1)); const tm = t0 + (t1 - t0) * .68; zdec.quadU(f(t0, -1), f(tm, -1), f(tm, 1), f(t0, 1), col, .62, u(t0), u(tm)); } } };
   if (spec.zones) { zoneTint(spec.zones.ai, [.95, .25, .2]); zoneTint(spec.zones.player, [.3, .55, 1], .5); }
