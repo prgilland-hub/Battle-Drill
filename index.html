@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.19-0150';
+  const VERSION = '2026.11.19-0152';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -1857,6 +1857,10 @@ html[data-look="cog"] .muted{color:var(--muted)}
   html:not([data-device="tablet"]):not(.fs-on) #tab-battle.on .battle-grid:not(.formonly) .col-side{position:absolute;top:0;right:0;bottom:0;width:min(440px,94vw);z-index:75;overflow:auto;padding:10px;background:var(--bg,#0e1214);border-left:1px solid var(--line);box-shadow:-12px 0 32px rgba(0,0,0,.6);transform:translateX(108%);visibility:hidden;transition:transform .16s ease,visibility 0s .16s}
   html:not([data-device="tablet"]):not(.fs-on) #tab-battle.on .battle-grid.side-open:not(.formonly) .col-side{transform:none;visibility:visible;transition:transform .16s ease}
   #b-sideclose{display:none;position:sticky;top:0;float:right;z-index:3;margin:0 0 6px 6px}
+  #b-sidepin{display:none;position:sticky;top:0;float:right;z-index:3;margin:0 0 6px 6px}
+  html:not([data-device="tablet"]):not(.fs-on) #tab-battle.on .battle-grid:not(.formonly) #b-sidepin{display:inline-flex}
+  html:not([data-device="tablet"]):not(.fs-on) #tab-battle.on .battle-grid.pinned.side-open:not(.formonly) .col-main{margin-right:min(440px,94vw)}
+  html:not([data-device="tablet"]):not(.fs-on) #tab-battle.on .battle-grid.pinned.side-open:not(.formonly) .col-side{box-shadow:none}
   html:not([data-device="tablet"]):not(.fs-on) #tab-battle.on .battle-grid:not(.formonly) #b-sideclose{display:inline-flex}
 }
 /* kill team: placement confirm, measure and sight tools */
@@ -17109,15 +17113,20 @@ function actTip(a) {
   const sb = mk('b-sidebtn', 'Orders', 'Show or hide the orders, army and battle log panel'), tb = mk('b-strbtn', 'Stratagems', 'Show or hide the stratagems');
   const cl = document.createElement('button'); cl.type = 'button'; cl.id = 'b-sideclose'; cl.className = 'btn'; cl.textContent = 'Close ✕'; side.insertBefore(cl, side.firstChild);
   const desk = () => !document.documentElement.classList.contains('fs-on') && document.documentElement.dataset.device !== 'tablet' && window.innerWidth >= 921 && !grid.classList.contains('formonly');
-  const setSide = on => { document.documentElement.classList.toggle('orders-open', !!on && desk()); grid.classList.toggle('side-open', !!on); sb.setAttribute('aria-expanded', String(!!on)); if (on) setStr(false); };
+  const setSide = on => { document.documentElement.classList.toggle('orders-open', !!on && desk()); grid.classList.toggle('side-open', !!on); if (grid.classList.contains('pinned')) setTimeout(() => window.dispatchEvent(new Event('resize')), 30); sb.setAttribute('aria-expanded', String(!!on)); if (on) setStr(false); };
   const setStr = on => { grid.classList.toggle('str-open', !!on); tb.setAttribute('aria-expanded', String(!!on)); if (on) setSide(false); };
   window.bdPanels = { side: setSide, str: setStr };
   sb.addEventListener('click', () => setSide(!grid.classList.contains('side-open')));
   tb.addEventListener('click', () => setStr(!grid.classList.contains('str-open')));
   cl.addEventListener('click', () => setSide(false));
+  /* pin: dock the orders beside the map so it stays put while you pick units and destinations */
+  const pn = document.createElement('button'); pn.type = 'button'; pn.id = 'b-sidepin'; pn.className = 'btn'; side.insertBefore(pn, cl.nextSibling);
+  let pinned = true; try { pinned = localStorage.getItem('bd.pinOrders') !== '0'; } catch (e) { }
+  const showPin = () => { grid.classList.toggle('pinned', pinned); pn.textContent = pinned ? 'Docked ✓' : 'Dock'; pn.title = pinned ? 'Orders stay beside the map. Click to let them float over it instead.' : 'Keep the orders beside the map so they never close while you play'; };
+  showPin(); pn.addEventListener('click', () => { pinned = !pinned; try { localStorage.setItem('bd.pinOrders', pinned ? '1' : '0'); } catch (e) { } showPin(); setTimeout(() => window.dispatchEvent(new Event('resize')), 30); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape') { setSide(false); setStr(false); } });
   /* clicking the map closes either popup, so the board is never left covered */
-  map.addEventListener('pointerdown', e => { if (!desk() || e.target.closest('.fs-btn')) return; if (e.button === 2) return; try { const pt = (typeof BF3D !== 'undefined' && BF3D.on) ? boardPt(e) : toSvg(e); if (pt && typeof unitAt === 'function' && unitAt(pt)) return; } catch (x) { } setSide(false); setStr(false); });
+  map.addEventListener('pointerdown', e => { if (!desk() || e.target.closest('.fs-btn')) return; if (e.button === 2) return; try { const pt = (typeof BF3D !== 'undefined' && BF3D.on) ? boardPt(e) : toSvg(e); if (pt && typeof unitAt === 'function' && unitAt(pt)) return; } catch (x) { } if (!grid.classList.contains('pinned') || grid.classList.contains('str-open')) setStr(false); if (!grid.classList.contains('pinned')) setSide(false); });
   /* a stratagem used from the popup closes it */
   const st = document.getElementById('b-strats'); if (st) st.addEventListener('click', e => { if (e.target.closest && e.target.closest('.scard[data-sact],.scard[data-sdet]')) setTimeout(() => setStr(false), 60); });
   /* new phase, step or game over: open the orders panel by itself */
