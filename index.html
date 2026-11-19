@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.19-0045';
+  const VERSION = '2026.11.19-0054';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -555,7 +555,28 @@ window.BDModels = BDModels; window.MODELIMP = MODELIMP;
     open(el);
   });
   window.addEventListener('bd-models-changed', () => { tshown = null; tipAttach(); if (cur && document.querySelector('#modal-box .ds-img')) mount(); });
-  window.BDPreview = { enabled: () => true, set: () => { } };
+  /* an inline turning model inside a datasheet that is part of a page (the Crusade unit preview) */
+  let pane = null;
+  function paneFrame(now) {
+    raf = 0; if (!pane || !pane.box.isConnected || !cv || cv.parentNode !== pane.slot) return;
+    const dt = Math.min(.1, (now - (last || now)) / 1000); last = now; if (now > idle) cam.yaw += dt * .7;
+    try { R.draw(cam, ENV); } catch (e) { return; } raf = requestAnimationFrame(paneFrame);
+  }
+  function mountPane(box, ds, faction, key, vi) {
+    if (!box || !box.isConnected || !BDModels.on()) { pane = null; return; }
+    const head = box.querySelector('.ds-head'); if (!head) return; const vars = BDModels.variants(ds, faction); if (!vars.length) { pane = null; return; }
+    vi = ((vi == null ? Math.max(0, vars.findIndex(m => BDModels.fig(m) === BDModels.pick(ds, faction, key))) : vi) % vars.length + vars.length) % vars.length;
+    const m = vars[vi], fig = BDModels.fig(m); pane = { box, ds, faction, key, vi, slot: null }; if (!fig || !ensureGL()) return;
+    let slot = box.querySelector('.ds-img'); if (!slot) { slot = document.createElement('div'); slot.className = 'ds-img mini'; head.insertBefore(slot, head.firstChild); }
+    slot.classList.add('mini'); slot.style.cssText = 'position:static;display:block;width:min(100%,300px);height:auto;aspect-ratio:1;margin:2px auto 4px;background:#16181c;border-radius:10px;overflow:hidden'; slot.style.backgroundImage = 'none';
+    try { upload(fig); } catch (e) { console.warn(e); return; } cur = null; tshown = null; pane.slot = slot; if (cv.parentNode !== slot) slot.appendChild(cv);
+    let bar = box.querySelector('.bdp-pbar'); if (!bar) { bar = document.createElement('div'); bar.className = 'bdp-pbar'; bar.style.cssText = 'display:flex;justify-content:center;align-items:center;gap:10px;font-size:12px;opacity:.85;margin-bottom:8px'; slot.after(bar); }
+    bar.innerHTML = (vars.length > 1 ? '<button class="btn" data-d="-1" type="button">‹</button>' : '') + '<span>' + m.name.replace(/</g, '&lt;') + (vars.length > 1 ? ' · ' + (vi + 1) + ' of ' + vars.length : '') + ' · drag to turn</span>' + (vars.length > 1 ? '<button class="btn" data-d="1" type="button">›</button>' : '');
+    bar.querySelectorAll('button').forEach(b => b.onclick = () => mountPane(box, ds, faction, key, vi + +b.dataset.d));
+    R.resize(); try { R.draw(cam, ENV); } catch (e) { } if (!raf) { last = 0; raf = requestAnimationFrame(paneFrame); }
+  }
+  window.addEventListener('bd-models-changed', () => { if (pane && pane.box.isConnected) mountPane(pane.box, pane.ds, pane.faction, pane.key, pane.vi); });
+  window.BDPreview = { enabled: () => true, set: () => { }, pane: (box, ds, faction, key) => mountPane(box, ds, faction, key) };
 })();
 </script>
 <meta charset="utf-8">
@@ -20353,8 +20374,11 @@ function crBuyPreview(name) {
   const l = LIB.find(x => x.faction === CAMP_FAC && x.name === name); if (!l) return '<p class="muted">Pick a unit to read its datasheet.</p>';
   try { return datasheetCard(Object.assign({}, l, { models: l.baseModels || l.models }), l.faction, { narrow: true }); } catch (e) { return '<p class="muted">No datasheet available for this unit.</p>'; }
 }
-document.addEventListener('change', e => { const t = e.target; if (t && t.id === 'cr-buy') { const el = document.getElementById('cr-buy-prev'); if (el) el.innerHTML = crBuyPreview(t.value); } });
+/* with the model library installed (the PWA), the preview also shows the unit's 3D model turning in the datasheet */
+function crPrevMount() { try { const el = document.getElementById('cr-buy-prev'), sel = document.getElementById('cr-buy'); if (!el || !sel || !window.BDPreview || !BDPreview.pane) return; const l = LIB.find(x => x.faction === CAMP_FAC && x.name === sel.value); if (l) BDPreview.pane(el, l.ds || l.name, l.faction, l.id); } catch (e) { } }
+document.addEventListener('change', e => { const t = e.target; if (t && t.id === 'cr-buy') { const el = document.getElementById('cr-buy-prev'); if (el) { el.innerHTML = crBuyPreview(t.value); crPrevMount(); } } });
 function crBuyHtml(used, lim) {
+  setTimeout(crPrevMount, 60);
   const S = CAMP_STATE, opts = crBuyable(), room = lim - used, cap = crSupCap(), supMax = (S.sup || 0) >= cap;
   return crDetHtml() + `<div class="cru-box"><h4>Reinforcements and Supply</h4><p class="muted" style="margin:0 0 6px">Supply used <b>${used}</b> of <b>${lim}</b> pts (${room >= 0 ? room + ' free' : -room + ' over'}). Your story units set the base; any extra headroom is bought with RP: Increase Supply Limit costs 1 RP for +200 pts, up to +${cap} at this point in the campaign. Units you can add now cost up to <b>${crUnitCap() >= 9999 ? 'any' : crUnitCap()}</b> pts each (characters from chapter 3, epic heroes from chapter 7); heavier units unlock as you advance. Up to 3 of one unit (6 for Battleline and Dedicated Transports).</p>
     <label>Add a unit <select id="cr-buy">${opts.map(x => `<option value="${escH(x.l.name)}"${x.pts > room ? ' disabled' : ''}>${escH(x.l.name)}${x.ch === 'epic' ? ' (epic hero)' : x.ch ? ' (character)' : ' ×' + x.n}: ${x.pts} pts</option>`).join('')}</select></label>

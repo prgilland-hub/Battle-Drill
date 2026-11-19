@@ -352,5 +352,26 @@ window.BDModels = BDModels; window.MODELIMP = MODELIMP;
     open(el);
   });
   window.addEventListener('bd-models-changed', () => { tshown = null; tipAttach(); if (cur && document.querySelector('#modal-box .ds-img')) mount(); });
-  window.BDPreview = { enabled: () => true, set: () => { } };
+  /* an inline turning model inside a datasheet that is part of a page (the Crusade unit preview) */
+  let pane = null;
+  function paneFrame(now) {
+    raf = 0; if (!pane || !pane.box.isConnected || !cv || cv.parentNode !== pane.slot) return;
+    const dt = Math.min(.1, (now - (last || now)) / 1000); last = now; if (now > idle) cam.yaw += dt * .7;
+    try { R.draw(cam, ENV); } catch (e) { return; } raf = requestAnimationFrame(paneFrame);
+  }
+  function mountPane(box, ds, faction, key, vi) {
+    if (!box || !box.isConnected || !BDModels.on()) { pane = null; return; }
+    const head = box.querySelector('.ds-head'); if (!head) return; const vars = BDModels.variants(ds, faction); if (!vars.length) { pane = null; return; }
+    vi = ((vi == null ? Math.max(0, vars.findIndex(m => BDModels.fig(m) === BDModels.pick(ds, faction, key))) : vi) % vars.length + vars.length) % vars.length;
+    const m = vars[vi], fig = BDModels.fig(m); pane = { box, ds, faction, key, vi, slot: null }; if (!fig || !ensureGL()) return;
+    let slot = box.querySelector('.ds-img'); if (!slot) { slot = document.createElement('div'); slot.className = 'ds-img mini'; head.insertBefore(slot, head.firstChild); }
+    slot.classList.add('mini'); slot.style.cssText = 'position:static;display:block;width:min(100%,300px);height:auto;aspect-ratio:1;margin:2px auto 4px;background:#16181c;border-radius:10px;overflow:hidden'; slot.style.backgroundImage = 'none';
+    try { upload(fig); } catch (e) { console.warn(e); return; } cur = null; tshown = null; pane.slot = slot; if (cv.parentNode !== slot) slot.appendChild(cv);
+    let bar = box.querySelector('.bdp-pbar'); if (!bar) { bar = document.createElement('div'); bar.className = 'bdp-pbar'; bar.style.cssText = 'display:flex;justify-content:center;align-items:center;gap:10px;font-size:12px;opacity:.85;margin-bottom:8px'; slot.after(bar); }
+    bar.innerHTML = (vars.length > 1 ? '<button class="btn" data-d="-1" type="button">‹</button>' : '') + '<span>' + m.name.replace(/</g, '&lt;') + (vars.length > 1 ? ' · ' + (vi + 1) + ' of ' + vars.length : '') + ' · drag to turn</span>' + (vars.length > 1 ? '<button class="btn" data-d="1" type="button">›</button>' : '');
+    bar.querySelectorAll('button').forEach(b => b.onclick = () => mountPane(box, ds, faction, key, vi + +b.dataset.d));
+    R.resize(); try { R.draw(cam, ENV); } catch (e) { } if (!raf) { last = 0; raf = requestAnimationFrame(paneFrame); }
+  }
+  window.addEventListener('bd-models-changed', () => { if (pane && pane.box.isConnected) mountPane(pane.box, pane.ds, pane.faction, pane.key, pane.vi); });
+  window.BDPreview = { enabled: () => true, set: () => { }, pane: (box, ds, faction, key) => mountPane(box, ds, faction, key) };
 })();
