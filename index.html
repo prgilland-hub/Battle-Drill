@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.19-0128';
+  const VERSION = '2026.11.19-0144';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -16412,7 +16412,7 @@ const ENV_KEYS = ['desert', 'base', 'marsh', 'ice', 'forge', 'jungle', 'hive'];
 /* spec: { theme, seed, terrain:[{x,y,w,h,walls?,poly?}], objs:[{x,y,poly?}], objR, zones:{player,ai}, decor:[{x,y,r,kind}] } */
 const zoneHas = (z, x, y) => z.pts ? inPoly(x, y, z.pts) : (x >= z.x && x <= z.x + z.w && y >= z.y && y <= z.y + z.h && !(z.kind === 'quarter' && Math.hypot(x - z.cx, y - z.cy) < z.cut));
 function buildMap(spec) {
-  const th = THEMES[spec.theme] || THEMES.desert, seed = spec.seed || 1, rng = mulberry(seed * 7919 + th.seed), rects = spec.terrain || [], OB = spec.objs || [], OR = spec.objR || 3, sd = th.seed * 10.37;
+  const th = THEMES[spec.theme] || THEMES.desert, seed = spec.seed || 1, rng = mulberry(seed * 7919 + th.seed), rects = (spec.terrain || []).map(r => (r.poly || r.walls) ? r : Object.assign({}, r, { walls: ['top', 'left'] })), OB = spec.objs || [], OR = spec.objR || 3, sd = th.seed * 10.37;
   const mask = (x, z) => { let d = 99; for (const r of rects) d = Math.min(d, tdist(x, z, r)); for (const o of OB) d = Math.min(d, Math.hypot(x - o.x, z - o.y) - (OR + .6)); return sstep(.6, 4.2, d); };
   const outD = (x, z) => Math.hypot(Math.max(-x, 0, x - BW), Math.max(-z, 0, z - BH)), H = (x, z) => th.amp * (fbm(x * th.freq + sd, z * th.freq * 1.3 + sd) - .5) * 2.4 * mask(x, z) * (1 - sstep(.5, 4, outD(x, z)));
   const ok = (x, z, m) => { for (const r of rects) if (tdist(x, z, r) < m + .3) return false; for (const o of OB) if (Math.hypot(x - o.x, z - o.y) < OR + .6) return false; return true; };
