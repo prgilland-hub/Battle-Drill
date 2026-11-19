@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.19-0010';
+  const VERSION = '2026.11.19-0031';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -15861,7 +15861,32 @@ const sideIn = (r, s, d) => { const [a, b] = sideLine(r, s), n = inward(r, s); r
 const inward = (r, s) => s === 'top' ? [0, 1] : s === 'bottom' ? [0, -1] : s === 'left' ? [1, 0] : [-1, 0];
 
 /* a wall of stacked blocks with a ragged top and optional window gaps */
+/* ferrocrete slabs: wide poured panels with joints, bolt holes, rebar, water-streak grime, jagged broken caps and the odd stencil */
+function panelRun(mb, a, b, o, rng) {
+  const L = Math.hypot(b[0] - a[0], b[1] - a[1]), n = Math.max(2, Math.round(L / 1.5)), ux = (b[0] - a[0]) / L, uz = (b[1] - a[1]) / L, ry = Math.atan2(uz, ux), sd = rng() * 50, wins = [], th = o.th, px = -uz, pz = ux;
+  if (o.windows) for (let k = 0; k < o.windows; k++) { const c = (k + .5) / o.windows + (rng() - .5) * .12, wv = Math.min(.14, 1.7 / L); wins.push([c - wv, c + wv]); }
+  const GR = shade(o.col, .5), RB = [.3, .14, .07];
+  for (let i = 0; i < n; i++) {
+    const t = (i + .5) / n, cx = a[0] + ux * L * t, cz = a[1] + uz * L * t, w = L / n * 1.02; let hh = o.h * (.45 + .55 * vnoise(t * L * .3 + sd, sd)); if (rng() < .12) hh *= .62; hh = Math.max(hh, .6);
+    const win = wins.find(([x0, x1]) => t > x0 && t < x1); const top = win ? Math.min(hh, o.sill || 1) : hh, col = vary(o.col, rng, o.var || .08);
+    let y = 0; while (y < top - .02) { const ch = Math.min(top - y, .9 + rng() * .9); box(mb, cx, y, cz, w, ch, th, ry, vary(col, rng, .04), [o.grit == null ? .9 : o.grit, 0], .02, rng); y += ch; }
+    if (win && o.lintel && hh > (o.sill || 1) + 1.9) { const y0 = (o.sill || 1) + 1.8; box(mb, cx, y0, cz, w, hh - y0, th, ry, shade(col, .95), [.9, 0], .02, rng); }
+    for (const sd2 of [-1, 1]) {
+      const fx = cx + px * sd2 * (th / 2 + .012), fz = cz + pz * sd2 * (th / 2 + .012);
+      for (const by of [.35, top - .3]) if (by > .2) for (const bx of [-.4, .4]) box(mb, fx + ux * bx * w * .8, by, fz + uz * bx * w * .8, .07, .07, .03, ry, GR, [.6, 0], 0, rng);
+      if (top > 1.6 && rng() < .55) { const gh = top * (.3 + rng() * .5); box(mb, fx + ux * (rng() - .5) * w * .7, top - gh, fz + uz * (rng() - .5) * w * .7, .1 + rng() * .1, gh, .03, ry, GR, [.7, 0], 0, rng); }
+      if (top > 2.2 && !win && rng() < .16) { const sy = top * .45; box(mb, fx, sy, fz, .62, .3, .03, ry, [.42, .37, .1], [.4, 0], 0, rng); box(mb, fx, sy - .12, fz, .5, .05, .03, ry, [.4, .08, .06], [.4, 0], 0, rng); }
+      if (rng() < .22) box(mb, fx + ux * (rng() - .5) * w * .8, .5 + rng() * Math.max(.2, top - 1), fz + uz * (rng() - .5) * w * .8, .1, .1, .03, ry, [.012, .012, .014], [.7, 0], 0, rng);
+    }
+    if (top > .9 && !win) {
+      for (let k = 0; k < 2; k++) blob(mb, cx + ux * (rng() - .5) * w * .7, top - .02, cz + uz * (rng() - .5) * w * .7, .22 + rng() * .3, .12 + rng() * .22, th * .4, vary(col, rng, .05), [.9, 0], rng, .5);
+      if (rng() < .35) for (let k = 0; k < 3; k++) { const q = (rng() - .5) * w * .7, lean = (rng() - .5) * .35; tube(mb, [cx + ux * q, top - .05, cz + uz * q], [cx + ux * (q + lean), top + .4 + rng() * .5, cz + uz * (q + lean)], .025, .02, 4, RB, [.7, 0]); }
+    }
+    if (o.moss && !win && rng() < .6) blob(mb, cx, top - .05, cz, w * .75, .22 + rng() * .15, th * .85, o.moss, [.8594, 0], rng, .4);
+  }
+}
 function wallRun(mb, a, b, o, rng) {
+  if (o.panel) return panelRun(mb, a, b, o, rng);
   const L = Math.hypot(b[0] - a[0], b[1] - a[1]), n = Math.max(2, Math.round(L / .55)), ux = (b[0] - a[0]) / L, uz = (b[1] - a[1]) / L, ry = Math.atan2(uz, ux), sd = rng() * 50, wins = [];
   if (o.windows) for (let k = 0; k < o.windows; k++) { const c = (k + .5) / o.windows + (rng() - .5) * .12, wv = Math.min(.14, 1.7 / L); wins.push([c - wv, c + wv]); }
   for (let i = 0; i < n; i++) {
@@ -15993,12 +16018,12 @@ function propsLowPoly(mb, r, rng, th) {
 function propsPoly(mb, r, rng, i, th) {
   const P = r.poly, c = polyCen(P), area = polyArea(P), W = th.wall;
   for (let k = 0; k < P.length; k++) { const a = P[k], b = P[(k + 1) % P.length]; mb.tri([c[0], .07, c[1]], [a[0], .07, a[1]], [b[0], .07, b[1]], W.floor, [.9, 0], [c[0], -10, c[1]]); }
-  if (r.wseg) for (const w of r.wseg) { wallRun(mb, w.a, w.b, { h: w.h, th: W.th, col: W.col, windows: w.win ? 1 : 0, sill: .95, lintel: true, moss: W.moss, var: .1 }, rng); if (th.overhead) { const L2 = Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]) || 1, ux = (w.b[0] - w.a[0]) / L2, uz = (w.b[1] - w.a[1]) / L2, mx = (w.a[0] + w.b[0]) / 2, mz = (w.a[1] + w.b[1]) / 2; let nx = -uz, nz = ux; if (!inPoly(mx + nx * 1.2, mz + nz * 1.2, P) && inPoly(mx - nx * 1.2, mz - nz * 1.2, P)) { nx = -nx; nz = -nz; } th.overhead(mb, w.a, w.b, [nx, nz], rng, w.h, W.th); } }
+  if (r.wseg) for (const w of r.wseg) { wallRun(mb, w.a, w.b, { h: w.h, th: W.th, col: W.col, windows: w.win ? 1 : 0, sill: .95, lintel: true, moss: W.moss, var: .1, panel: W.panel }, rng); if (th.overhead) { const L2 = Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]) || 1, ux = (w.b[0] - w.a[0]) / L2, uz = (w.b[1] - w.a[1]) / L2, mx = (w.a[0] + w.b[0]) / 2, mz = (w.a[1] + w.b[1]) / 2; let nx = -uz, nz = ux; if (!inPoly(mx + nx * 1.2, mz + nz * 1.2, P) && inPoly(mx - nx * 1.2, mz - nz * 1.2, P)) { nx = -nx; nz = -nz; } th.overhead(mb, w.a, w.b, [nx, nz], rng, w.h, W.th); } }
   let used = r.wseg ? 1e9 : 0; const per = P.reduce((s, p, k) => s + Math.hypot(P[(k + 1) % P.length][0] - p[0], P[(k + 1) % P.length][1] - p[1]), 0);
   for (let k = 0; k < P.length; k++) {
     const a = P[k], b = P[(k + 1) % P.length], L = Math.hypot(b[0] - a[0], b[1] - a[1]); if (L < 2.4) continue;
     const ux = (b[0] - a[0]) / L, uz = (b[1] - a[1]) / L; let nx = -uz, nz = ux; if (inPoly(a[0] + ux * L / 2 + nx * .3, a[1] + uz * L / 2 + nz * .3, P) === false) { nx = -nx; nz = -nz; }
-    let t = 0; while (t < L - 1.5) { const seg = Math.min(L - t, 3 + rng() * 3.5); if (seg > 1.6 && used < per * .5 && rng() < .55) { const d = W.th / 2 + .05, p0 = [a[0] + ux * t + nx * d, a[1] + uz * t + nz * d], p1 = [a[0] + ux * (t + seg) + nx * d, a[1] + uz * (t + seg) + nz * d]; wallRun(mb, p0, p1, { h: W.h[0] + rng() * (W.h[1] - W.h[0]), th: W.th, col: W.col, windows: seg > 3.6 && rng() < .5 ? 1 : 0, sill: .95, lintel: rng() < .5, moss: W.moss, var: .1 }, rng); used += seg; } t += seg + .9 + rng() * 1.6; }
+    let t = 0; while (t < L - 1.5) { const seg = Math.min(L - t, 3 + rng() * 3.5); if (seg > 1.6 && used < per * .5 && rng() < .55) { const d = W.th / 2 + .05, p0 = [a[0] + ux * t + nx * d, a[1] + uz * t + nz * d], p1 = [a[0] + ux * (t + seg) + nx * d, a[1] + uz * (t + seg) + nz * d]; wallRun(mb, p0, p1, { h: W.h[0] + rng() * (W.h[1] - W.h[0]), th: W.th, col: W.col, windows: seg > 3.6 && rng() < .5 ? 1 : 0, sill: .95, lintel: rng() < .5, moss: W.moss, var: .1, panel: W.panel }, rng); used += seg; } t += seg + .9 + rng() * 1.6; }
   }
   for (let k = 0; k < P.length; k++) if (rng() < .5) { const a = P[k], d = [c[0] - a[0], c[1] - a[1]], l = Math.hypot(d[0], d[1]) || 1; if (th.pillar) th.pillar(mb, a[0] + d[0] / l * .7, a[1] + d[1] / l * .7, rng); }
   const n = Math.min(th.clutterMax || 3, Math.max(1, Math.min(3, Math.round(area / 30)))); let placed = 0;
@@ -16053,7 +16078,7 @@ function surround(solid, decal, rng, H, key, th) {
     else if (k < .35) pillar(solid, x, z, 3 + rng() * 3.5, .6, rock, rng); else rubbleAt(solid, rng, H, x, z, rock, 1.8 + rng() * 1.2);
   }
   if (key === 'forge') forgeSkyline(solid, rng, H);
-  if (key === 'hive') hiveSkyline(solid, rng, H);
+  if (key === 'hive') { hiveSkyline(solid, rng, H); solid.quad([-700, -.05, -700], [-700, -.05, 700], [700, -.05, 700], [700, -.05, -700], [.03, .038, .055], [.9, 0], [0, -10, 0]); }
   void decal;
 }
 function dressing(solid, decal, rng, ok, H, th, key) {
@@ -16196,7 +16221,7 @@ function sign(mb, x, y, z, ry, rng) { const c = [[.1, .9, 1], [1, .2, .7], [1, .
 function propsHive(mb, r, rng, i) {
   box(mb, r.x + r.w / 2, 0, r.y + r.h / 2, r.w - .2, .09, r.h - .2, 0, [.14, .145, .17], [.5, 0], .01, rng);
   for (const s of r.walls) { const [a2, b2] = sideIn(r, s, .26); hiveOverhead(mb, a2, b2, inward(r, s), i % 2 === 1, rng, 4.6, .5); }
-  for (const s of r.walls) { const [a, b] = sideIn(r, s, .26); wallRun(mb, a, b, { h: 4.6 + rng() * 2.4, th: .5, col: HIVEC, windows: 2 + Math.floor(rng() * 2), sill: 1.1, lintel: true, var: .06 }, rng); if (rng() < .7) { const t = .25 + rng() * .5, n = inward(r, s); sign(mb, a[0] + (b[0] - a[0]) * t + n[0] * .36, 2.6 + rng() * 1.8, a[1] + (b[1] - a[1]) * t + n[1] * .36, Math.atan2(b[1] - a[1], b[0] - a[0]), rng); } }
+  for (const s of r.walls) { const [a, b] = sideIn(r, s, .26); wallRun(mb, a, b, { h: 4.6 + rng() * 2.4, th: .5, col: HIVEC, windows: 2 + Math.floor(rng() * 2), sill: 1.1, lintel: true, var: .06, panel: true }, rng); if (rng() < .7) { const t = .25 + rng() * .5, n = inward(r, s); sign(mb, a[0] + (b[0] - a[0]) * t + n[0] * .36, 2.6 + rng() * 1.8, a[1] + (b[1] - a[1]) * t + n[1] * .36, Math.atan2(b[1] - a[1], b[0] - a[0]), rng); } }
   hiveEdgeProps(mb, r, rng);
   if (r.w >= 6 || r.h >= 6) container(mb, r.walls.includes('left') ? r.x + r.w - 2.3 : r.x + 2.3, r.walls.includes('top') ? r.y + r.h - 1.1 : r.y + 1.1, 0, rng);
   const px = r.walls.includes('left') ? r.x + .45 : r.x + r.w - .45, pz = r.walls.includes('top') ? r.y + .45 : r.y + r.h - .45; hiveLamp(mb, px, 0, pz, 0, 6, rng, false);
@@ -16211,7 +16236,9 @@ function hiveLamp(mb, x, y, z, a, hgt, rng, lit) {
   box(mb, x, y, z, .56, .6, .56, a, [.06, .06, .065], [.7, 0], 0, rng);
   for (let k = 0; k < 3; k++) box(mb, x, y + .08 + k * .17, z, .6, .075, .6, a, HI_HZ, [.5, 0], 0, rng);
   const hy = y + hgt, cs = Math.cos(a), sn = Math.sin(a);
-  box(mb, x, hy - .02, z, .46, .52, .46, a, [1, .6, .18], [.2, lit ? .38 : .22], 0, rng);
+  box(mb, x, hy - .02, z, .44, .5, .44, a, [.5, .3, .1], [.2, .12], 0, rng);
+  for (let k = 0; k < 4; k++) { const f = .55 + rng() * .45; box(mb, x + (k - 1.5) * .105 * cs, hy - .01, z + (k - 1.5) * .105 * sn, .09, .46, .47, a, [f, f * .56, f * .16], [.2, (lit ? .22 : .14) + rng() * .2], 0, rng); }
+  box(mb, x, hy + .2, z, .48, .1, .48, a, [.03, .025, .02], [.5, 0], 0, rng); box(mb, x, hy - .27, z, .48, .06, .48, a, [.04, .03, .02], [.5, 0], 0, rng);
   for (const [sx, sz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) box(mb, x + (sx * .27) * cs - (sz * .27) * sn, hy - .06, z + (sx * .27) * sn + (sz * .27) * cs, .06, .66, .06, a, HI_IRON, [.7, 0], 0, rng);
   for (let k = 0; k < 4; k++) box(mb, x, hy - .04 + k * .15, z, .58, .035, .58, a, HI_IRON, [.7, 0], 0, rng);
   box(mb, x, hy + .62, z, .74, .09, .74, a, HI_IRON, [.7, 0], 0, rng);
@@ -16303,6 +16330,8 @@ function hiveSkyline(mb, rng, H) {
   const pts = [];
   for (let i = 0; i < 30; i++) { const side = i % 4, t = rng(); let x, z; if (side === 0) { x = -34 + t * (BW + 68); z = -(24 + rng() * 24); } else if (side === 1) { x = -34 + t * (BW + 68); z = BH + 24 + rng() * 24; } else if (side === 2) { x = -(18 + rng() * 28); z = -10 + t * (BH + 20); } else { x = BW + 18 + rng() * 28; z = -10 + t * (BH + 20); } pts.push([x, z]); }
   pts.forEach(([x, z], i) => {
+    if (i + 4 < pts.length && Math.hypot(pts[i + 4][0] - x, pts[i + 4][1] - z) < 30 && i % 2 === 0) { const [x2, z2] = pts[i + 4], by = 8 + rng() * 6, dk = [.06, .065, .09]; tube(mb, [x, by, z], [x2, by, z2], .45, .45, 8, dk, [.6, 0]); tube(mb, [x, by - 1.1, z], [x2, by - 1.1, z2], .25, .25, 6, dk, [.6, 0]); }
+    for (let q = 0; q < 3; q++) { const ox = x + (rng() - .5) * 15, oz = z + (rng() - .5) * 15, bw = 3 + rng() * 5, bd = 3 + rng() * 4, bh = 2.5 + rng() * 5.5, fc = Math.atan2(BH / 2 - oz, BW / 2 - ox); box(mb, ox, H(ox, oz), oz, bw, bh, bd, fc, vary([.07, .075, .1], rng, .14), [.6, 0], .01, rng); if (rng() < .5) hiveWindows(mb, ox + Math.cos(fc) * (bd / 2 + .05), H(ox, oz), oz + Math.sin(fc) * (bd / 2 + .05), fc + Math.PI, bw - .6, bh - .6, rng, .22); }
     const y = H(x, z), kind = i % 3, dark = vary([.055, .06, .085], rng, .14), face = Math.atan2(BH / 2 - z, BW / 2 - x), cs = Math.cos(face), sn = Math.sin(face);
     if (kind === 0) {
       let h0 = 0, r0 = 2.6 + rng() * 1.2; const tiers = 3 + Math.floor(rng() * 2), tot = 24 + rng() * 18;
@@ -16341,9 +16370,9 @@ function hiveDecals(decal, solid, rects, OB, ok, H, rng) {
 }
 function scatterHive(mb, rng, ok, H) { for (let i = 0; i < 70; i++) { const x = rng() * BW, z = rng() * BH; if (!ok(x, z, .6)) continue; const s = .03 + rng() * .06; box(mb, x, 0, z, s * 2, s, s * 1.4, rng() * 3, vary([.2, .2, .24], rng, .2), [.8, 0], .01, rng); } for (let i = 0; i < 12; i++) { const x = rng() * BW, z = rng() * BH; if (!ok(x, z, 1)) continue; box(mb, x, 0, z, .5, .9, .3, rng() * 3, [.22, .24, .28], [.7, 0], .02, rng); box(mb, x, .55, z, .3, .05, .02, 0, [.1, .9, 1], [0, .9], 0, rng); } }
 THEMES.hive = { name: 'Hive City', sub: 'Dark streets, neon signs and tall ruins', props: propsHive, scatter: scatterHive, amp: .05, freq: .2, seed: 79,
-  env: { sun: [.4, .38, -.5], sunC: [.62, .92, 1.75], ambT: [.035, .065, .15], ambB: [.02, .032, .068], fog: [.03, .04, .09], fogD: .009, dust: 0 },
+  env: { sun: [.4, .38, -.5], sunC: [.62, .92, 1.75], ambT: [.035, .065, .15], ambB: [.02, .032, .068], fog: [.03, .04, .09], fogD: .0115, dust: 0 },
   ground: (x, z, h, n) => { let c = mixc([.055, .07, .09], [.17, .17, .18], n); const m = fbm(x * .13 + 9, z * .13); c = mixc(c, m > .52 ? [.26, .14, .08] : [.05, .17, .2], clamp(Math.abs(m - .5) * 3, 0, .7)); const gx = Math.abs(((x / 8) % 1 + 1) % 1 - .5); if (gx > .494) c = shade(c, .55); const gz = Math.abs(((z / 6) % 1 + 1) % 1 - .5); if (gz > .488) c = shade(c, .6); return c; } };
-THEMES.hive.poly = { wall: { h: [1, 1.3], th: .6, col: HIVEC, floor: [.12, .125, .15] }, pillar: null, hug: 2.7, clutterMax: 2,
+THEMES.hive.poly = { wall: { h: [1, 1.3], th: .6, col: HIVEC, floor: [.12, .125, .15], panel: true }, pillar: null, hug: 2.7, clutterMax: 2,
   overhead: (mb, a, b, n, rng, hh, wth) => hiveOverhead(mb, a, b, n, hh >= 4 && rng() < .4, rng, hh, wth),
   clutter: (mb, x, z, rng, k) => { const kind = (k + Math.floor(rng() * 4)) % 4, ry = rng() * 6.28; if (kind === 0) munitorum(mb, x, z, ry, rng); else if (kind === 1) { for (const [dx, dz] of [[0, 0], [.7, .1], [.35, .62]]) promBarrel(mb, x + dx, z + dz, rng); } else if (kind === 2) genCoil(mb, x, z, ry, rng); else { ammoCrate(mb, x, z, ry, rng); ammoCrate(mb, x + .1, z, ry + .1, rng); } } };
 
