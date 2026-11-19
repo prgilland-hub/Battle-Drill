@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.19-0036';
+  const VERSION = '2026.11.19-0045';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -20348,11 +20348,18 @@ function crDiffHtml() {
   const S = CAMP_STATE;
   return crCanDiff() ? `<div class="cru-box"><h4>Difficulty</h4><p class="muted" style="margin:0 0 6px">Requisition Points are your only way to grow beyond the story units, so they set how hard the campaign is. Choose before your first battle.</p>${Object.entries(CR_DIFF).map(([k, v]) => `<button type="button" class="btn${S.diff === k ? ' primary' : ''}" data-cr="diff" data-d="${k}">${v[0]}: ${v[1]} RP</button>`).join(' ')}</div>` : (S.leg ? '' : `<p class="muted" style="margin:0 0 6px">Difficulty: <b>${escH((CR_DIFF[S.diff] || ['Standard'])[0])}</b>.</p>`);
 }
+/* a live datasheet under the Add a unit list, so a faction you don't know well can be read before you pick */
+function crBuyPreview(name) {
+  const l = LIB.find(x => x.faction === CAMP_FAC && x.name === name); if (!l) return '<p class="muted">Pick a unit to read its datasheet.</p>';
+  try { return datasheetCard(Object.assign({}, l, { models: l.baseModels || l.models }), l.faction, { narrow: true }); } catch (e) { return '<p class="muted">No datasheet available for this unit.</p>'; }
+}
+document.addEventListener('change', e => { const t = e.target; if (t && t.id === 'cr-buy') { const el = document.getElementById('cr-buy-prev'); if (el) el.innerHTML = crBuyPreview(t.value); } });
 function crBuyHtml(used, lim) {
   const S = CAMP_STATE, opts = crBuyable(), room = lim - used, cap = crSupCap(), supMax = (S.sup || 0) >= cap;
   return crDetHtml() + `<div class="cru-box"><h4>Reinforcements and Supply</h4><p class="muted" style="margin:0 0 6px">Supply used <b>${used}</b> of <b>${lim}</b> pts (${room >= 0 ? room + ' free' : -room + ' over'}). Your story units set the base; any extra headroom is bought with RP: Increase Supply Limit costs 1 RP for +200 pts, up to +${cap} at this point in the campaign. Units you can add now cost up to <b>${crUnitCap() >= 9999 ? 'any' : crUnitCap()}</b> pts each (characters from chapter 3, epic heroes from chapter 7); heavier units unlock as you advance. Up to 3 of one unit (6 for Battleline and Dedicated Transports).</p>
     <label>Add a unit <select id="cr-buy">${opts.map(x => `<option value="${escH(x.l.name)}"${x.pts > room ? ' disabled' : ''}>${escH(x.l.name)}${x.ch === 'epic' ? ' (epic hero)' : x.ch ? ' (character)' : ' ×' + x.n}: ${x.pts} pts</option>`).join('')}</select></label>
     <button type="button" class="btn primary" data-cr="buy"${crPendingOpen() || !opts.length ? ' disabled' : ''}>Add to Order of Battle</button>
+    <details class="cr-prev" open style="margin:8px 0"><summary><b>Datasheet preview</b> <small class="muted">(updates as you change the unit above)</small></summary><div id="cr-buy-prev" style="max-height:440px;overflow:auto;margin-top:6px">${opts.length ? crBuyPreview(((opts.find(x => x.pts <= room) || opts[0]).l).name) : ''}</div></details>
     <button type="button" class="btn" data-cr="supply"${S.rp < 1 || supMax ? ' disabled' : ''}>Increase Supply Limit (1 RP, +200)${supMax ? ' (max for now)' : ''}</button>
     ${(S.undo || []).length ? `<button type="button" class="btn" data-cr="undo" title="Restores the points, units and cards from before it">&#8630; Undo: ${escH(S.undo[S.undo.length - 1].lab)}</button>` : ''}</div>`;
 }
