@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.19-0152';
+  const VERSION = '2026.11.20-0023';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -16460,7 +16460,7 @@ return { ENV_KEYS, Renderer, Cam, MB, buildMap, THEMES, layoutTerrain, OBJS, CLE
 })();
 
 /* ===== 3D board view: look-only; draws the game's real terrain, zones, objectives and models ===== */
-const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto', dirty: true, tsig: '', raf: 0, pend: 0, sel: new Set(), rot: null, ghost: null, opt: { zones: true, objs: true, dice: true, guides: true }, zm: null, om: null };
+const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto', dirty: true, tsig: '', raf: 0, pend: 0, sel: new Set(), rot: null, ghost: null, opt: { zones: true, objs: true, dice: true, guides: true, badges: true }, zm: null, om: null };
 (function () {
   const BFX = BF, hash = s => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0); };
   const $b = () => document.getElementById('board'), $m = () => document.getElementById('b-map');
@@ -16600,7 +16600,7 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
     addEventListener('blur', () => keys.clear());
     /* controls */
     const bar = document.createElement('div'); bar.id = 'b-3dbar'; bar.hidden = true;
-    bar.innerHTML = '<button type="button" id="b-3dmore" aria-expanded="false" title="3D view options and controls">View options \u25BE</button><div id="b-3dpanel"><select id="b-3dtheme" aria-label="Terrain theme"><option value="auto">Theme: auto</option><option value="desert">Desert ruins</option><option value="base">Hive base</option><option value="marsh">Rot marsh</option><option value="ice">Frozen hive</option><option value="forge">Forge world</option><option value="jungle">Death world</option><option value="hive">Hive city</option></select><button type="button" data-o="zones" aria-pressed="true" title="Show or hide the deployment zones">Zones</button><button type="button" data-o="objs" aria-pressed="true" title="Show or hide the objective markers">Objectives</button><button type="button" data-o="dice" aria-pressed="true" title="Show or hide the dice trays">Dice trays</button><button type="button" data-o="guides" aria-pressed="true" title="Show or hide the placement guides: 8 inch rings and the 6 inch edge band">Guides</button><button type="button" id="b-3dsight" aria-pressed="true" title="Show or hide sight lines, with the distance to every enemy">Sight lines</button><select id="b-3dq" aria-label="Graphics quality" title="Graphics quality"><option value="low">Quality: low</option><option value="std">Quality: standard</option><option value="high">Quality: high</option><option value="auto">Quality: auto</option></select><button type="button" id="b-3dfps" title="Show frame time, resolution and draw load">Stats</button><button type="button" id="b-3dchk" title="List which 3D model each unit on the board matched">Model check</button><button type="button" id="b-3dtop" title="Top-down view">Top</button><button type="button" id="b-3dtab" title="Tabletop view">Table</button><span id="b-3dnote">Drag = select units · Alt-drag = turn models · right-drag = orbit · WASD move · Q/E turn view · Z/X zoom · right-click or 1 = datasheet</span></div>';
+    bar.innerHTML = '<button type="button" id="b-3dmore" aria-expanded="false" title="3D view options and controls">View options \u25BE</button><div id="b-3dpanel"><select id="b-3dtheme" aria-label="Terrain theme"><option value="auto">Theme: auto</option><option value="desert">Desert ruins</option><option value="base">Hive base</option><option value="marsh">Rot marsh</option><option value="ice">Frozen hive</option><option value="forge">Forge world</option><option value="jungle">Death world</option><option value="hive">Hive city</option></select><button type="button" data-o="zones" aria-pressed="true" title="Show or hide the deployment zones">Zones</button><button type="button" data-o="objs" aria-pressed="true" title="Show or hide the objective markers">Objectives</button><button type="button" data-o="dice" aria-pressed="true" title="Show or hide the dice trays">Dice trays</button><button type="button" data-o="guides" aria-pressed="true" title="Show or hide the placement guides: 8 inch rings and the 6 inch edge band">Guides</button><button type="button" data-o="badges" aria-pressed="true" title="Health pips and status markers over each unit">Unit badges</button><button type="button" id="b-3dsight" aria-pressed="true" title="Show or hide sight lines, with the distance to every enemy">Sight lines</button><select id="b-3dq" aria-label="Graphics quality" title="Graphics quality"><option value="low">Quality: low</option><option value="std">Quality: standard</option><option value="high">Quality: high</option><option value="auto">Quality: auto</option></select><button type="button" id="b-3dfps" title="Show frame time, resolution and draw load">Stats</button><button type="button" id="b-3dchk" title="List which 3D model each unit on the board matched">Model check</button><button type="button" id="b-3dtop" title="Top-down view">Top</button><button type="button" id="b-3dtab" title="Tabletop view">Table</button><span id="b-3dnote">Drag = select units · Alt-drag = turn models · right-drag = orbit · WASD move · Q/E turn view · Z/X zoom · right-click or 1 = datasheet</span></div>';
     bar.querySelector('#b-3dmore').addEventListener('click', () => { const o = bar.classList.toggle('open'); bar.querySelector('#b-3dmore').setAttribute('aria-expanded', String(o)); });
     holder.appendChild(bar);
     bar.querySelectorAll('[data-o]').forEach(b => b.addEventListener('click', () => { BF3D.opt[b.dataset.o] = !BF3D.opt[b.dataset.o]; try { localStorage.setItem(OPT_KEY, JSON.stringify(BF3D.opt)); } catch (e) { } applyOpts(); if (b.dataset.o === 'guides') buildGhost(); }));
@@ -16854,6 +16854,27 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
       for (const t of ovTargets(sel)) {
         const col = t.side === 'ai' ? OC.bad : OC.good; ring(t.x, t.y, t.r + .6, col, 3, [8, 5], 1, .15);
         const a = P(t.x, t.y, 7.2), b = P(t.x, t.y, 5.2); if (a && b) { ctx.fillStyle = col; ctx.strokeStyle = '#0a0c0d'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(b[0], b[1]); ctx.lineTo(a[0] - 8, a[1]); ctx.lineTo(a[0] + 8, a[1]); ctx.closePath(); ctx.stroke(); ctx.fill(); }
+      }
+    } catch (e) { }
+    /* selected unit: a bold double ring so the active unit is never in doubt */
+    try { if (sel && G.stage === 'battle') { ring(sel.x, sel.y, sel.r + .95, '#ffd24a', 3.4, [], 1, .16); ring(sel.x, sel.y, sel.r + 1.5, '#ffd24a', 1.4, [3, 4], .7, .16); } } catch (e) { }
+    /* unit badges: health pips (one per model, or a bar for big squads and single models) and status markers */
+    try {
+      if (BF3D.opt.badges !== false && G.stage === 'battle') for (const u of alive()) {
+        if (u.reserve || u.embarkedIn) continue;
+        const big = (u.r || 1) > 3, a = P(u.x, u.y, big ? 5.4 : 3.6); if (!a) continue;
+        const st = startModels(u), cur = st > 1 ? totalModels(u) : u.cur, tot = st > 1 ? st : (u.W || 1), fr = Math.max(0, Math.min(1, cur / tot));
+        const hc = fr > .5 ? '#58e07a' : fr > .25 ? '#e8c25a' : '#ff5a4d', sc = u.side === 'ai' ? '#ff5a4d' : '#4ea0ff', isSel = sel === u;
+        ctx.globalAlpha = isSel ? 1 : .88;
+        let w;
+        if (st > 1 && st <= 12) { const pw = 7, gp = 2; w = st * pw + (st - 1) * gp; const x0 = a[0] - w / 2; ctx.fillStyle = 'rgba(8,10,12,.72)'; ctx.fillRect(x0 - 3, a[1] - 5, w + 6, 10); for (let i = 0; i < st; i++) { ctx.fillStyle = i < cur ? hc : 'rgba(255,255,255,.16)'; ctx.fillRect(x0 + i * (pw + gp), a[1] - 3, pw, 6); } }
+        else { w = st > 1 ? 56 : 40; const x0 = a[0] - w / 2; ctx.fillStyle = 'rgba(8,10,12,.72)'; ctx.fillRect(x0 - 3, a[1] - 5, w + 6, 10); ctx.fillStyle = 'rgba(255,255,255,.16)'; ctx.fillRect(x0, a[1] - 3, w, 6); ctx.fillStyle = hc; ctx.fillRect(x0, a[1] - 3, w * fr, 6); }
+        ctx.fillStyle = sc; ctx.fillRect(a[0] - w / 2 - 3, a[1] - 5, 2, 10);
+        const ic = []; if (u.shocked) ic.push(['!', '#ff9a3d']); try { if (engagedWith(u).length) ic.push(['\u2694', '#ff5a4d']); } catch (e) { }
+        if (isSel) { if (u.moved) ic.push(['M', '#e8e2d0']); if (u.advanced) ic.push(['A', '#e8e2d0']); if (u.shot) ic.push(['S', '#e8e2d0']); if (u.charged) ic.push(['C', '#e8e2d0']); if (u.fought) ic.push(['F', '#e8e2d0']); }
+        let ix = a[0] - (ic.length * 14) / 2;
+        for (const [t, c] of ic) { ctx.globalAlpha = .95; ctx.fillStyle = 'rgba(8,10,12,.8)'; ctx.beginPath(); ctx.arc(ix + 7, a[1] - 15, 7, 0, 6.2832); ctx.fill(); ctx.strokeStyle = c; ctx.lineWidth = 1.4; ctx.stroke(); ctx.fillStyle = c; ctx.font = '700 9px system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(t, ix + 7, a[1] - 14.5); ix += 14; }
+        ctx.globalAlpha = 1; ctx.textAlign = 'start'; ctx.textBaseline = 'alphabetic';
       }
     } catch (e) { }
     for (const l of labels) pill(l[0], l[1], l[2], l[3], l[4]);
