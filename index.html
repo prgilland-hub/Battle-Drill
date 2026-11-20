@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.20-0023';
+  const VERSION = '2026.11.20-0033';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -5842,6 +5842,7 @@ async function attack(u, w, t, shooting, cover, snap) {
     `${plural(st.wounds, 'wound')} on ${clamp(woundNeed(p.S, p.T) - clamp(p.woundMod, -1, 1), 2, 6)}+${woundBits.length ? ' (' + woundBits.join(', ') + ')' : ''}${st.auto ? `, ${st.auto} lethal` : ''}${st.dev ? `, ${st.dev} devastating` : ''}`,
     `${st.unsaved} failed ${st.unsaved === 1 ? 'save' : 'saves'} (${svTxt})`];
   const killed = before - totalModels(t);
+  try { if (window.bfCombatFx) window.bfCombatFx(u, w, t, shooting, st, killed); } catch (e) { }
   let res;
   if (t.models <= 0 && !leaderUp(t)) res = 'The unit is wiped out';
   else if (killed) res = `${plural(killed, 'model')} slain`;
@@ -16460,7 +16461,7 @@ return { ENV_KEYS, Renderer, Cam, MB, buildMap, THEMES, layoutTerrain, OBJS, CLE
 })();
 
 /* ===== 3D board view: look-only; draws the game's real terrain, zones, objectives and models ===== */
-const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto', dirty: true, tsig: '', raf: 0, pend: 0, sel: new Set(), rot: null, ghost: null, opt: { zones: true, objs: true, dice: true, guides: true, badges: true }, zm: null, om: null };
+const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto', dirty: true, tsig: '', raf: 0, pend: 0, sel: new Set(), rot: null, ghost: null, opt: { zones: true, objs: true, dice: true, guides: true, badges: true, fx: true }, zm: null, om: null };
 (function () {
   const BFX = BF, hash = s => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0); };
   const $b = () => document.getElementById('board'), $m = () => document.getElementById('b-map');
@@ -16600,7 +16601,7 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
     addEventListener('blur', () => keys.clear());
     /* controls */
     const bar = document.createElement('div'); bar.id = 'b-3dbar'; bar.hidden = true;
-    bar.innerHTML = '<button type="button" id="b-3dmore" aria-expanded="false" title="3D view options and controls">View options \u25BE</button><div id="b-3dpanel"><select id="b-3dtheme" aria-label="Terrain theme"><option value="auto">Theme: auto</option><option value="desert">Desert ruins</option><option value="base">Hive base</option><option value="marsh">Rot marsh</option><option value="ice">Frozen hive</option><option value="forge">Forge world</option><option value="jungle">Death world</option><option value="hive">Hive city</option></select><button type="button" data-o="zones" aria-pressed="true" title="Show or hide the deployment zones">Zones</button><button type="button" data-o="objs" aria-pressed="true" title="Show or hide the objective markers">Objectives</button><button type="button" data-o="dice" aria-pressed="true" title="Show or hide the dice trays">Dice trays</button><button type="button" data-o="guides" aria-pressed="true" title="Show or hide the placement guides: 8 inch rings and the 6 inch edge band">Guides</button><button type="button" data-o="badges" aria-pressed="true" title="Health pips and status markers over each unit">Unit badges</button><button type="button" id="b-3dsight" aria-pressed="true" title="Show or hide sight lines, with the distance to every enemy">Sight lines</button><select id="b-3dq" aria-label="Graphics quality" title="Graphics quality"><option value="low">Quality: low</option><option value="std">Quality: standard</option><option value="high">Quality: high</option><option value="auto">Quality: auto</option></select><button type="button" id="b-3dfps" title="Show frame time, resolution and draw load">Stats</button><button type="button" id="b-3dchk" title="List which 3D model each unit on the board matched">Model check</button><button type="button" id="b-3dtop" title="Top-down view">Top</button><button type="button" id="b-3dtab" title="Tabletop view">Table</button><span id="b-3dnote">Drag = select units · Alt-drag = turn models · right-drag = orbit · WASD move · Q/E turn view · Z/X zoom · right-click or 1 = datasheet</span></div>';
+    bar.innerHTML = '<button type="button" id="b-3dmore" aria-expanded="false" title="3D view options and controls">View options \u25BE</button><div id="b-3dpanel"><select id="b-3dtheme" aria-label="Terrain theme"><option value="auto">Theme: auto</option><option value="desert">Desert ruins</option><option value="base">Hive base</option><option value="marsh">Rot marsh</option><option value="ice">Frozen hive</option><option value="forge">Forge world</option><option value="jungle">Death world</option><option value="hive">Hive city</option></select><button type="button" data-o="zones" aria-pressed="true" title="Show or hide the deployment zones">Zones</button><button type="button" data-o="objs" aria-pressed="true" title="Show or hide the objective markers">Objectives</button><button type="button" data-o="dice" aria-pressed="true" title="Show or hide the dice trays">Dice trays</button><button type="button" data-o="guides" aria-pressed="true" title="Show or hide the placement guides: 8 inch rings and the 6 inch edge band">Guides</button><button type="button" data-o="badges" aria-pressed="true" title="Health pips and status markers over each unit">Unit badges</button><button type="button" data-o="fx" aria-pressed="true" title="Tracers, muzzle flashes, impacts and damage numbers when attacks resolve">Combat effects</button><button type="button" id="b-3dsight" aria-pressed="true" title="Show or hide sight lines, with the distance to every enemy">Sight lines</button><select id="b-3dq" aria-label="Graphics quality" title="Graphics quality"><option value="low">Quality: low</option><option value="std">Quality: standard</option><option value="high">Quality: high</option><option value="auto">Quality: auto</option></select><button type="button" id="b-3dfps" title="Show frame time, resolution and draw load">Stats</button><button type="button" id="b-3dchk" title="List which 3D model each unit on the board matched">Model check</button><button type="button" id="b-3dtop" title="Top-down view">Top</button><button type="button" id="b-3dtab" title="Tabletop view">Table</button><span id="b-3dnote">Drag = select units · Alt-drag = turn models · right-drag = orbit · WASD move · Q/E turn view · Z/X zoom · right-click or 1 = datasheet</span></div>';
     bar.querySelector('#b-3dmore').addEventListener('click', () => { const o = bar.classList.toggle('open'); bar.querySelector('#b-3dmore').setAttribute('aria-expanded', String(o)); });
     holder.appendChild(bar);
     bar.querySelectorAll('[data-o]').forEach(b => b.addEventListener('click', () => { BF3D.opt[b.dataset.o] = !BF3D.opt[b.dataset.o]; try { localStorage.setItem(OPT_KEY, JSON.stringify(BF3D.opt)); } catch (e) { } applyOpts(); if (b.dataset.o === 'guides') buildGhost(); }));
@@ -16877,6 +16878,23 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
         ctx.globalAlpha = 1; ctx.textAlign = 'start'; ctx.textBaseline = 'alphabetic';
       }
     } catch (e) { }
+    /* combat effects */
+    try {
+      const fxs = BF3D.fx; if (fxs && fxs.length) {
+        const nowT = performance.now(); BF3D.fx = fxs.filter(e => nowT < e.t0 + e.dur);
+        ctx.save(); ctx.globalCompositeOperation = 'lighter';
+        for (const e of BF3D.fx) {
+          const t = (nowT - e.t0) / e.dur; if (t < 0) continue;
+          if (e.k === 'trace') { const u1 = Math.min(1, t * 1.1), u0 = Math.max(0, u1 - .3), at = u => P(e.a[0] + (e.b[0] - e.a[0]) * u, e.a[1] + (e.b[1] - e.a[1]) * u, e.ha + (e.hb - e.ha) * u), p0 = at(u0), p1 = at(u1); if (p0 && p1) { const al = t > .9 ? (1 - t) * 10 : 1; ctx.lineCap = 'round'; ctx.strokeStyle = e.col; ctx.globalAlpha = .45 * al; ctx.lineWidth = e.w + 4; ctx.beginPath(); ctx.moveTo(p0[0], p0[1]); ctx.lineTo(p1[0], p1[1]); ctx.stroke(); ctx.globalAlpha = al; ctx.strokeStyle = '#fffbe8'; ctx.lineWidth = e.w; ctx.stroke(); } }
+          else if (e.k === 'flash') { const q = P(e.p[0], e.p[1], e.p[2]); if (q) { const r = e.r * (1 - t * .4), g = ctx.createRadialGradient(q[0], q[1], 0, q[0], q[1], r); g.addColorStop(0, '#fffbe8'); g.addColorStop(.4, e.col); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.globalAlpha = 1 - t; ctx.fillStyle = g; ctx.beginPath(); ctx.arc(q[0], q[1], r, 0, 6.2832); ctx.fill(); } }
+          else if (e.k === 'burst') { const q = P(e.p[0], e.p[1], e.p[2]); if (q) { const r = e.r * (.25 + .75 * Math.sqrt(t)); if (e.ring) { ctx.globalAlpha = (1 - t) * .8; ctx.strokeStyle = e.col; ctx.lineWidth = 2.4 * (1 - t) + .6; ctx.beginPath(); ctx.ellipse(q[0], q[1], r, r * .5, 0, 0, 6.2832); ctx.stroke(); } else { const g = ctx.createRadialGradient(q[0], q[1], 0, q[0], q[1], r); g.addColorStop(0, '#fffbe8'); g.addColorStop(.35, e.col); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.globalAlpha = (1 - t) * .9; ctx.fillStyle = g; ctx.beginPath(); ctx.arc(q[0], q[1], r, 0, 6.2832); ctx.fill(); ctx.strokeStyle = e.col; ctx.lineWidth = 1.4; for (const a of e.sp) { ctx.beginPath(); ctx.moveTo(q[0] + Math.cos(a) * r * .5, q[1] + Math.sin(a) * r * .5); ctx.lineTo(q[0] + Math.cos(a) * r * (1 + t * .9), q[1] + Math.sin(a) * r * (1 + t * .9) - t * 6); ctx.stroke(); } } } }
+          else if (e.k === 'slash') { const q = P(e.p[0], e.p[1], e.p[2]); if (q) { const L = 16 * Math.min(1, t * 3), c = Math.cos(e.ang - .6), sn = Math.sin(e.ang - .6); ctx.globalAlpha = 1 - t; ctx.strokeStyle = e.col; ctx.lineCap = 'round'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(q[0] - c * L, q[1] - sn * L); ctx.lineTo(q[0] + c * L, q[1] + sn * L); ctx.stroke(); ctx.strokeStyle = '#fffbe8'; ctx.lineWidth = 1.2; ctx.stroke(); } }
+        }
+        ctx.restore();
+        for (const e of BF3D.fx) if (e.k === 'text') { const t = (nowT - e.t0) / e.dur; if (t < 0) continue; const q = P(e.p[0], e.p[1], e.p[2]); if (q) { ctx.save(); ctx.globalAlpha = Math.min(1, (1 - t) * 2); ctx.font = '800 15px system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.lineWidth = 4; ctx.strokeStyle = '#0a0c0d'; ctx.fillStyle = e.col; const y = q[1] - 14 - t * 34; ctx.strokeText(e.txt, q[0], y); ctx.fillText(e.txt, q[0], y); ctx.restore(); } }
+        if (BF3D.fx.length) { BF3D.dirty = true; kick(); }
+      }
+    } catch (e) { console.error(e); }
     for (const l of labels) pill(l[0], l[1], l[2], l[3], l[4]);
     const sb = document.getElementById('b-3dsight'); if (sb) sb.setAttribute('aria-pressed', String(!!sightOn));
   }
@@ -16916,6 +16934,42 @@ function gfxStatsEl() {
   if (!el) { el = document.createElement('pre'); el.id = 'b-3dstats'; el.style.cssText = 'position:absolute;left:8px;bottom:8px;margin:0;padding:6px 9px;background:rgba(10,12,16,.78);color:#cfe;font:11px/1.4 ui-monospace,monospace;border-radius:6px;pointer-events:none;z-index:6;white-space:pre'; R.cv.parentNode.appendChild(el); if (getComputedStyle(R.cv.parentNode).position === 'static') R.cv.parentNode.style.position = 'relative'; }
   el.textContent = gfxStatsText(R);
 }
+/* combat effects: tracers, muzzle flashes, impacts, slashes and damage numbers, drawn on the 3D overlay for about a second after an attack resolves */
+function bfCombatFx(u, w, t, shooting, st, killed) {
+  if (typeof BF3D === 'undefined' || !BF3D.on || BF3D.opt.fx === false || !G || G.stage !== 'battle' || !u.placed || !t.placed) return;
+  if (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const fx = BF3D.fx = BF3D.fx || []; if (fx.length > 300) return;
+  const nm = (w && w.name || '').toLowerCase(), now = performance.now(), rnd = (a, b) => a + Math.random() * (b - a);
+  const col = /plasma|ion/.test(nm) ? '#7fd8ff' : /melta|flam|burner|torch|inferno|fusion|incinerat|heavy bolter flamer/.test(nm) ? '#ff8a2a' : /las|beam|lance|volkite|eradicat/.test(nm) ? '#ff4a4a' : /plague|toxic|spew|blight|gas|vomit|bile|rot|fester|miasma/.test(nm) ? '#9acd50' : /psy|warp|smite|doom|vortex/.test(nm) ? '#bb82f0' : /missile|rocket|krak|frag|cannon|shell|howitzer|mortar|bombard|thunder|hammer/.test(nm) ? '#ffd27a' : '#ffe9a0';
+  const heavy = /missile|rocket|cannon|lance|melta|howitzer|mortar|bombard|las/.test(nm), tw = heavy ? 3.4 : 2;
+  const pt = (o, spread) => { const a = Math.random() * 6.2832, r = Math.sqrt(Math.random()) * Math.max(.3, o.r * spread); return [o.x + Math.cos(a) * r, o.y + Math.sin(a) * r]; };
+  const hits = Math.max(0, (st.hits || 0) + (st.extra || 0)), A = Math.max(1, st.A || hits || 1);
+  let at = now + 40, last = now;
+  if (shooting) {
+    const shots = Math.min(9, A), hitN = Math.min(shots, hits);
+    for (let i = 0; i < shots; i++) {
+      const t0 = now + 40 + i * (heavy ? 140 : 75) + rnd(0, 40), a = pt(u, .75), hit = i < hitN, b = hit ? pt(t, .7) : (() => { const q = pt(t, 1.5), dx = q[0] - t.x, dy = q[1] - t.y, L = Math.hypot(dx, dy) || 1; return [t.x + dx / L * (t.r + 1.2 + Math.random() * 1.5), t.y + dy / L * (t.r + 1.2 + Math.random() * 1.5)]; })();
+      const dur = Math.max(160, Math.min(380, Math.hypot(b[0] - a[0], b[1] - a[1]) * 14));
+      fx.push({ k: 'flash', p: [a[0], a[1], 2.2], t0, dur: 140, col, r: heavy ? 15 : 10 });
+      fx.push({ k: 'trace', a, b, ha: 2.0, hb: hit ? 1.4 : .6, t0, dur, col, w: tw });
+      if (hit) fx.push({ k: 'burst', p: [b[0], b[1], 1.3], t0: t0 + dur * .85, dur: heavy ? 420 : 300, col, r: heavy ? 22 : 13, sp: [...Array(5)].map(() => Math.random() * 6.2832) });
+      else fx.push({ k: 'burst', p: [b[0], b[1], .2], t0: t0 + dur * .85, dur: 220, col: '#c8c2b0', r: 7, sp: [] });
+      last = Math.max(last, t0 + dur + 300);
+    }
+  } else {
+    const n = Math.min(9, Math.max(1, hits || A));
+    for (let i = 0; i < n; i++) { const m = pt(t, .6), t0 = now + 40 + i * 90 + rnd(0, 50); fx.push({ k: 'slash', p: [m[0], m[1], 1.5], t0, dur: 260, col: i % 2 ? '#ffe9a0' : '#ff9a5a', ang: rnd(-1.2, 1.2) }); last = Math.max(last, t0 + 300); }
+  }
+  const dmg = st.dmg || 0;
+  if (dmg > 0 || killed > 0) {
+    const txt = !t.alive || (t.models <= 0 && !leaderUp(t)) ? 'DESTROYED' : killed > 0 ? '\u2212' + killed + (killed === 1 ? ' model' : ' models') : '\u2212' + dmg + ' W';
+    fx.push({ k: 'text', p: [t.x, t.y, 3.4], t0: last - 120, dur: 1400, txt, col: killed > 0 || txt === 'DESTROYED' ? '#ff5a4d' : '#ffb84a' });
+    fx.push({ k: 'burst', p: [t.x, t.y, .3], t0: last - 120, dur: 520, col: '#ff5a4d', r: Math.max(26, t.r * 14), sp: [], ring: true });
+    if (txt === 'DESTROYED') fx.push({ k: 'burst', p: [t.x, t.y, 1.2], t0: last - 80, dur: 800, col: '#ffb84a', r: Math.max(34, t.r * 20), sp: [...Array(10)].map(() => Math.random() * 6.2832) });
+  }
+  BF3D.dirty = true; kick();
+}
+window.bfCombatFx = bfCombatFx;
 /* deployment-zone pulse: a slow light wave (5 s per lap) runs round each zone edge while units are being set up, then the edges settle to the steady dashed line.
    Off on the Low preset and for people who ask their system for reduced motion. */
 function gfxPulse(Rn) {
