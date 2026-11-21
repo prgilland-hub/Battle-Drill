@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.21-0228';
+  const VERSION = '2026.11.21-0231';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -2921,8 +2921,10 @@ function playTray(x) {
       sum: `${st.hits + st.extra} ${st.hits + st.extra === 1 ? 'hit' : 'hits'}${st.extra ? ` (+${st.extra} sustained)` : ''}${st.auto ? `, ${st.auto} lethal` : ''}` });
     if (rec.wound.length || st.auto) steps.push({ key: 'wound', btn: 'Roll to wound', label: `Wound rolls: ${clamp(woundNeed(p.S, p.T) - clamp(p.woundMod, -1, 1), 2, 6)}+${p.woundMod > 0 ? ' (after +1)' : p.woundMod < 0 ? ' (after -1)' : ''}${rrTxt(p.twin ? 'all' : p.rrWound)}`, dice: rec.wound.map(d => dieH(d.r, d.ok ? 'ok' + (d.crit ? ' crit' : '') : 'no', d.rr)).join(''),
       sum: `${plural(st.wounds, 'wound')}${st.auto ? ` (${st.auto} from Lethal Hits)` : ''}${st.dev ? `, ${st.dev} devastating` : ''}` });
-    if (rec.save.length) steps.push({ key: 'save', btn: `${t.name} rolls saves`, label: `${t.name} saves`, dice: rec.save.map(d => dieH(d.r, d.ok ? 'saved' : 'bad')).join(''), sum: `${st.unsaved} failed` });
-    if (rec.dmg.length) steps.push({ key: 'dmg', btn: 'Roll damage', label: 'Damage', dice: rec.dmg.map(d => dieH(d.d, (d.inf ? 'bad' : 'no') + (d.mw ? ' crit' : ''))).join(''), sum: `${plural(st.dmg, 'wound')} dealt` });
+    /* a flat damage value (D1, D2...) cannot vary, so there is nothing to roll: fold the damage into the save result instead of a row of identical dice */
+    const flatD = !!(p.Dexpr && p.Dexpr.n === 0) && rec.save.length > 0 && rec.dmg.length > 0 && rec.dmg.every(d => d.d === rec.dmg[0].d);
+    if (rec.save.length) steps.push({ key: 'save', btn: `${t.name} rolls saves`, label: `${t.name} saves`, dice: rec.save.map(d => dieH(d.r, d.ok ? 'saved' : 'bad')).join(''), sum: `${st.unsaved} failed` + (flatD ? `, ${plural(st.dmg, 'wound')} dealt (damage ${rec.dmg[0].d} each)` : '') });
+    if (rec.dmg.length && !flatD) steps.push({ key: 'dmg', btn: 'Roll damage', label: 'Damage', dice: rec.dmg.map(d => dieH(d.d, (d.inf ? 'bad' : 'no') + (d.mw ? ' crit' : ''))).join(''), sum: `${plural(st.dmg, 'wound')} dealt` });
     const killed = x.before - x.after;
     const result = x.after <= 0 ? `${t.name} is wiped out!` : killed ? `${plural(killed, 'model')} slain.` : st.dmg ? `${plural(st.dmg, 'wound')} dealt, no models slain.` : 'No damage.';
     let shown = 0;
