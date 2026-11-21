@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.21-0238';
+  const VERSION = '2026.11.21-0248';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -17898,6 +17898,7 @@ function schBegin(spec) {
   if (spec.cp) G.cp.player = Math.max(G.cp.player, spec.cp);
   if (spec.cpAi) G.cp.ai = Math.max(G.cp.ai, spec.cpAi);
   showTab('battle'); render();
+  try { for (const m of (spec.missing || [])) log('<b>Library:</b> ' + escH(m) + '.'); } catch (e) { }
   setTimeout(() => { try { if (localStorage.getItem('bd.camp3d') !== '0' && typeof BF3D !== 'undefined' && BF3D.set && !BF3D.on) BF3D.set(true); } catch (e) { } }, 250);
 }
 /* the scene for a staged lesson battle: fits the faction, and stays the same for the same unit */
@@ -17998,8 +17999,8 @@ function schHudClick(e) {
 }
 function schLaunch(spec) {
   const s = spec.build();
-  if (!s) { alert('That unit is not in the library yet.'); return; }
-  s.camp = spec.camp; s.lesson = spec.lesson; s.title = spec.title; s.goal = spec.goal; s.refs = spec.refs; s.key = spec.key; s.build = spec.build;
+  if (!s) { alert('That unit is not in the library yet.' + (spec.camp && CAMP_MISS.length ? '\n\nMissing: ' + CAMP_MISS.join(', ') : '')); return; }
+  s.camp = spec.camp; s.missing = s.missing || []; s.lesson = spec.lesson; s.title = spec.title; s.goal = spec.goal; s.refs = spec.refs; s.key = spec.key; s.build = spec.build;
   schBegin(s);
 }
 /* hooks the engine calls */
@@ -20105,15 +20106,24 @@ function campLayoutTerr(ch) {
   const h = [...String(CAMP_ID)].reduce((a, c) => a + c.charCodeAt(0), 0), L = ls[(h + ch.n) % ls.length];
   return layoutDep(L, true).terr;
 }
+let CAMP_MISS = [];
+/* a foe the player's library does not have: stand in the closest unit of the same faction (infantry of a similar size) so the chapter can still be played */
+function campFoeStandIn(f) {
+  const c = LIB.filter(l => l.faction === f.fac && !l.legends && l.name !== f.name && !(l.kw || []).some(k => /character|epic hero/i.test(k)) && (l.ranged || []).length);
+  if (!c.length) return null; const want = f.models || 5, inf = c.filter(l => (l.kw || []).some(k => /infantry/i.test(k)));
+  return (inf.length ? inf : c).slice().sort((a, b) => Math.abs((a.baseModels || a.models) - want) - Math.abs((b.baseModels || b.models) - want) || (b.role === 'Battleline') - (a.role === 'Battleline'))[0];
+}
 function campBuildSpec(ch) {
   const force = campForce(ch), lead = force[0];
   const mk = f => { const u = schUnitFor(f.fac || CAMP_FAC, f.name, f.models, f.leader || ''); if (u) { u.campId = f.id; try { const nk = crNick(f.id); if (nk) { u.baseName = u.name; u.name = `${u.name} \u201c${nk}\u201d`; } } catch (e) { } try { campApplyCard(u, f.id); } catch (e) { } } return u; };
-  const hero = mk(lead); if (!hero) return null;
+  const missing = [];
+  const hero = mk(lead); if (!hero) { CAMP_MISS = [lead.name + ' (' + (lead.fac || CAMP_FAC) + ')']; return null; }
   const rest = force.slice(1), allies = [];
   const idx = {}; rest.forEach((f, i) => { idx[f.id] = i; });
-  for (const f of rest) { const u = mk(f); if (!u) continue; allies.push({ unit: u, dx: f.pos[0] - lead.pos[0], dy: f.pos[1] - lead.pos[1], reserve: f.reserve && !f.embarkIn, inId: f.embarkIn || '' }); }
-  const foes = ch.foes.map(f => { const u = schUnitFor(f.fac, f.name, f.models); if (u) u.campFoe = f.name; return u ? { unit: u, d: f.d, ang: f.ang, ai: f.ai, fac: f.fac } : null; });
-  if (foes.some(x => !x) || !foes.length) return null;
+  for (const f of rest) { const u = mk(f); if (!u) { missing.push(f.name + ' (skipped, not in your library)'); continue; } allies.push({ unit: u, dx: f.pos[0] - lead.pos[0], dy: f.pos[1] - lead.pos[1], reserve: f.reserve && !f.embarkIn, inId: f.embarkIn || '' }); }
+  const foes = ch.foes.map(f => { let u = schUnitFor(f.fac, f.name, f.models); if (!u) { const alt = campFoeStandIn(f); if (alt) { u = schUnitFor(f.fac, alt.name, f.models); if (u) missing.push(f.name + ' is not in your library, so ' + alt.name + ' stands in'); } } if (u) u.campFoe = f.name; return u ? { unit: u, d: f.d, ang: f.ang, ai: f.ai, fac: f.fac } : null; });
+  if (foes.some(x => !x) || !foes.length) { CAMP_MISS = ch.foes.filter((f, i) => !foes[i]).map(f => f.name + ' (' + f.fac + ')'); return null; }
+  CAMP_MISS = [];
   const det = null;
   const cur = CAMP_UI.cur && CAMP_UI.cur.n === ch.n ? CAMP_UI.cur : null, hk = cur ? cur.hk : '';
   if (hk) for (const u of [hero, ...allies.map(a => a.unit), ...foes.map(f => f.unit)]) {
@@ -20123,7 +20133,7 @@ function campBuildSpec(ch) {
     else if (hk === 'mud') u.M = Math.max(1, (+u.M || 0) - 1);
   }
   const extraT = (hk === 'mud' || hk === 'cover') ? [[30, 14], [30, 30], [18, 22]] : [];
-  return { hero: { faction: lead.fac || CAMP_FAC, unit: hero }, heroIn: lead.embarkIn || '', reserve: !!lead.reserve && !lead.embarkIn, foes, x: lead.pos[0], y: lead.pos[1], terrain: ch.terrain.concat(extraT).map(([x, y]) => SCH_RUIN(x, y)), allies, detachment: ch.det ? tutDetSnap(ch.det) : (CAMP_ID === 'tut' ? null : crDetSnap()), cp: ch.cp, cpAi: ch.cpAi, extraT: extraT.map(([x, y]) => SCH_RUIN(x, y)) };
+  return { missing, hero: { faction: lead.fac || CAMP_FAC, unit: hero }, heroIn: lead.embarkIn || '', reserve: !!lead.reserve && !lead.embarkIn, foes, x: lead.pos[0], y: lead.pos[1], terrain: ch.terrain.concat(extraT).map(([x, y]) => SCH_RUIN(x, y)), allies, detachment: ch.det ? tutDetSnap(ch.det) : (CAMP_ID === 'tut' ? null : crDetSnap()), cp: ch.cp, cpAi: ch.cpAi, extraT: extraT.map(([x, y]) => SCH_RUIN(x, y)) };
 }
 const tutDetSnap = name => { try { const d = detsFor(TUT_FAC).find(x => x.name === name); return d ? JSON.parse(JSON.stringify({ name: d.name, rule: d.rule, ruleText: d.ruleText, strats: d.strats, effects: d.effects || [], dp: d.dp, disposition: d.disposition })) : null; } catch (e) { return null; } };
 function campCtxExtra(c) {
