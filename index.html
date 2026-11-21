@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.21-1643';
+  const VERSION = '2026.11.21-1649';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -1308,11 +1308,11 @@ html[data-device="tablet"] .tabletbar{display:flex;gap:8px;align-items:center;fl
 #a-list details.nest-fac{margin:4px 0 4px 8px}
 #a-list details.nest-fac>summary{cursor:pointer;padding:4px 2px;font-weight:600}
 .sch-card{position:relative}
-.sch-3d{position:absolute;right:14px;top:14px;width:172px;aspect-ratio:1;background:#16181c;border-radius:12px;overflow:hidden;border:2px solid var(--line);z-index:1}
-@media (min-width:641px){.sch-card:has(.sch-3d:not([hidden]))>h3,.sch-card:has(.sch-3d:not([hidden]))>p,.sch-card:has(.sch-3d:not([hidden])) .sch-r{margin-right:196px}}
+.sch-3d{position:absolute;right:14px;top:14px;width:220px;aspect-ratio:1;background:#16181c;border-radius:12px;overflow:hidden;border:2px solid var(--line);z-index:1}
+@media (min-width:641px){.sch-card:has(.sch-3d:not([hidden]))>h3,.sch-card:has(.sch-3d:not([hidden]))>p,.sch-card:has(.sch-3d:not([hidden])) .sch-r{margin-right:244px}}
 .sch-3d[hidden]{display:none}
 @media (max-width:640px){.sch-3d{position:static;width:min(240px,100%);margin:0 auto 8px}}
-.tq-sheets{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,460px),1fr));gap:8px;padding:6px 8px 8px;--ds3w:132px}
+.tq-sheets{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,460px),1fr));gap:8px;padding:6px 8px 8px;--ds3w:clamp(150px,13vw,200px)}
 .tq-sheets .ds-head{display:grid;grid-template-columns:auto 1fr;gap:2px 12px;align-items:center;padding:8px 10px}
 .tq-sheets .ds-head>*{grid-column:2;min-width:0}
 .tq-sheets .ds-head>.ds-img,.tq-sheets .ds-head>.ds-3dslot{grid-column:1;grid-row:1 / span 4;width:var(--ds3w);max-width:none;margin:0 !important;align-self:center;position:static}
