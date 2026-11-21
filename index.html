@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.21-1515';
+  const VERSION = '2026.11.21-1517';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -22053,6 +22053,58 @@ const detBlock = (x) => {   /* why this detachment can't be added right now ('' 
   const m = mergeDets(list, B.faction); return dpOver(m, size) ? `Needs ${m.dp} DP, ${size.name} allows ${size.dp}` : '';
 };
 const B = { editId: null, wOpen: new Set(), sort: 'role', dir: 'desc', step: 0, faction: null, name: '', limit: 2000, legends: false, q: '', roster: [], seq: 1, open: new Set(['Battleline']), det: null, dets: [], warlord: null, enh: {}, nameEdited: false, chapter: '' };
+/* short in-universe histories shown in the army builder (step 1) */
+const FACTION_LORE = {
+  'Space Marines': 'The Adeptus Astartes are the Emperor’s genetically enhanced super-soldiers. They were created in the Great Crusade from the gene-seed of the twenty Primarchs, then split into Chapters of roughly a thousand warriors after the Horus Heresy so that no single commander could ever again hold so much power. They fight as a rapid-reaction force, striking hardest where the Imperium is most threatened.',
+  'Adepta Sororitas': 'The Sisters of Battle are the armed order of the Ecclesiarchy. Founded after the Age of Apostasy, when the Ecclesiarchy was forbidden its own armies, they were raised as the Daughters of the Emperor so that the faithful could take up arms without breaking the law. They fight with fire, flame and unshakeable faith.',
+  'Adeptus Custodes': 'The Emperor’s personal guardians, each a hand-made warrior far beyond a Space Marine. They were created at the end of the Unification Wars and served as the Emperor’s bodyguard, and after the Horus Heresy they have remained in the Imperial Palace on Terra, rarely leaving unless the threat is great.',
+  'Adeptus Mechanicus': 'The priesthood of Mars, who worship the Omnissiah and guard the technology that keeps the Imperium alive. They allied with the Emperor in the Great Crusade in exchange for control of the forge worlds. Their armies of Skitarii and war machines march to protect and recover lost technology.',
+  'Aeldari': 'An ancient and once mighty psychic race whose empire collapsed when their decadence gave birth to the Chaos god Slaanesh, the Fall. Survivors endure as Craftworld Aeldari, Exodites, Harlequins and Rangers, holding on by the guidance of their seers.',
+  'Astra Militarum': 'The Imperial Guard, the largest fighting force in the galaxy. Billions of ordinary soldiers are raised from Imperial worlds by the Departmento Munitorum and fight with massed lasguns, tanks and artillery. They are individually weak, but the sheer numbers and courage of the Guard hold the Imperium’s frontiers.',
+  'Black Templars': 'A Chapter of crusaders, descended from Sigismund, the first High Marshal, who was a champion of the Imperial Fists. They are always at war, never settling in one place, and swear sacred vows before each battle. Their Chapter is among the largest in the Imperium and the most zealous.',
+  'Blood Angels': 'The sons of Sanguinius, known for noble bearing and furious assault. They carry the Red Thirst and the Black Rage, flaws in their gene-seed that threaten to drive them into violent madness, and the Death Company are those who have fallen to it.',
+  'Chaos Daemons': 'Creatures of the Warp, the sentient reflections of mortal emotions and the servants of the Chaos gods: Khorne, Tzeentch, Nurgle and Slaanesh. They break into the material realm whenever the veil thins and fight to spread their gods’ domains.',
+  'Chaos Knights': 'Knights who have fallen from the service of the Imperium, whether by the choices of their noble houses or by the corruption of Chaos. They pilot ancient war machines bound to daemons and serve the Dark Gods or their own ambition.',
+  'Chaos Space Marines': 'Traitor Legionnaires who followed Horus in the Heresy, together with the renegades and warbands who have joined them since. They have been cast out in the Eye of Terror and other Warp rifts for ten thousand years, and they raid the Imperium to settle old grudges and seize power.',
+  'Dark Angels': 'The First Legion, led by Lion El’Jonson. Their history was divided by the Heresy: half of the Legion fell with Luther’s rebellion on Caliban, and the loyalists, called the Unforgiven, carry that shame and hunt down every Fallen they can find. They are an enigmatic Chapter, organised around the secretive Inner Circle.',
+  'Death Guard': 'The Legion of Mortarion, corrupted by Nurgle during the Heresy. Plague-ridden and slow, they are tough and relentless, fighting under their god’s blessing of decay as a force that cannot be stopped by wounds that would kill a normal warrior.',
+  'Deathwatch': 'The Chamber Militant of the Ordo Xenos and a Chapter drawn from many others. Battle-Brothers are seconded from their Chapters for a time and serve in Watch Fortresses, trained to the highest level, with special ammunition and wargear, to hunt aliens.',
+  'Drukhari': 'The dark kin of the Aeldari, living in the Webway city of Commorragh. They stay alive by feeding their souls on torment, raiding the realms of other species for slaves, and their cruel nobles compete for power in the Kabals, Wych Cults and Haemonculus Covens.',
+  "Emperor's Children": 'The Third Legion of Fulgrim, which fell to Slaanesh after the discovery of a cursed daemon-weapon. Perfectionists who turned to excess, they now seek ever more extreme sensation in sound, pain and war.',
+  'Genestealer Cults': 'Secret cults seeded by Genestealers, spreading across a world generation by generation until the hybrid brood rises up. They believe the arrival of the Tyranid hive fleets will bring them union with the Star Children.',
+  'Grey Knights': 'The Chamber Militant of the Ordo Malleus. Founded in secret and made up of psychically gifted Space Marines, they fight daemons and nothing else, from their fortress on Titan. They have never fallen to Chaos in their ten thousand years.',
+  'Imperial Agents': 'The Inquisition and its servants: Inquisitors, Assassins of the Officio Assassinorum, Sisters of Silence and other operatives. They work in the shadows, and answer to no one in the Imperium.',
+  'Imperial Knights': 'The noble houses of the Knight worlds, whose warriors pilot giant armoured Knights bound to them by the Throne Mechanicum. They pledged themselves to the Imperium in the Great Crusade and have been loyal to it, mostly, ever since.',
+  'Leagues of Votann': 'The Kin of the Leagues, humans long ago adapted to life on hard, resource-poor worlds. They search the galaxy for resources and lost kin, and they fight to keep their Kindred safe and their trade secure, driven by the Ancestors’ Oaths.',
+  'Necrons': 'An ancient race that sold their souls to become immortal metal Necrontyr, then slept for sixty million years. As they wake in their tomb worlds they set out to reclaim their empire, under the command of nobles and dynasty lords.',
+  'Orks': 'A brutal, green-skinned species that lives for war and spreads across the galaxy through spores. They are strongest when they believe they are, and the Waaagh! is a psychic tide that follows when enough of them gather behind a great warboss.',
+  'Space Wolves': 'The sons of Leman Russ, the Wolf King, from the ice world Fenris. Their warriors are fierce, unpolished and individualistic, forming Great Companies led by Wolf Lords, and they rely on the Rune Priests and the Wolf Guard.',
+  "T'au Empire": 'A young, ambitious empire pursuing the Greater Good. Its technologically advanced caste society expands by conquest and diplomacy, backed by Fire Warriors, Battlesuits and allied Kroot and Vespid.',
+  'Thousand Sons': 'The Fifteenth Legion of Magnus the Red, a Legion of sorcerers. After Magnus’s attempt to warn the Emperor was taken as treachery, the Legion fell to Tzeentch. A flesh-change tore them apart and the Rubric of Ahriman turned most of them into armoured dust.',
+  'Tyranids': 'Hive fleets from beyond the galaxy that consume entire worlds for biomass. They are one vast organism, directed by the Hive Mind and made of endlessly adapting bio-engineered creatures.',
+  'World Eaters': 'The Twelfth Legion, once led by Angron. After the neural implants known as Butcher’s Nails were driven into their brains, they gave themselves to Khorne and wage a never-ending war for the sake of blood.',
+  'Salamanders': 'The sons of Vulkan, who live on the volcanic world Nocturne. They are known for the craftsmanship of their forges and their compassion for the people they protect, and for their love of flame.'
+};
+const CHAPTER_LORE = {
+  'Dark Angels': 'First Founding Chapter, descended from the Lion’s Legion. Their secret shame, the fall of Caliban, is kept by the Inner Circle, and the Deathwing (Terminators) and Ravenwing (fast attack) are their two elite companies.',
+  'Blood Angels': 'First Founding Chapter, descended from Sanguinius. Known for their speed and ferocity in close combat, they are haunted by the Red Thirst and the Black Rage, and the Death Company is formed of those in the grip of it.',
+  'Space Wolves': 'First Founding Chapter, descended from the Wolf King Leman Russ. They are not bound by the Codex Astartes and fight in Great Companies of Fenrisian warriors, accompanied by wolves and led by Wolf Lords.',
+  'Deathwatch': 'A Chapter of veterans drawn from other Chapters. They serve the Ordo Xenos from Watch Fortresses on the edge of the Imperium and are trained to fight every kind of xenos threat.',
+  'Black Templars': 'Successor Chapter of the Imperial Fists, founded after the Second Founding. A crusading fleet always at war, they follow the Emperor’s Champion and swear solemn vows before battle.',
+  'Ultramarines': 'First Founding Chapter and the most visible, from Macragge. Led by Marneus Calgar, they follow the Codex Astartes (written by their Primarch, Roboute Guilliman) and are known for being strong, disciplined and flexible.',
+  'Imperial Fists': 'First Founding Chapter, descended from Rogal Dorn, from the fortress-monastery the Phalanx. Masters of siegecraft and holding a line, they are known for stoic endurance.',
+  'White Scars': 'First Founding Chapter, descended from Jaghatai Khan on Chogoris. Masters of fast, mobile warfare, they strike quickly with bikes and fast vehicles and withdraw before the enemy can respond.',
+  'Raven Guard': 'First Founding Chapter, descended from Corvus Corax. Masters of stealth, ambush and covert assault, they come from the dark world Deliverance and strike from the shadows.',
+  'Iron Hands': 'First Founding Chapter, descended from Ferrus Manus. They believe the flesh is weak, replace much of themselves with bionics, and are known for stubborn, grim endurance and tough machine-like discipline.',
+  'Salamanders': 'First Founding Chapter, descended from Vulkan on Nocturne. They favour flamers, melta weapons and hardy armour, and are known for craftsmanship and for protecting the innocent.',
+  'Crimson Fists': 'Successor Chapter of the Imperial Fists. Their homeworld Rynn’s World was devastated by a sneak attack in M41, and the survivors are rebuilding the Chapter while seeking revenge on the Orks.'
+};
+const loreHtml = () => {
+  const c = B.faction === 'Space Marines' ? (B.chapter || '') : '', f = B.faction;
+  const own = CHAPTER_LORE[f] && !FACTION_LORE[f] ? CHAPTER_LORE[f] : FACTION_LORE[f];
+  if (!own && !c) return '';
+  return `<details class="lore" open style="margin:8px 0;border:1px solid var(--line);border-radius:6px;padding:8px 12px;background:var(--raised)"><summary style="cursor:pointer;font-weight:600">About ${escH(c || f)}</summary>${c ? `<p style="margin:6px 0 4px">${escH(CHAPTER_LORE[c] || '')}</p><p class="muted" style="margin:4px 0;font-size:.88rem"><b>${escH(f)}:</b> ${escH(own || '')}</p>` : `<p style="margin:6px 0 4px">${escH(own || '')}</p>${CHAPTER_LORE[f] && FACTION_LORE[f] && f !== 'Space Marines' ? `<p class="muted" style="margin:4px 0;font-size:.88rem">${escH(CHAPTER_LORE[f])}</p>` : ''}`}</details>`;
+};
 const ALL_FACTIONS = ['Adepta Sororitas', 'Adeptus Custodes', 'Adeptus Mechanicus', 'Aeldari', 'Astra Militarum', 'Black Templars', 'Blood Angels', 'Chaos Daemons', 'Chaos Knights', 'Chaos Space Marines', 'Dark Angels', 'Death Guard', 'Deathwatch', 'Drukhari', "Emperor's Children", 'Genestealer Cults', 'Grey Knights', 'Imperial Agents', 'Imperial Knights', 'Leagues of Votann', 'Necrons', 'Orks', 'Space Marines', 'Space Wolves', "T'au Empire", 'Thousand Sons', 'Tyranids', 'World Eaters'];
 const libCount = f => LIB.filter(u => u.faction === f).length;
 function openBuilder() {
@@ -22423,6 +22475,7 @@ function stepContent() {
         ${['Space Marines', 'Salamanders', 'Black Templars'].includes(B.faction) ? `<label>Chapter<select id="bl-chap">${B.faction === 'Space Marines' ? `<option value="">Any chapter (no restriction)</option>` : `<option value="">Any chapter (back to Space Marines)</option>`}${SM_CHAPS.map(c => c[0]).sort().map(c => `<option${curChapter() === c ? ' selected' : ''}>${c}</option>`).join('')}</select></label>` : ''}
         <label>Army name<input id="bl-name" value="${escH(B.name)}"></label>
       </div>
+      ${loreHtml()}
       ${['Space Marines', 'Salamanders', 'Black Templars'].includes(B.faction) ? `<p class="muted" style="font-size:.85rem;margin:0 0 6px">${curChapter() ? `Showing ${escH(curChapter())} datasheets and detachments${B.faction === 'Space Marines' ? ' plus the generic Space Marine ones' : ''}. Other chapters are hidden.` : 'No chapter picked: every Space Marine datasheet and detachment is listed, including ones that belong to a single chapter.'}${B.chapNote ? ` <b>${escH(B.chapNote)}</b>` : ''}</p>` : ''}
       <div class="det-grid">${SIZES.map(([v, n]) => `<button type="button" class="det-card${B.limit === v ? ' on' : ''}" data-size="${v}"><b>${n}</b><span>${v} points</span></button>`).join('')}
         <label class="det-card" style="cursor:default"><b>Custom</b><input id="bl-limit" type="number" min="100" step="50" value="${B.limit}" style="margin-top:4px;background:var(--raised);border:1px solid var(--line);border-radius:4px;padding:4px 6px;color:var(--ink)"></label></div>
