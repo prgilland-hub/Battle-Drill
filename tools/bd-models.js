@@ -373,5 +373,35 @@ window.BDModels = BDModels; window.MODELIMP = MODELIMP;
     R.resize(); try { R.draw(cam, ENV); } catch (e) { } if (!raf) { last = 0; raf = requestAnimationFrame(paneFrame); }
   }
   window.addEventListener('bd-models-changed', () => { if (pane && pane.box.isConnected) mountPane(pane.box, pane.ds, pane.faction, pane.key, pane.vi); });
-  window.BDPreview = { enabled: () => true, set: () => { }, pane: (box, ds, faction, key) => mountPane(box, ds, faction, key) };
+  /* several inline turning models at once (the two datasheets in the dice quiz): each card gets its own small renderer so both turn together */
+  const cards = [];
+  function cardFrame(now) {
+    craf = 0; for (let i = cards.length - 1; i >= 0; i--) if (!cards[i].box.isConnected) { try { const g = cards[i].cv.getContext('webgl2'); const x = g && g.getExtension('WEBGL_lose_context'); if (x) x.loseContext(); } catch (e) { } cards.splice(i, 1); }
+    if (!cards.length) return; const dt = Math.min(.1, (now - (clast || now)) / 1000); clast = now;
+    const sv = [R, cam, cv]; for (const V of cards) { if (!V.slot.isConnected || V.slot.offsetParent === null) continue; R = V.R; cam = V.cam; cv = V.cv; cam.yaw += dt * .7; try { R.draw(cam, ENV); } catch (e) { } }
+    R = sv[0]; cam = sv[1]; cv = sv[2]; craf = requestAnimationFrame(cardFrame);
+  }
+  let craf = 0, clast = 0;
+  function mountCards(root) {
+    if (!BDModels.on() || typeof BF === 'undefined') return;
+    (root || document).querySelectorAll('.ds[data-3d]').forEach(box => {
+      if (box._bd3 || box.closest('.tip-pop') || box.closest('#modal-box')) return;
+      for (let i = cards.length - 1; i >= 0; i--) if (cards[i].box === box) cards.splice(i, 1);
+      const head = box.querySelector('.ds-head'); if (!head) return; const fig = BDModels.pick(box.dataset.ds3, box.dataset.fac3, box.dataset.key3); if (!fig) return; box._bd3 = 1;
+      const c2 = document.createElement('canvas'); c2.style.cssText = 'display:block;width:100%;height:100%;border-radius:inherit;touch-action:none'; let V;
+      const sv = [R, cam, cv];
+      try { cv = c2; R = new BF.Renderer(c2); R.q.shadow = 512; R.q.dpr = Math.min(window.devicePixelRatio || 1, 1.5); R.makeShadow(); cam = new BF.Cam(); cam.pitch = .38; upload(fig); V = { box, cv: c2, R, cam }; } catch (e) { console.warn('card 3D unavailable', e); R = sv[0]; cam = sv[1]; cv = sv[2]; return; }
+      R = sv[0]; cam = sv[1]; cv = sv[2];
+      let slot = head.querySelector('.ds-img'); if (!slot) { slot = document.createElement('div'); head.insertBefore(slot, head.firstChild); }
+      slot.className = 'ds-img mini ds-3dslot'; slot.style.cssText = 'display:block;aspect-ratio:1;height:auto;background:#16181c;border-radius:12px;overflow:hidden;border:2px solid rgba(255,255,255,.35)'; slot.innerHTML = ''; slot.appendChild(c2); V.slot = slot;
+      let d = null; c2.style.cursor = 'grab'; c2.addEventListener('pointerdown', e => { d = e.clientX; c2.setPointerCapture(e.pointerId); }); c2.addEventListener('pointermove', e => { if (d == null) return; V.cam.yaw -= (e.clientX - d) * .012; d = e.clientX; }); c2.addEventListener('pointerup', () => { d = null; });
+      cards.push(V); const s2 = [R, cam, cv]; R = V.R; cam = V.cam; cv = V.cv; try { R.resize(); R.draw(cam, ENV); } catch (e) { } R = s2[0]; cam = s2[1]; cv = s2[2];
+      if (!craf) { clast = 0; craf = requestAnimationFrame(cardFrame); }
+    });
+  }
+  { let pend = 0; const kick = () => { if (pend) return; pend = setTimeout(() => { pend = 0; try { mountCards(document); } catch (e) { console.warn(e); } }, 60); };
+    const start = () => new MutationObserver(kick).observe(document.body, { childList: true, subtree: true });
+    if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
+    window.addEventListener('bd-models-changed', () => { document.querySelectorAll('.ds[data-3d]').forEach(b => { b._bd3 = 0; }); kick(); }); }
+  window.BDPreview = { enabled: () => true, set: () => { }, pane: (box, ds, faction, key) => mountPane(box, ds, faction, key), cards: mountCards };
 })();

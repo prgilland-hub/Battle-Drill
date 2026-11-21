@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.21-0201';
+  const VERSION = '2026.11.21-0228';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -576,7 +576,37 @@ window.BDModels = BDModels; window.MODELIMP = MODELIMP;
     R.resize(); try { R.draw(cam, ENV); } catch (e) { } if (!raf) { last = 0; raf = requestAnimationFrame(paneFrame); }
   }
   window.addEventListener('bd-models-changed', () => { if (pane && pane.box.isConnected) mountPane(pane.box, pane.ds, pane.faction, pane.key, pane.vi); });
-  window.BDPreview = { enabled: () => true, set: () => { }, pane: (box, ds, faction, key) => mountPane(box, ds, faction, key) };
+  /* several inline turning models at once (the two datasheets in the dice quiz): each card gets its own small renderer so both turn together */
+  const cards = [];
+  function cardFrame(now) {
+    craf = 0; for (let i = cards.length - 1; i >= 0; i--) if (!cards[i].box.isConnected) { try { const g = cards[i].cv.getContext('webgl2'); const x = g && g.getExtension('WEBGL_lose_context'); if (x) x.loseContext(); } catch (e) { } cards.splice(i, 1); }
+    if (!cards.length) return; const dt = Math.min(.1, (now - (clast || now)) / 1000); clast = now;
+    const sv = [R, cam, cv]; for (const V of cards) { if (!V.slot.isConnected || V.slot.offsetParent === null) continue; R = V.R; cam = V.cam; cv = V.cv; cam.yaw += dt * .7; try { R.draw(cam, ENV); } catch (e) { } }
+    R = sv[0]; cam = sv[1]; cv = sv[2]; craf = requestAnimationFrame(cardFrame);
+  }
+  let craf = 0, clast = 0;
+  function mountCards(root) {
+    if (!BDModels.on() || typeof BF === 'undefined') return;
+    (root || document).querySelectorAll('.ds[data-3d]').forEach(box => {
+      if (box._bd3 || box.closest('.tip-pop') || box.closest('#modal-box')) return;
+      for (let i = cards.length - 1; i >= 0; i--) if (cards[i].box === box) cards.splice(i, 1);
+      const head = box.querySelector('.ds-head'); if (!head) return; const fig = BDModels.pick(box.dataset.ds3, box.dataset.fac3, box.dataset.key3); if (!fig) return; box._bd3 = 1;
+      const c2 = document.createElement('canvas'); c2.style.cssText = 'display:block;width:100%;height:100%;border-radius:inherit;touch-action:none'; let V;
+      const sv = [R, cam, cv];
+      try { cv = c2; R = new BF.Renderer(c2); R.q.shadow = 512; R.q.dpr = Math.min(window.devicePixelRatio || 1, 1.5); R.makeShadow(); cam = new BF.Cam(); cam.pitch = .38; upload(fig); V = { box, cv: c2, R, cam }; } catch (e) { console.warn('card 3D unavailable', e); R = sv[0]; cam = sv[1]; cv = sv[2]; return; }
+      R = sv[0]; cam = sv[1]; cv = sv[2];
+      let slot = head.querySelector('.ds-img'); if (!slot) { slot = document.createElement('div'); head.insertBefore(slot, head.firstChild); }
+      slot.className = 'ds-img mini ds-3dslot'; slot.style.cssText = 'display:block;aspect-ratio:1;height:auto;background:#16181c;border-radius:12px;overflow:hidden;border:2px solid rgba(255,255,255,.35)'; slot.innerHTML = ''; slot.appendChild(c2); V.slot = slot;
+      let d = null; c2.style.cursor = 'grab'; c2.addEventListener('pointerdown', e => { d = e.clientX; c2.setPointerCapture(e.pointerId); }); c2.addEventListener('pointermove', e => { if (d == null) return; V.cam.yaw -= (e.clientX - d) * .012; d = e.clientX; }); c2.addEventListener('pointerup', () => { d = null; });
+      cards.push(V); const s2 = [R, cam, cv]; R = V.R; cam = V.cam; cv = V.cv; try { R.resize(); R.draw(cam, ENV); } catch (e) { } R = s2[0]; cam = s2[1]; cv = s2[2];
+      if (!craf) { clast = 0; craf = requestAnimationFrame(cardFrame); }
+    });
+  }
+  { let pend = 0; const kick = () => { if (pend) return; pend = setTimeout(() => { pend = 0; try { mountCards(document); } catch (e) { console.warn(e); } }, 60); };
+    const start = () => new MutationObserver(kick).observe(document.body, { childList: true, subtree: true });
+    if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
+    window.addEventListener('bd-models-changed', () => { document.querySelectorAll('.ds[data-3d]').forEach(b => { b._bd3 = 0; }); kick(); }); }
+  window.BDPreview = { enabled: () => true, set: () => { }, pane: (box, ds, faction, key) => mountPane(box, ds, faction, key), cards: mountCards };
 })();
 </script>
 <meta charset="utf-8">
@@ -1255,7 +1285,15 @@ html[data-device="tablet"] .tabletbar{display:flex;gap:8px;align-items:center;fl
 .tquiz{margin-top:6px}
 .tq-ds{margin:6px 0;border:1px solid var(--line);border-radius:6px;background:var(--raised)}
 .tq-ds>summary{cursor:pointer;padding:6px 10px;font-weight:600;font-size:.92rem}
-.tq-sheets{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,460px),1fr));gap:8px;padding:6px 8px 8px}
+.tq-sheets{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,460px),1fr));gap:8px;padding:6px 8px 8px;--ds3w:132px}
+.tq-sheets .ds-head{display:grid;grid-template-columns:auto 1fr;gap:2px 12px;align-items:center;padding:8px 10px}
+.tq-sheets .ds-head>*{grid-column:2;min-width:0}
+.tq-sheets .ds-head>.ds-img,.tq-sheets .ds-head>.ds-3dslot{grid-column:1;grid-row:1 / span 4;width:var(--ds3w);max-width:none;margin:0 !important;align-self:center;position:static}
+.tq-sheets .ds-head .bdp-pbar{display:none !important}
+.tq-sheets .ds .ds-body{grid-template-columns:1.5fr 1fr}
+.tq-sheets .ds-w,.tq-sheets .ds-abil{max-height:24vh;overflow:auto;overscroll-behavior:contain}
+.tq-sheets .ds-foot{display:none}
+.fs-shell.trayopen .fs-dock{max-height:60vh}
 .tq-sheet{max-height:none;overflow:visible;min-width:0;border:1px solid var(--line);border-radius:6px;padding:6px 8px;background:var(--surface);font-size:.86rem}
 @media (max-width:700px){.tq-sheets{grid-template-columns:1fr}}
 .tq-q{font-size:1.05rem;margin:8px 0 6px}
@@ -1295,7 +1333,6 @@ html.fs-on{overflow:hidden}
 .fs-shell .map-panel{position:relative !important;top:auto !important;flex:1 1 auto;min-height:0;display:flex;flex-direction:column;margin:0;padding:8px;box-shadow:none}
 .fs-shell .map-panel #board{flex:1 1 auto;min-height:0;width:100%;height:100%}
 .fs-dock{flex:0 0 auto;max-height:36vh;overflow:auto;display:flex;flex-direction:column;gap:8px}
-.fs-shell.trayopen .fs-dock{max-height:62vh}
 .fs-shell.trayopen .next{display:none}
 .fs-dock .next{width:100%;max-width:none;margin:0;position:static !important;max-height:none}
 .fs-dock .tray{margin:0}
@@ -2843,7 +2880,7 @@ function quizSpec(key, p, st, count, w, t) {
     if (!p.Aexpr || p.Aexpr.n !== 0) return null;
     const flat = p.Aexpr.flat, bb = p.blast ? Math.floor((p.selModels !== undefined ? p.selModels : st.start) / 5) : 0, per = flat + (p.bonusA || 0) * (p.halfN === undefined ? 1 : p.halfN / Math.max(1, p.models)) + bb;
     const parts = [`${flat} base`, p.bonusA ? `${p.bonusA} from Rapid Fire` : '', bb ? `${bb} from Blast` : ''].filter(Boolean);
-    return { label: `How many dice do you roll for the hit rolls?`, count, why: `One hit roll per attack: ${p.models} ${p.models === 1 ? 'model' : 'models'} × ${per} ${per === 1 ? 'attack' : 'attacks'}${parts.length > 1 ? ' (' + parts.join(' + ') + ')' : ''} = ${count}.` };
+    return { label: `How many dice do you roll for the hit rolls?`, count, why: `One hit roll per attack: ${p.models} ${p.models === 1 ? 'model carries' : 'models carry'} the ${w && w.name ? w.name : 'weapon'} (only models armed with it count; the rest of the unit fires its own weapons) × ${per} ${per === 1 ? 'attack' : 'attacks'}${parts.length > 1 ? ' (' + parts.join(' + ') + ')' : ''} = ${count}.` };
   }
   if (key === 'wound') return { label: `How many dice do you roll for the wound rolls?`, count, why: `One wound roll per hit: ${st.hits} ${st.hits === 1 ? 'hit' : 'hits'}${st.extra ? ` + ${st.extra} extra from Sustained Hits` : ''}${st.auto ? ` − ${st.auto} Lethal Hits that wound automatically` : ''} = ${count}.${st.extra ? ` Sustained Hits ${(w && w.sustained) || p.sustained || ''} comes from ${w && w.sustained ? `the ${w.name} profile itself` : (p.notes && p.notes.length ? `these rules in play: ${p.notes.join(', ')}` : 'a rule on the attacker')}.` : ''}${st.auto ? ` Lethal Hits comes from ${w && w.lethal ? `the ${w.name} profile itself` : (p.notes && p.notes.length ? `these rules in play: ${p.notes.join(', ')}` : 'a rule on the attacker')}.` : ''}` };
   if (key === 'save') { const exp = st.wounds - st.dev; return { label: `How many saving throws does ${who} roll?`, count, why: `One save per wound that can be saved: ${st.wounds} ${st.wounds === 1 ? 'wound' : 'wounds'}${st.auto ? ` (${st.wounds - st.dev - st.auto} from successful wound rolls + ${st.auto} automatic from Lethal Hits)` : ''}${st.dev ? ` − ${st.dev} Devastating Wounds (no save allowed)` : ''} = ${exp}${exp !== count ? `, but only ${count} were needed because the unit ran out of models` : ''}.` }; }
@@ -20922,7 +20959,8 @@ function datasheetCard(u, faction, opts) {
     live = `<div class="ds-live">${escH(bits.join(' · '))}</div>`;
   }
   const kw = [...(u.kw || []), u.scouts ? `scouts ${u.scouts}"` : ''].filter(Boolean);
-  return `<div class="ds${opts.narrow ? ' narrow' : ''}" style="--fc:${fc}">
+  const d3 = opts.live && (!u.imgId && !u.imgData) ? ` data-3d="1" data-ds3="${escH(u.ds || u.name)}" data-fac3="${escH(typeof miniFactionOf === 'function' ? miniFactionOf(u) : faction)}" data-key3="${escH(String(u.id))}"` : '';
+  return `<div class="ds${opts.narrow ? ' narrow' : ''}" style="--fc:${fc}"${d3}>
     <div class="ds-head">${src ? `<div class="ds-img${!u.imgId && !u.imgData ? ' mini' : ''}" style="background-image:url('${src}')"></div>` : ''}
       <h3>${escH(u.name)}${u.pts ? ` <small style="font-size:.8rem;opacity:.85">${u.pts} pts${u.baseModels > 1 ? ' / ' + u.baseModels + ' models' : ''}</small>` : ''}${u.legends ? ' <small style="font-size:.7rem">[Legends]</small>' : ''}</h3>
       <div class="ds-stats">${statBoxes(u)}</div>
