@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.21-1649';
+  const VERSION = '2026.11.21-1658';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -597,8 +597,11 @@ window.BDModels = BDModels; window.MODELIMP = MODELIMP;
   const cards = [];
   function cardFrame(now) {
     craf = 0; for (let i = cards.length - 1; i >= 0; i--) if (!cards[i].box.isConnected) { try { const g = cards[i].cv.getContext('webgl2'); const x = g && g.getExtension('WEBGL_lose_context'); if (x) x.loseContext(); } catch (e) { } cards.splice(i, 1); }
-    if (!cards.length) return; const dt = Math.min(.1, (now - (clast || now)) / 1000); clast = now;
-    const sv = [R, cam, cv]; for (const V of cards) { if (!V.slot.isConnected || V.slot.offsetParent === null) continue; R = V.R; cam = V.cam; cv = V.cv; cam.yaw += dt * .7; try { R.draw(cam, ENV); } catch (e) { } }
+    if (!cards.length) return;
+    /* spin the tokens at about 30 frames a second, only the ones actually on screen, and not at all in a hidden tab: scrolling past a screenful of cards stays smooth */
+    if (document.hidden || now - (clast || 0) < 30) { craf = requestAnimationFrame(cardFrame); return; }
+    const dt = Math.min(.1, (now - (clast || now)) / 1000); clast = now; const vh = innerHeight, vw = innerWidth;
+    const sv = [R, cam, cv]; for (const V of cards) { if (!V.slot.isConnected || V.slot.offsetParent === null) continue; const rc = V.slot.getBoundingClientRect(); if (rc.bottom < 0 || rc.top > vh || rc.right < 0 || rc.left > vw) continue; R = V.R; cam = V.cam; cv = V.cv; cam.yaw += dt * .7; try { R.draw(cam, ENV); } catch (e) { } }
     R = sv[0]; cam = sv[1]; cv = sv[2]; craf = requestAnimationFrame(cardFrame);
   }
   let craf = 0, clast = 0;
@@ -15871,7 +15874,7 @@ class Renderer {
     this.meshes = []; this.makeShadow();
   }
   makeShadow() {
-    const gl = this.gl, S = this.q.shadow; if (this.shTex) gl.deleteTexture(this.shTex);
+    this._shSig = ''; const gl = this.gl, S = this.q.shadow; if (this.shTex) gl.deleteTexture(this.shTex);
     this.shTex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, this.shTex); gl.texStorage2D(gl.TEXTURE_2D, 1, gl.DEPTH_COMPONENT24, S, S);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_COMPARE_MODE, gl.COMPARE_REF_TO_TEXTURE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_COMPARE_FUNC, gl.LEQUAL);
@@ -15881,7 +15884,7 @@ class Renderer {
     const gl = this.gl, vao = gl.createVertexArray(); gl.bindVertexArray(vao);
     const buf = (arr, loc, size) => { const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(arr), gl.STATIC_DRAW); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, size, gl.FLOAT, false, 0, 0); return b; };
     const bs = [buf(mb.P, 0, 3), buf(mb.N, 1, 3), buf(mb.C, 2, 3), buf(mb.M, 3, 2)], ib = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint32Array(mb.I), gl.STATIC_DRAW);
-    gl.bindVertexArray(null); const m = { vao, count: mb.I.length, kind: kind || 'solid', bs, ib }; this.meshes.push(m); return m;
+    gl.bindVertexArray(null); const m = { vao, count: mb.I.length, kind: kind || 'solid', bs, ib, uid: (Renderer._uid = (Renderer._uid || 0) + 1) }; this.meshes.push(m); return m;
   }
   clear() { const gl = this.gl; for (const m of this.meshes) { gl.deleteVertexArray(m.vao); m.bs.forEach(b => gl.deleteBuffer(b)); gl.deleteBuffer(m.ib); } this.meshes = []; }
   postTargets(W, H) {
@@ -15924,7 +15927,9 @@ class Renderer {
     const eye = cam.eye(), V = m4.look(eye, cam.target, [0, 1, 0]), P = m4.persp(cam.fov, W / H, .5, 400), VP = m4.mul(P, V); this.projP5 = P[5];
     const sd = v3.norm(env.sun), c = [30, 0, 22], le = v3.add(c, v3.mul(sd, 80)), LV = m4.look(le, c, [0, 1, 0]), LP = m4.ortho(-46, 46, -46, 46, 10, 170), LVP = m4.mul(LP, LV);
     gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL);
-    if (this.q.shadowOn) {
+    /* the sun never moves and meshes never change once uploaded, so the shadow map only has to be redrawn when the set of visible solid meshes (or the sun, or the map size) changes. Camera moves, which is most frames, reuse it. */
+    let shDraw = false; if (this.q.shadowOn) { let sg = this.q.shadow + '|' + sd[0].toFixed(3) + sd[1].toFixed(3) + sd[2].toFixed(3); for (const m of this.meshes) if (m.kind === 'solid' && !m.hidden) sg += ',' + m.uid; if (sg !== this._shSig) { this._shSig = sg; shDraw = true; } }
+    if (shDraw) {
       gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo); gl.viewport(0, 0, this.q.shadow, this.q.shadow); gl.clear(gl.DEPTH_BUFFER_BIT); gl.useProgram(this.sh.p); gl.uniformMatrix4fv(this.sh.U.uLVP, false, LVP);
       gl.colorMask(false, false, false, false); gl.enable(gl.CULL_FACE); gl.cullFace(gl.FRONT);
       for (const m of this.meshes) if (m.kind === 'solid' && !m.hidden) { gl.bindVertexArray(m.vao); gl.drawElements(gl.TRIANGLES, m.count, gl.UNSIGNED_INT, 0); }

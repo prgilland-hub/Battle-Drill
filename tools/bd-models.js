@@ -391,8 +391,11 @@ window.BDModels = BDModels; window.MODELIMP = MODELIMP;
   const cards = [];
   function cardFrame(now) {
     craf = 0; for (let i = cards.length - 1; i >= 0; i--) if (!cards[i].box.isConnected) { try { const g = cards[i].cv.getContext('webgl2'); const x = g && g.getExtension('WEBGL_lose_context'); if (x) x.loseContext(); } catch (e) { } cards.splice(i, 1); }
-    if (!cards.length) return; const dt = Math.min(.1, (now - (clast || now)) / 1000); clast = now;
-    const sv = [R, cam, cv]; for (const V of cards) { if (!V.slot.isConnected || V.slot.offsetParent === null) continue; R = V.R; cam = V.cam; cv = V.cv; cam.yaw += dt * .7; try { R.draw(cam, ENV); } catch (e) { } }
+    if (!cards.length) return;
+    /* spin the tokens at about 30 frames a second, only the ones actually on screen, and not at all in a hidden tab: scrolling past a screenful of cards stays smooth */
+    if (document.hidden || now - (clast || 0) < 30) { craf = requestAnimationFrame(cardFrame); return; }
+    const dt = Math.min(.1, (now - (clast || now)) / 1000); clast = now; const vh = innerHeight, vw = innerWidth;
+    const sv = [R, cam, cv]; for (const V of cards) { if (!V.slot.isConnected || V.slot.offsetParent === null) continue; const rc = V.slot.getBoundingClientRect(); if (rc.bottom < 0 || rc.top > vh || rc.right < 0 || rc.left > vw) continue; R = V.R; cam = V.cam; cv = V.cv; cam.yaw += dt * .7; try { R.draw(cam, ENV); } catch (e) { } }
     R = sv[0]; cam = sv[1]; cv = sv[2]; craf = requestAnimationFrame(cardFrame);
   }
   let craf = 0, clast = 0;
