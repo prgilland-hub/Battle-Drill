@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.21-0231';
+  const VERSION = '2026.11.21-0238';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -587,16 +587,17 @@ window.BDModels = BDModels; window.MODELIMP = MODELIMP;
   let craf = 0, clast = 0;
   function mountCards(root) {
     if (!BDModels.on() || typeof BF === 'undefined') return;
-    (root || document).querySelectorAll('.ds[data-3d]').forEach(box => {
+    (root || document).querySelectorAll('.ds[data-3d], .sch-3d[data-3d]').forEach(box => {
+      const solo = box.classList.contains('sch-3d');
       if (box._bd3 || box.closest('.tip-pop') || box.closest('#modal-box')) return;
       for (let i = cards.length - 1; i >= 0; i--) if (cards[i].box === box) cards.splice(i, 1);
-      const head = box.querySelector('.ds-head'); if (!head) return; const fig = BDModels.pick(box.dataset.ds3, box.dataset.fac3, box.dataset.key3); if (!fig) return; box._bd3 = 1;
+      const head = solo ? box : box.querySelector('.ds-head'); if (!head) return; const fig = BDModels.pick(box.dataset.ds3, box.dataset.fac3, box.dataset.key3); if (!fig) return; box._bd3 = 1;
       const c2 = document.createElement('canvas'); c2.style.cssText = 'display:block;width:100%;height:100%;border-radius:inherit;touch-action:none'; let V;
       const sv = [R, cam, cv];
       try { cv = c2; R = new BF.Renderer(c2); R.q.shadow = 512; R.q.dpr = Math.min(window.devicePixelRatio || 1, 1.5); R.makeShadow(); cam = new BF.Cam(); cam.pitch = .38; upload(fig); V = { box, cv: c2, R, cam }; } catch (e) { console.warn('card 3D unavailable', e); R = sv[0]; cam = sv[1]; cv = sv[2]; return; }
       R = sv[0]; cam = sv[1]; cv = sv[2];
-      let slot = head.querySelector('.ds-img'); if (!slot) { slot = document.createElement('div'); head.insertBefore(slot, head.firstChild); }
-      slot.className = 'ds-img mini ds-3dslot'; slot.style.cssText = 'display:block;aspect-ratio:1;height:auto;background:#16181c;border-radius:12px;overflow:hidden;border:2px solid rgba(255,255,255,.35)'; slot.innerHTML = ''; slot.appendChild(c2); V.slot = slot;
+      let slot; if (solo) { slot = box; box.hidden = false; box.innerHTML = ''; box.appendChild(c2); } else { slot = head.querySelector('.ds-img'); if (!slot) { slot = document.createElement('div'); head.insertBefore(slot, head.firstChild); }
+        slot.className = 'ds-img mini ds-3dslot'; slot.style.cssText = 'display:block;aspect-ratio:1;height:auto;background:#16181c;border-radius:12px;overflow:hidden;border:2px solid rgba(255,255,255,.35)'; slot.innerHTML = ''; slot.appendChild(c2); } V.slot = slot;
       let d = null; c2.style.cursor = 'grab'; c2.addEventListener('pointerdown', e => { d = e.clientX; c2.setPointerCapture(e.pointerId); }); c2.addEventListener('pointermove', e => { if (d == null) return; V.cam.yaw -= (e.clientX - d) * .012; d = e.clientX; }); c2.addEventListener('pointerup', () => { d = null; });
       cards.push(V); const s2 = [R, cam, cv]; R = V.R; cam = V.cam; cv = V.cv; try { R.resize(); R.draw(cam, ENV); } catch (e) { } R = s2[0]; cam = s2[1]; cv = s2[2];
       if (!craf) { clast = 0; craf = requestAnimationFrame(cardFrame); }
@@ -605,7 +606,7 @@ window.BDModels = BDModels; window.MODELIMP = MODELIMP;
   { let pend = 0; const kick = () => { if (pend) return; pend = setTimeout(() => { pend = 0; try { mountCards(document); } catch (e) { console.warn(e); } }, 60); };
     const start = () => new MutationObserver(kick).observe(document.body, { childList: true, subtree: true });
     if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
-    window.addEventListener('bd-models-changed', () => { document.querySelectorAll('.ds[data-3d]').forEach(b => { b._bd3 = 0; }); kick(); }); }
+    window.addEventListener('bd-models-changed', () => { document.querySelectorAll('.ds[data-3d], .sch-3d[data-3d]').forEach(b => { b._bd3 = 0; }); kick(); }); }
   window.BDPreview = { enabled: () => true, set: () => { }, pane: (box, ds, faction, key) => mountPane(box, ds, faction, key), cards: mountCards };
 })();
 </script>
@@ -1285,6 +1286,11 @@ html[data-device="tablet"] .tabletbar{display:flex;gap:8px;align-items:center;fl
 .tquiz{margin-top:6px}
 .tq-ds{margin:6px 0;border:1px solid var(--line);border-radius:6px;background:var(--raised)}
 .tq-ds>summary{cursor:pointer;padding:6px 10px;font-weight:600;font-size:.92rem}
+.sch-card{position:relative}
+.sch-3d{position:absolute;right:14px;top:14px;width:172px;aspect-ratio:1;background:#16181c;border-radius:12px;overflow:hidden;border:2px solid var(--line);z-index:1}
+@media (min-width:641px){.sch-card:has(.sch-3d:not([hidden]))>h3,.sch-card:has(.sch-3d:not([hidden]))>p,.sch-card:has(.sch-3d:not([hidden])) .sch-r{margin-right:196px}}
+.sch-3d[hidden]{display:none}
+@media (max-width:640px){.sch-3d{position:static;width:min(240px,100%);margin:0 auto 8px}}
 .tq-sheets{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,460px),1fr));gap:8px;padding:6px 8px 8px;--ds3w:132px}
 .tq-sheets .ds-head{display:grid;grid-template-columns:auto 1fr;gap:2px 12px;align-items:center;padding:8px 10px}
 .tq-sheets .ds-head>*{grid-column:2;min-width:0}
@@ -17874,6 +17880,7 @@ function schBegin(spec) {
   if (spec.heroIn) { const car = al.find(x => x.campId === spec.heroIn); if (car) { embarkInto(car, me); me.x = car.x; me.y = car.y; } }
   al.forEach((a, i) => { const sp = (spec.allies || [])[i] || {}; if (sp.inId) { const car = [me].concat(al).find(x => x.campId === sp.inId); if (car && car !== a) embarkInto(car, a); } });
   fu.forEach((f, i) => { f.lessonAi = foes[i].ai || 'still'; f.placed = true; f.reserve = false; f.role = f.lessonAi === 'active' ? 'assault' : 'hold'; schPlaceEdge(foes[i].from === 'ally' && al[0] ? al[0] : me, f, foes[i].d, foes[i].ang || 0); if (f.x > BW - f.r - 1) f.x = BW - f.r - 1; });
+  if (!spec.camp) { try { G.env3d = schEnv(hero.faction, hero.unit && hero.unit.name); } catch (e) { } }
   if (spec.camp) {
     try { G.env3d = campEnv(spec.camp.ch.n); } catch (e) { }
     try {
@@ -17891,8 +17898,11 @@ function schBegin(spec) {
   if (spec.cp) G.cp.player = Math.max(G.cp.player, spec.cp);
   if (spec.cpAi) G.cp.ai = Math.max(G.cp.ai, spec.cpAi);
   showTab('battle'); render();
-  if (spec.camp) setTimeout(() => { try { if (localStorage.getItem('bd.camp3d') !== '0' && typeof BF3D !== 'undefined' && BF3D.set && !BF3D.on) BF3D.set(true); } catch (e) { } }, 250);
+  setTimeout(() => { try { if (localStorage.getItem('bd.camp3d') !== '0' && typeof BF3D !== 'undefined' && BF3D.set && !BF3D.on) BF3D.set(true); } catch (e) { } }, 250);
 }
+/* the scene for a staged lesson battle: fits the faction, and stays the same for the same unit */
+const SCH_ENV = { 'Death Guard': 'marsh', 'Space Wolves': 'ice', 'Necrons': 'desert', 'Tyranids': 'jungle', 'Orks': 'desert', 'Adeptus Mechanicus': 'forge', 'Chaos Space Marines': 'forge', 'World Eaters': 'forge', 'Thousand Sons': 'desert', 'Adepta Sororitas': 'hive', 'Adeptus Custodes': 'hive', 'Astra Militarum': 'hive', 'Blood Angels': 'hive', 'Dark Angels': 'hive', 'Black Templars': 'hive', 'Imperial Fists': 'hive', "Emperor's Children": 'forge' };
+function schEnv(fac, name) { if (SCH_ENV[fac]) return SCH_ENV[fac]; const o = ['hive', 'desert', 'base', 'forge'], str = String(fac || '') + String(name || ''); let h = 0; for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0; return o[h % o.length]; }
 function schTotalW(u) { return (u.models - 1) * u.W + Math.max(u.cur, 0) + (leaderUp(u) ? liveLeaders(u).reduce((a, l) => a + l.cur, 0) : 0); }
 function schCtx() {
   const g = G.school; if (!g) return null;
@@ -18314,7 +18324,7 @@ function schCard(lib) {
   const abl = (lib.abilities || []).filter(a => !/^(leader|support)$/i.test(a.name));
   const mix = (typeof MIX_W === 'object' && MIX_W[lib.name]) ? `<p class="sch-note">Mixed unit: its last ${MIX_W[lib.name].wl ? 'model has' : 'model(s) have'} different wounds from the rest, and is removed last.</p>` : '';
   const wrow = (w, k) => `<tr><td>${escH(w.name)}${w.count ? ` <small>x${w.count}</small>` : ''}${schWk(w)}</td><td>${k === 'r' ? (w.range || '') + '"' : 'Melee'}</td><td>${escH(String(w.A))}</td><td>${w.skill ? w.skill + '+' : '–'}</td><td>${w.S}</td><td>${w.AP ? -Math.abs(w.AP) : 0}</td><td>${escH(String(w.D))}</td></tr>`;
-  return `<div class="panel sch-card"><h3>${escH(lib.name)} <small class="muted">${lib.models} model${lib.models > 1 ? 's' : ''} · ${lib.pts} pts</small></h3>
+  return `<div class="panel sch-card"><div class="sch-3d" data-3d="1" data-ds3="${escH(lib.ds || lib.name)}" data-fac3="${escH(lib.faction)}" data-key3="${escH(String(lib.id || lib.name))}" hidden></div><h3>${escH(lib.name)} <small class="muted">${lib.models} model${lib.models > 1 ? 's' : ''} · ${lib.pts} pts</small></h3>
     ${T ? `<p>${schTx(T.blurb)}</p>` : ''}${schIsChar(lib) ? `<p class="sch-note">Character: attaches to ${escH(leadsOf(lib).join(', '))}. Pick the bodyguard above; lessons choose their own.</p>` : ''}${mix}
     <div class="sch-l"><div class="sch-stats">${[['M', lib.M + '"'], ['T', lib.T], ['Sv', lib.Sv + '+'], ['Inv', lib.inv ? lib.inv + '+' : '–'], ['W', lib.W], ['Ld', lib.Ld + '+'], ['OC', lib.OC]].map(([k, v]) => `<div><span>${k}</span><b>${v}</b></div>`).join('')}</div>
     <table class="sch-w"><tr><th>Weapon</th><th>Range</th><th>A</th><th>Skill</th><th>S</th><th>AP</th><th>D</th></tr>${(lib.ranged || []).map(w => wrow(w, 'r')).join('')}${(lib.melee || []).map(w => wrow(w, 'm')).join('')}</table></div>
