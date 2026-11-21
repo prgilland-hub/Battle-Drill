@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.21-1249';
+  const VERSION = '2026.11.21-1358';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -1286,6 +1286,10 @@ html[data-device="tablet"] .tabletbar{display:flex;gap:8px;align-items:center;fl
 .tquiz{margin-top:6px}
 .tq-ds{margin:6px 0;border:1px solid var(--line);border-radius:6px;background:var(--raised)}
 .tq-ds>summary{cursor:pointer;padding:6px 10px;font-weight:600;font-size:.92rem}
+#a-list details.nest-size{margin:8px 0;border:1px solid var(--line);border-radius:10px;padding:2px 8px 6px}
+#a-list details.nest-size>summary{cursor:pointer;padding:6px 2px;font-size:1.02rem}
+#a-list details.nest-fac{margin:4px 0 4px 8px}
+#a-list details.nest-fac>summary{cursor:pointer;padding:4px 2px;font-weight:600}
 .sch-card{position:relative}
 .sch-3d{position:absolute;right:14px;top:14px;width:172px;aspect-ratio:1;background:#16181c;border-radius:12px;overflow:hidden;border:2px solid var(--line);z-index:1}
 @media (min-width:641px){.sch-card:has(.sch-3d:not([hidden]))>h3,.sch-card:has(.sch-3d:not([hidden]))>p,.sch-card:has(.sch-3d:not([hidden])) .sch-r{margin-right:196px}}
@@ -15244,13 +15248,23 @@ function refreshArmyUI() {
   // list grouped by faction
   const groups = {};
   for (const b of allBuilds()) (groups[b.faction || 'Unsorted'] = groups[b.faction || 'Unsorted'] || []).push(b);
-  $('#a-list').innerHTML = Object.keys(groups).map(f => `<h3>${escH(f)}</h3>` + groups[f].map(b =>
-    `<div style="display:flex;gap:4px;align-items:stretch"><button class="army-item${b.id === A.editing ? ' on' : ''}" data-id="${b.id}">${escH(b.name)}${detName(b) ? `<small class="det">${escH(detName(b))}${dispOf(b) ? ' · ' + dispChip(dispOf(b)) : ''}</small>` : ''}<small>${plural(b.units.length, 'unit')}${b.builtin ? ', sample' : ''}${legalBadge(b)}</small></button><button class="btn" data-delid="${b.id}" aria-label="${b.builtin ? 'Hide' : 'Archive'} ${escH(b.name)}" data-tip="${b.builtin ? 'Remove this sample army' : 'Archive this army'}" style="margin-bottom:5px">✕</button></div>`).join('')).join('') + (hiddenSamples.length ? `<p style="margin:8px 0 0;font-size:.85rem"><button class="btn" id="a-unhide" style="padding:3px 9px">Bring back the sample armies</button></p>` : '')
+  /* nested by battle size (Incursion, Strike Force, Onslaught), then by faction; open/closed state is remembered */
+  A.nOpen = A.nOpen || {};
+  const armyItem = b => `<div style="display:flex;gap:4px;align-items:stretch"><button class="army-item${b.id === A.editing ? ' on' : ''}" data-id="${b.id}">${escH(b.name)}${detName(b) ? `<small class="det">${escH(detName(b))}${dispOf(b) ? ' · ' + dispChip(dispOf(b)) : ''}</small>` : ''}<small>${plural(b.units.length, 'unit')}${b.builtin ? ', sample' : ''}${legalBadge(b)}</small></button><button class="btn" data-delid="${b.id}" aria-label="${b.builtin ? 'Hide' : 'Archive'} ${escH(b.name)}" data-tip="${b.builtin ? 'Remove this sample army' : 'Archive this army'}" style="margin-bottom:5px">✕</button></div>`;
+  const bySize = {};
+  for (const b of allBuilds()) { const sz = sizeFor(b.limit).name, f = b.faction || 'Unsorted'; ((bySize[sz] = bySize[sz] || {})[f] = (bySize[sz][f] || [])).push(b); }
+  const sizeOrder = BATTLE_SIZES.map(x => x.name).filter(n => bySize[n]);
+  const edB = A.editing ? findBuild(A.editing) : null, edSz = edB ? sizeFor(edB.limit).name : null, edFac = edB ? (edB.faction || 'Unsorted') : null;
+  const isOpen = (key, dflt) => key in A.nOpen ? A.nOpen[key] : dflt;
+  $('#a-list').innerHTML = sizeOrder.map(sz => { const facs = Object.keys(bySize[sz]).sort(), cnt = facs.reduce((n, f) => n + bySize[sz][f].length, 0), lim = (BATTLE_SIZES.find(x => x.name === sz) || {}).pts;
+    return `<details class="nest-size" data-nk="s|${escH(sz)}"${isOpen('s|' + sz, true) ? ' open' : ''}><summary><b>${escH(sz)}</b>${lim ? ` <small class="muted">${lim} pts</small>` : ''} <small class="muted">${plural(cnt, 'army')}</small></summary>` + facs.map(f => { const k = 'f|' + sz + '|' + f, list = bySize[sz][f];
+      return `<details class="nest-fac" data-nk="${escH(k)}"${isOpen(k, sz === edSz && f === edFac) ? ' open' : ''}><summary>${escH(f)} <small class="muted">${list.length}</small></summary>${list.map(armyItem).join('')}</details>`; }).join('') + `</details>`; }).join('') + (hiddenSamples.length ? `<p style="margin:8px 0 0;font-size:.85rem"><button class="btn" id="a-unhide" style="padding:3px 9px">Bring back the sample armies</button></p>` : '')
     + (archivedBuilds.length ? `<details style="margin-top:10px" id="a-arch"${A.archOpen ? ' open' : ''}><summary class="muted" style="cursor:pointer">Archived armies (${archivedBuilds.length})</summary>` + archivedBuilds.map(b => `<div class="row" style="justify-content:space-between;gap:6px;margin:4px 0"><span>${escH(b.name)} <small class="muted">${escH(b.faction || '')}</small></span><span style="display:flex;gap:4px"><button class="btn" data-restore="${b.id}">Restore</button><button class="btn" data-purge="${b.id}">Delete for good</button></span></div>`).join('') + `</details>` : '');
   $$('#a-list .army-item').forEach(el => el.addEventListener('click', () => selectBuild(el.dataset.id)));
   $$('#a-list [data-restore]').forEach(el => el.addEventListener('click', () => restoreArmy(el.dataset.restore)));
   $$('#a-list [data-purge]').forEach(el => el.addEventListener('click', () => { A.archOpen = true; purgeArmy(el.dataset.purge); }));
   const ad = $('#a-arch'); if (ad) ad.addEventListener('toggle', () => { A.archOpen = ad.open; });
+  $$('#a-list details[data-nk]').forEach(d => d.addEventListener('toggle', () => { A.nOpen[d.dataset.nk] = d.open; }));
   $$('#a-list [data-delid]').forEach(el => el.addEventListener('click', () => deleteArmy(el.dataset.delid)));
   // battle selects
   const pv = $('#b-army-p').value, av = $('#b-army-a').value;
