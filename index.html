@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.21-1814';
+  const VERSION = '2026.11.21-2010';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -18788,10 +18788,10 @@ const tsL = (id, title, goal, o) => Object.assign({ id, title, goal, me: DG_ME }
 const TS_LESSONS = {
   'Thousand Sons|Rubric Marines': {
     blurb: 'Armoured husks of the Cabal: slow, durable and deadly at 24". Bring them for a rock-solid objective squad that your Sorcerers can lead.',
-    strengths: ['Toughness 5, 2 Wounds and a 5+ invulnerable save make them hard to shift.', 'Malefic Curse hits at 24" with Devastating Wounds.', 'Bringers of Change: re-roll Wound rolls of 1 on ranged attacks, and all of them against units that sit near an objective you do not hold.', 'Battleline with Objective Control 2.'],
+    strengths: ['2 Wounds a model and a 5+ invulnerable save make them hard to shift.', 'Inferno boltguns reach 24" with AP -2, and the Aspiring Sorcerer adds Malefic Curse (3 attacks at AP -3, Devastating Wounds). Only the models carrying a weapon fire it.', 'Bringers of Change: re-roll Wound rolls of 1 on ranged attacks, and all of them against units that sit near an objective you do not hold.', 'Battleline with Objective Control 2.'],
     weaknesses: ['Move 6" is average at best and they are not fast.', 'Few models in the squad, so mortal wounds hurt.', 'Alone they have no Rituals: they need a Sorcerer to lead them for the Cabal.'],
     lessons: [
-      tsL('rm1', 'Malefic Curse', 'Shoot a squad from 24" and compare the results with a re-roll of 1s.', { foes: [dgF.mar(18, 'hold')], steps: [dSh('Shoot the Tactical Squad. Malefic Curse reaches 24".', null, /malefic curse/), dKo('Destroy the Tactical Squad.')], recap: 'Rubric Marines out-range bolters, and Bringers of Change fixes unlucky Wound rolls.' }),
+      tsL('rm1', 'Firepower at 24"', 'Shoot a squad from 24" and compare the results with a re-roll of 1s.', { foes: [dgF.mar(18, 'hold')], steps: [dSh('Shoot the Tactical Squad. Inferno boltguns reach 24", and the Aspiring Sorcerer fires Malefic Curse.', null, /inferno boltgun|malefic curse|soulreaper|warpflam/), dKo('Destroy the Tactical Squad.')], recap: 'Rubric Marines out-range bolters, and Bringers of Change fixes unlucky Wound rolls.' }),
       tsL('rm2', 'The anvil', 'See what a 5+ invulnerable save does against bolter fire.', { foes: [dgF.mar(16, 'hold')], steps: [dTk('End your turn and let the Tactical Squad shoot at you.', 1), dTk('Do it again and compare the casualties.', 2)], recap: 'Two wounds a model and a 5+ invulnerable save turn a basic volley into very little.' })
     ]
   },
@@ -19572,12 +19572,12 @@ const TS_CAMP = [
   { n: 1, title: 'The Sealed Archive', place: 'Vael Secundus, the Reliquary Gate',
     story: 'The Cabal has traced a stolen fragment of the Great Library to a fortress-archive on Vael Secundus. A single squad of Rubric Marines is sent ahead to open the gate. They do not speak, they do not hurry, and they do not stop. A Scout patrol is the only thing between them and the doors.',
     outro: 'The Scouts are ash and the doors swing open without being touched. Somewhere behind the stacks, something starts to read.',
-    rule: 'Ensorcelled Cadre: Rubric Marines are Toughness 5 with 2 Wounds and a 5+ invulnerable save, and Bringers of Change lets them re-roll Wound rolls of 1 on ranged attacks. Their Malefic Curse reaches 24".',
+    rule: 'Ensorcelled Cadre: Rubric Marines have 2 Wounds each and a 5+ invulnerable save, and Bringers of Change lets them re-roll Wound rolls of 1 on ranged attacks. Their inferno boltguns reach 24", and their Aspiring Sorcerer also fires Malefic Curse.',
     objective: 'Destroy the Scouts.', win: { kind: 'kill' }, maxRound: 13,
     foes: [{ name: 'Scout Squad', fac: SMF, models: 5, d: 14, ang: 0, ai: 'hold' }],
     terrain: [[24, 12], [24, 30]],
     steps: [
-      { text: 'Advance steadily and shoot with Malefic Curse.', hint: 'Movement phase: move up, then in the Shooting phase select the Rubric Marines and the Scouts.', done: c => c.shot },
+      { text: 'Advance steadily and shoot with the inferno boltguns.', hint: 'Movement phase: move up, then in the Shooting phase select the Rubric Marines and the Scouts.', done: c => c.shot },
       { text: 'Keep firing until the Scouts are gone.', hint: 'Rubric Marines are slow but very hard to remove.', done: c => c.dead }] },
   { n: 2, title: 'Pink Fire', place: 'The Cartulary Stacks',
     story: 'The stacks are alive with warp-flicker. Pink Horrors tumble out of a torn page, laughing in several voices at once. The defenders of the archive open fire on something that gets bigger every time it is hurt.',
