@@ -105,7 +105,8 @@ const MODELIMP = (function () {
     }
     let dmn = [1e9, 1e9, 1e9], dmx = [-1e9, -1e9, -1e9];
     for (let i = 0; i < parts.length; i++) { const g = raw[i]; if (!g) continue; const M = W[i], st = Math.max(1, Math.floor(g.X.length / 3 / 400)); for (let k = 0; k < g.X.length; k += 3 * st) { const x = g.X[k], y = g.X[k + 1], z = g.X[k + 2], q = [M[0] * x + M[1] * y + M[2] * z + M[3], M[4] * x + M[5] * y + M[6] * z + M[7], M[8] * x + M[9] * y + M[10] * z + M[11]]; for (let j = 0; j < 3; j++) { dmn[j] = Math.min(dmn[j], q[j]); dmx[j] = Math.max(dmx[j], q[j]); } } }
-    const diag = Math.hypot(dmx[0] - dmn[0], dmx[1] - dmn[1], dmx[2] - dmn[2]), budget = opt.budget || (diag > 5 ? 30000 : 10000) * (opt.scale || 1), out = []; let tris = 0, mnx = 1e9, mny = 1e9, mnz = 1e9, mxx = -1e9, mxy = -1e9, mxz = -1e9;
+    const diag = Math.hypot(dmx[0] - dmn[0], dmx[1] - dmn[1], dmx[2] - dmn[2]), stdBudget = opt.budget || (diag > 5 ? 30000 : 10000) * (opt.scale || 1);
+    const mkPass = (budget, u32) => { const out = []; let tris = 0, mnx = 1e9, mny = 1e9, mnz = 1e9, mxx = -1e9, mxy = -1e9, mxz = -1e9;
     for (let i = 0; i < parts.length; i++) {
       const g = raw[i]; if (!g) continue; const tr = g.T.length / 3, share = opt.full ? 1e9 : Math.max(400, Math.round(budget * tr / Math.max(1, total)));
       const d = decimate(g, share), M = W[i], V = new Float32Array(d.X.length);
@@ -116,9 +117,13 @@ const MODELIMP = (function () {
       }
       const gg = { X: V, T: Int32Array.from(d.T) }; const N = finish(gg);
       const C8 = new Uint8Array(d.C.length); for (let k = 0; k < C8.length; k++) C8[k] = Math.round(clamp(d.C[k], 0, 1) * 255);
-      out.push({ V, N, C: C8, T: Uint16Array.from(gg.T) }); tris += gg.T.length / 3;
+      out.push({ V, N, C: C8, T: u32 ? Uint32Array.from(gg.T) : Uint16Array.from(gg.T) }); tris += gg.T.length / 3;
     }
-    return { name: unit.name, parts: out, tris, bbox: [mnx, mny, mnz, mxx, mxy, mxz], big: diag > 5 };
+    return { name: unit.name, parts: out, tris, bbox: [mnx, mny, mnz, mxx, mxy, mxz], big: diag > 5 }; };
+    const res = mkPass(stdBudget, false);
+    /* a second, richer copy for previews and (optionally) the battle: High about 4x, Maximum about 12x the standard triangles, capped so the library stays a sensible size */
+    if (opt.hi === 'hi' || opt.hi === 'max') { const hb = opt.hi === 'max' ? (diag > 5 ? 250000 : 120000) : (diag > 5 ? 100000 : 40000); if (hb > stdBudget * 1.5) res.hi = mkPass(hb, true); }
+    return res;
   }
   return { parseOBJ, decodeTex, expand, decimate, build, mat };
 })();
@@ -147,11 +152,16 @@ const BDModels = (function () {
     }) };
   }
   async function load() { try { const d = await idbOpen(); index = await rq(tx(d, 'index').objectStore('index').getAll()); d.close(); } catch (e) { index = []; } cache.clear(); loading.clear(); poolCache.clear(); return index.length; }
-  function fetchFig(m) {
-    if (cache.has(m.key)) return cache.get(m.key); if (loading.has(m.key)) return null; loading.add(m.key);
-    idbOpen().then(async d => { const rec = await rq(tx(d, 'figs').objectStore('figs').get(m.key)); d.close(); if (!rec) console.warn('[BDModels] indexed but not stored:', m.key, m.name); if (rec) { if (cache.size > 350) cache.delete(cache.keys().next().value); cache.set(m.key, prep(rec)); } loading.delete(m.key); ping(); }).catch(e => { loading.delete(m.key); console.warn('[BDModels] could not load', m.name, e); });
+  const figOf = new WeakMap(), hiOrder = []; let hiLeft = 0;
+  function fetchFig(m, hi) {
+    const k = hi ? m.key + '#hi' : m.key;
+    if (cache.has(k)) return cache.get(k); if (loading.has(k)) return null; loading.add(k);
+    idbOpen().then(async d => { const rec = await rq(tx(d, 'figs').objectStore('figs').get(k)); d.close(); if (!rec) console.warn('[BDModels] indexed but not stored:', k, m.name); if (rec) { if (hi) { hiOrder.push(k); while (hiOrder.length > 40) cache.delete(hiOrder.shift()); } else if (cache.size > 350) cache.delete(cache.keys().next().value); const fg = prep(rec); figOf.set(fg, m); cache.set(k, fg); } loading.delete(k); ping(); }).catch(e => { loading.delete(k); console.warn('[BDModels] could not load', m.name, e); });
     return null;
   }
+  /* the richer copy of a model you already hold (previews): it arrives a moment later and the preview refreshes */
+  function upgrade(fig) { if (!fig || get('hiPrev', '1') !== '1') return fig; const m = figOf.get(fig); if (!m || !m.hi) return fig; return fetchFig(m, true) || fig; }
+  const frame = n => { hiLeft = n == null ? 450000 : n; };
   /* datasheet name (+faction) -> which stored models may stand in for it */
   const DG = f => /death guard/i.test(f || ''), ANY = () => true;
   const RULES = [
@@ -207,7 +217,10 @@ const BDModels = (function () {
     if (idx > 0 && idx % 4 === 3 && spec.length) return spec;
     return plain.length ? plain : p;
   }
-  function pick(ds, faction, key, idx, n) { if (!index.length || get('on', '1') !== '1') return null; let p = pool(ds, faction); if (!p) return null; p = roleFilter(p, idx | 0, n | 0); const m = p[hash(String(key)) % p.length]; return fetchFig(m) || cache.get(m.key) || null; }
+  function pick(ds, faction, key, idx, n, hi) { if (!index.length || get('on', '1') !== '1') return null; let p = pool(ds, faction); if (!p) return null; p = roleFilter(p, idx | 0, n | 0); const m = p[hash(String(key)) % p.length];
+    /* battle: use the richer copy while the scene stays within a triangle budget (so a big army never stalls the redraw); the standard copy fills in until it has loaded */
+    if (hi && m.hi && hiLeft >= m.hi) { const f = fetchFig(m, true); if (f) { hiLeft -= m.hi; return f; } }
+    const f0 = fetchFig(m) || cache.get(m.key) || null; if (f0 && !figOf.has(f0)) figOf.set(f0, m); return f0; }
   function add(mb, fig, x, y, z, yaw) {
     const cy = Math.cos(yaw), sy = Math.sin(yaw);
     for (const g of fig.parts) {
@@ -246,7 +259,7 @@ const BDModels = (function () {
           const r = await MODELIMP.build(u, getMesh, getTex, opt); if (!r.parts.length) { bad++; (why[fac.name] = why[fac.name] || []).push(u.name + ': empty' + (MODELIMP.build.err ? ' (' + MODELIMP.build.err + ')' : '')); continue; }
           let hy = 0; for (const p of r.parts) for (let k = 1; k < p.V.length; k += 3) if (p.V[k] > hy) hy = p.V[k];
           const key = fac.name + '|' + i, rec = { key, faction: fac.name, name: u.name, big: r.big, tris: r.tris, parts: r.parts.map(p => ({ V: p.V, N: p.N, C: p.C, T: p.T })) };
-          const t = tx(d, ['figs', 'index'], 'readwrite'); t.objectStore('figs').put(rec); t.objectStore('index').put({ key, faction: fac.name, name: u.name, h: hy, tris: r.tris }); await done(t); ok++;
+          const t = tx(d, ['figs', 'index'], 'readwrite'); t.objectStore('figs').put(rec); if (r.hi) t.objectStore('figs').put({ key: key + '#hi', faction: fac.name, name: u.name, big: r.big, tris: r.hi.tris, parts: r.hi.parts.map(p => ({ V: p.V, N: p.N, C: p.C, T: p.T })) }); t.objectStore('index').put({ key, faction: fac.name, name: u.name, h: hy, tris: r.tris, hi: r.hi ? r.hi.tris : 0 }); await done(t); ok++;
         } catch (e) { bad++; (why[fac.name] = why[fac.name] || []).push(u.name + ': ' + (e && e.message || e)); console.warn('model skipped', u.name, e); }
         if (i % 4 === 0) await new Promise(r => setTimeout(r, 0));
       }
@@ -255,7 +268,7 @@ const BDModels = (function () {
   }
   async function clearAll() { const d = await idbOpen(); const t = tx(d, ['figs', 'index'], 'readwrite'); t.objectStore('figs').clear(); t.objectStore('index').clear(); await done(t); d.close(); index = []; cache.clear(); poolCache.clear(); ping(); }
   const factions = () => { const c = {}; for (const m of index) c[m.faction] = (c[m.faction] || 0) + 1; return c; };
-  return { debug: (ds, fac) => { const t = toks(ds).filter(w => w.length > 3)[0] || toks(ds)[0] || '', hits = index.filter(f => toks(f.name).some(w => w === t || w.includes(t))); const mine = index.filter(f => String(f.faction).toLowerCase() === String(fac).toLowerCase()); return 'faction has ' + mine.length + ' models' + (mine.length ? ' (tallest ' + Math.max(...mine.map(f => f.h)).toFixed(2) + ')' : '') + '; name hits for "' + t + '": ' + (hits.length ? hits.slice(0, 3).map(f => f.faction + ': ' + f.name + ' h=' + f.h.toFixed(2)).join(' | ') : 'none'); }, variants: (ds, fac) => pool(ds, fac) || [], fig: m => fetchFig(m) || cache.get(m.key) || null, why: (ds, fac) => { const p = pool(ds, fac); return p ? p.map(f => f.faction + ': ' + f.name) : 'no match among ' + index.length + ' models'; }, load, pick, add, scan, importFactions, clearAll, factions, on: () => index.length > 0 && get('on', '1') === '1', count: () => index.length, get, set, reprep: async () => { cache.clear(); poolCache.clear(); ping(); } };
+  return { debug: (ds, fac) => { const t = toks(ds).filter(w => w.length > 3)[0] || toks(ds)[0] || '', hits = index.filter(f => toks(f.name).some(w => w === t || w.includes(t))); const mine = index.filter(f => String(f.faction).toLowerCase() === String(fac).toLowerCase()); return 'faction has ' + mine.length + ' models' + (mine.length ? ' (tallest ' + Math.max(...mine.map(f => f.h)).toFixed(2) + ')' : '') + '; name hits for "' + t + '": ' + (hits.length ? hits.slice(0, 3).map(f => f.faction + ': ' + f.name + ' h=' + f.h.toFixed(2)).join(' | ') : 'none'); }, variants: (ds, fac) => pool(ds, fac) || [], fig: m => fetchFig(m) || cache.get(m.key) || null, why: (ds, fac) => { const p = pool(ds, fac); return p ? p.map(f => f.faction + ': ' + f.name) : 'no match among ' + index.length + ' models'; }, load, pick, add, scan, importFactions, clearAll, factions, on: () => index.length > 0 && get('on', '1') === '1', count: () => index.length, get, set, reprep: async () => { cache.clear(); hiOrder.length = 0; poolCache.clear(); ping(); }, upgrade, frame, hiCount: () => index.filter(m => m.hi).length, hiTris: () => index.reduce((n, m) => n + (m.hi || 0), 0) };
 })();
 window.BDModels = BDModels; window.MODELIMP = MODELIMP;
 
@@ -284,6 +297,7 @@ window.BDModels = BDModels; window.MODELIMP = MODELIMP;
     e = { h: h || 1, r: r || 1 }; ext.set(fig, e); return e;
   }
   function upload(fig) {
+    fig = BDModels.upgrade(fig);
     R.clear(); const mb = new BF.MB(), e = extent(fig), cx = 30, cz = 22, rd = Math.max(e.r * 1.25, .8);
     for (let k = 0; k < 28; k++) { const a = k / 28 * 6.2832, b = (k + 1) / 28 * 6.2832, base = mb.n; mb.vtx([cx, .004, cz], [0, 1, 0], [.17, .17, .19], [0, 0]); mb.vtx([cx + Math.cos(a) * rd, .004, cz + Math.sin(a) * rd], [0, 1, 0], [.13, .13, .15], [0, 0]); mb.vtx([cx + Math.cos(b) * rd, .004, cz + Math.sin(b) * rd], [0, 1, 0], [.13, .13, .15], [0, 0]); mb.I.push(base, base + 2, base + 1); }
     BDModels.add(mb, fig, cx, 0, cz, 0); R.upload(mb, 'solid');
@@ -388,7 +402,7 @@ window.BDModels = BDModels; window.MODELIMP = MODELIMP;
       const solo = box.classList.contains('sch-3d');
       if (box._bd3 || box.closest('.tip-pop') || box.closest('#modal-box')) return;
       for (let i = cards.length - 1; i >= 0; i--) if (cards[i].box === box) cards.splice(i, 1);
-      const head = solo ? box : box.querySelector('.ds-head'); if (!head) return; const fig = BDModels.pick(box.dataset.ds3, box.dataset.fac3, box.dataset.key3); if (!fig) return; box._bd3 = 1;
+      const head = solo ? box : box.querySelector('.ds-head'); if (!head) return; const fig = BDModels.upgrade(BDModels.pick(box.dataset.ds3, box.dataset.fac3, box.dataset.key3)); if (!fig) return; box._bd3 = 1;
       const c2 = document.createElement('canvas'); c2.style.cssText = 'display:block;width:100%;height:100%;border-radius:inherit;touch-action:none'; let V;
       const sv = [R, cam, cv];
       try { cv = c2; R = new BF.Renderer(c2); R.q.shadow = 512; R.q.dpr = Math.min(window.devicePixelRatio || 1, 1.5); R.makeShadow(); cam = new BF.Cam(); cam.pitch = .38; upload(fig); V = { box, cv: c2, R, cam }; } catch (e) { console.warn('card 3D unavailable', e); R = sv[0]; cam = sv[1]; cv = sv[2]; return; }

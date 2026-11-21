@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.21-1405';
+  const VERSION = '2026.11.21-1413';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -130,7 +130,7 @@
     const css = document.createElement('style'); css.textContent = '#bdl-b{position:fixed;left:8px;bottom:8px;z-index:99999;width:30px;height:30px;border-radius:50%;border:1px solid #888;background:#222;color:#ddd;font:16px/1 sans-serif;cursor:pointer;opacity:.45}#bdl-b:hover{opacity:1}#bdl-p{position:fixed;left:8px;bottom:46px;z-index:99999;width:300px;background:#1d1d1d;color:#eee;border:1px solid #666;border-radius:8px;padding:12px;font:13px/1.4 sans-serif;display:none}#bdl-p input,#bdl-p button{font:inherit;margin:3px 0}#bdl-p input[type=password],#bdl-p input[type=text]{width:100%;box-sizing:border-box}#bdl-p button{padding:4px 8px;cursor:pointer}#bdl-p h4{margin:8px 0 2px;font-size:12px;color:#aaa;text-transform:uppercase}#bdl-s{color:#9c9;min-height:1.2em}';
     document.head.appendChild(css);
     const b = document.createElement('button'); b.id = 'bdl-b'; b.title = 'Desktop settings'; b.textContent = '⚙'; const p = document.createElement('div'); p.id = 'bdl-p';
-    p.innerHTML = '<b>Battle Drill desktop</b> <span style="color:#999">v' + VERSION + '</span><h4>Updates</h4><button id="bdl-u">Check for update</button><div id="bdl-s"></div><h4>Coach (Anthropic API key)</h4><input type="password" id="bdl-k" placeholder="sk-ant-…" autocomplete="off"><input type="text" id="bdl-m" placeholder="model"><button id="bdl-ks">Save key and model</button><h4>Your data</h4><button id="bdl-ex">Back up everything</button> <button id="bdl-im">Restore backup</button><h4>3D models</h4><div id="bdl-ms" style="color:#aaa"></div><button id="bdl-mi">Import models folder…</button><div id="bdl-mf" style="max-height:200px;overflow:auto"></div> <button id="bdl-mx">Remove</button><label style=\"display:block;margin:5px 0\"><input type="checkbox" id="bdl-mo"> Use my models on the 3D board</label><label style=\"display:block;margin:5px 0\"><input type="checkbox" id="bdl-mm"> Mirror left/right</label><label style=\"display:block;margin:5px 0\">Turn all models <select id="bdl-my"><option value="0">0°</option><option value="90">90°</option><option value="180">180°</option><option value="270">270°</option></select></label><label style=\"display:block;margin:5px 0\">Detail on import <select id="bdl-mq"><option value="1">High (about 10k triangles per model)</option><option value="2.5">Very high</option><option value="full">Full, no simplifying</option></select></label><h4>Window</h4><button id="bdl-f">Toggle full screen</button>';
+    p.innerHTML = '<b>Battle Drill desktop</b> <span style="color:#999">v' + VERSION + '</span><h4>Updates</h4><button id="bdl-u">Check for update</button><div id="bdl-s"></div><h4>Coach (Anthropic API key)</h4><input type="password" id="bdl-k" placeholder="sk-ant-…" autocomplete="off"><input type="text" id="bdl-m" placeholder="model"><button id="bdl-ks">Save key and model</button><h4>Your data</h4><button id="bdl-ex">Back up everything</button> <button id="bdl-im">Restore backup</button><h4>3D models</h4><div id="bdl-ms" style="color:#aaa"></div><button id="bdl-mi">Import models folder…</button><div id="bdl-mf" style="max-height:200px;overflow:auto"></div> <button id="bdl-mx">Remove</button><label style=\"display:block;margin:5px 0\"><input type="checkbox" id="bdl-mo"> Use my models on the 3D board</label><label style=\"display:block;margin:5px 0\"><input type="checkbox" id="bdl-mm"> Mirror left/right</label><label style=\"display:block;margin:5px 0\">Turn all models <select id="bdl-my"><option value="0">0°</option><option value="90">90°</option><option value="180">180°</option><option value="270">270°</option></select></label><label style=\"display:block;margin:5px 0\">Detail on import <select id="bdl-mq"><option value="1">Standard (about 10k triangles per model)</option><option value="2.5">Higher (about 25k)</option><option value="full">Full, no simplifying (very large)</option></select></label><label style=\"display:block;margin:5px 0\">Also keep a high-detail copy <select id="bdl-mh"><option value="">No</option><option value="hi">High (about 40k triangles, 100k for big models)</option><option value="max">Maximum (about 120k, 250k for big models)</option></select></label><div style="color:#999;font-size:.85em;margin:2px 0 6px">The high-detail copy is used in the datasheet previews. Re-import your models after changing either setting. Maximum uses a lot of disk space (roughly 3 MB per model).</div><label style=\"display:block;margin:5px 0\"><input type="checkbox" id="bdl-mb"> Use the high-detail models in battles</label><div id="bdl-mhs" style="color:#999;font-size:.85em"></div><h4>Window</h4><button id="bdl-f">Toggle full screen</button>';
     document.body.appendChild(css); document.body.appendChild(b); document.body.appendChild(p);
     const $ = id => p.querySelector('#' + id), say = t => { $('bdl-s').textContent = t; };
     b.onclick = () => { p.style.display = p.style.display === 'block' ? 'none' : 'block'; $('bdl-k').value = getKey(); $('bdl-m').value = getModel(); };
@@ -138,13 +138,16 @@
     $('bdl-ks').onclick = () => { try { localStorage.setItem(KEY_LS, $('bdl-k').value.trim()); localStorage.setItem(MODEL_LS, $('bdl-m').value.trim() || DEFAULT_MODEL); say('Saved on this computer only.'); } catch (e) { say('Could not save: ' + e.message); } };
     $('bdl-ex').onclick = async () => { try { const j = await dump(); await downloads.save({ filename: 'battle-drill-backup-' + new Date().toISOString().slice(0, 10) + '.json', data: JSON.stringify(j) }); say('Backup downloaded.'); } catch (e) { say('Backup failed: ' + e.message); } };
     $('bdl-im').onclick = () => { const i = document.createElement('input'); i.type = 'file'; i.accept = '.json'; i.onchange = async () => { try { await restore(JSON.parse(await i.files[0].text())); say('Restored. Reloading…'); setTimeout(() => location.reload(), 800); } catch (e) { say('Restore failed: ' + e.message); } }; i.click(); };
-    const M = () => window.BDModels, mstat = () => { const m = M(); $('bdl-ms').textContent = m && m.count() ? m.count() + ' models loaded: ' + Object.entries(m.factions()).sort().map(([k, v]) => k + ' ' + v).join(', ') + '.' : 'No models imported yet.'; };
+    const M = () => window.BDModels, mstat = () => { const m = M(); $('bdl-ms').textContent = m && m.count() ? m.count() + ' models loaded: ' + Object.entries(m.factions()).sort().map(([k, v]) => k + ' ' + v).join(', ') + '.' : 'No models imported yet.'; try { hstat(); } catch (e) { } };
     const mfx = () => { try { document.dispatchEvent(new Event('bd-models-changed')); window.dispatchEvent(new Event('bd-models-changed')); } catch (e) { } };
-    setTimeout(async () => { if (M()) { await M().load(); mstat(); $('bdl-mo').checked = M().get('on', '1') === '1'; $('bdl-mm').checked = M().get('mirror', '1') === '1'; $('bdl-my').value = M().get('yaw', '0'); $('bdl-mq').value = M().get('q', '1'); mfx(); } }, 0);
+    setTimeout(async () => { if (M()) { await M().load(); mstat(); $('bdl-mo').checked = M().get('on', '1') === '1'; $('bdl-mm').checked = M().get('mirror', '1') === '1'; $('bdl-my').value = M().get('yaw', '0'); $('bdl-mq').value = M().get('q', '1'); $('bdl-mh').value = M().get('hiq', 'hi'); $('bdl-mb').checked = M().get('hiBattle', '1') === '1'; hstat(); mfx(); } }, 0);
     $('bdl-mo').onchange = () => { M().set('on', $('bdl-mo').checked ? '1' : '0'); mfx(); };
     $('bdl-mm').onchange = async () => { M().set('mirror', $('bdl-mm').checked ? '1' : '0'); await M().reprep(); mfx(); };
     $('bdl-my').onchange = async () => { M().set('yaw', $('bdl-my').value); await M().reprep(); mfx(); };
+    const hstat = () => { const m = M(); if (!m) return; const n = m.hiCount ? m.hiCount() : 0; $('bdl-mhs').textContent = n ? n + ' models have a high-detail copy (about ' + Math.round(m.hiTris() / 1000) + 'k triangles in total).' : 'No high-detail copies yet. Pick a level above, then import your models again.'; };
     $('bdl-mq').onchange = () => M().set('q', $('bdl-mq').value);
+    $('bdl-mh').onchange = () => M().set('hiq', $('bdl-mh').value);
+    $('bdl-mb').onchange = () => { M().set('hiBattle', $('bdl-mb').checked ? '1' : '0'); mfx(); };
     $('bdl-mx').onclick = async () => { await M().clearAll(); mstat(); mfx(); say('Models removed.'); };
     $('bdl-mi').onclick = () => {
       const i = document.createElement('input'); i.type = 'file'; i.multiple = true; i.setAttribute('webkitdirectory', ''); i.onchange = async () => {
@@ -157,7 +160,7 @@
         $('bdl-fg').onclick = async () => {
           const names = cbs().filter(c => c.checked).map(c => sc.factions[+c.dataset.k].name); if (!names.length) return;
           const q = $('bdl-mq').value, t0 = Date.now(); $('bdl-fg').disabled = true;
-          try { const r = await M().importFactions(sc, names, q === 'full' ? { full: true } : { scale: +q }, t => { $('bdl-ms').textContent = t; }); box.textContent = ''; const fl = Object.entries(r.why || {}).flatMap(([f, l]) => l.map(x => f + ' - ' + x)); if (fl.length) { const dt = document.createElement('details'), sm = document.createElement('summary'), pr = document.createElement('pre'); sm.textContent = 'Show all ' + fl.length + ' skipped'; pr.style.cssText = 'white-space:pre-wrap;font-size:11px;max-height:220px;overflow:auto;user-select:text'; pr.textContent = fl.join('\n'); dt.append(sm, pr); box.appendChild(dt); } mstat(); mfx(); say('Imported ' + r.ok + ' models' + (r.bad ? ' (' + r.bad + ' skipped, e.g. ' + Object.values(r.why).flat().slice(0, 3).join('; ') + ')' : '') + ' in ' + Math.round((Date.now() - t0) / 1000) + ' s.'); }
+          try { const r = await M().importFactions(sc, names, q === 'full' ? { full: true, hi: $('bdl-mh').value } : { scale: +q, hi: $('bdl-mh').value }, t => { $('bdl-ms').textContent = t; }); box.textContent = ''; const fl = Object.entries(r.why || {}).flatMap(([f, l]) => l.map(x => f + ' - ' + x)); if (fl.length) { const dt = document.createElement('details'), sm = document.createElement('summary'), pr = document.createElement('pre'); sm.textContent = 'Show all ' + fl.length + ' skipped'; pr.style.cssText = 'white-space:pre-wrap;font-size:11px;max-height:220px;overflow:auto;user-select:text'; pr.textContent = fl.join('\n'); dt.append(sm, pr); box.appendChild(dt); } mstat(); mfx(); say('Imported ' + r.ok + ' models' + (r.bad ? ' (' + r.bad + ' skipped, e.g. ' + Object.values(r.why).flat().slice(0, 3).join('; ') + ')' : '') + ' in ' + Math.round((Date.now() - t0) / 1000) + ' s.'); }
           catch (e) { say('Import failed: ' + ((e && e.message) || e)); mstat(); $('bdl-fg').disabled = false; }
         };
       }; i.click();
@@ -308,7 +311,8 @@ const MODELIMP = (function () {
     }
     let dmn = [1e9, 1e9, 1e9], dmx = [-1e9, -1e9, -1e9];
     for (let i = 0; i < parts.length; i++) { const g = raw[i]; if (!g) continue; const M = W[i], st = Math.max(1, Math.floor(g.X.length / 3 / 400)); for (let k = 0; k < g.X.length; k += 3 * st) { const x = g.X[k], y = g.X[k + 1], z = g.X[k + 2], q = [M[0] * x + M[1] * y + M[2] * z + M[3], M[4] * x + M[5] * y + M[6] * z + M[7], M[8] * x + M[9] * y + M[10] * z + M[11]]; for (let j = 0; j < 3; j++) { dmn[j] = Math.min(dmn[j], q[j]); dmx[j] = Math.max(dmx[j], q[j]); } } }
-    const diag = Math.hypot(dmx[0] - dmn[0], dmx[1] - dmn[1], dmx[2] - dmn[2]), budget = opt.budget || (diag > 5 ? 30000 : 10000) * (opt.scale || 1), out = []; let tris = 0, mnx = 1e9, mny = 1e9, mnz = 1e9, mxx = -1e9, mxy = -1e9, mxz = -1e9;
+    const diag = Math.hypot(dmx[0] - dmn[0], dmx[1] - dmn[1], dmx[2] - dmn[2]), stdBudget = opt.budget || (diag > 5 ? 30000 : 10000) * (opt.scale || 1);
+    const mkPass = (budget, u32) => { const out = []; let tris = 0, mnx = 1e9, mny = 1e9, mnz = 1e9, mxx = -1e9, mxy = -1e9, mxz = -1e9;
     for (let i = 0; i < parts.length; i++) {
       const g = raw[i]; if (!g) continue; const tr = g.T.length / 3, share = opt.full ? 1e9 : Math.max(400, Math.round(budget * tr / Math.max(1, total)));
       const d = decimate(g, share), M = W[i], V = new Float32Array(d.X.length);
@@ -319,9 +323,13 @@ const MODELIMP = (function () {
       }
       const gg = { X: V, T: Int32Array.from(d.T) }; const N = finish(gg);
       const C8 = new Uint8Array(d.C.length); for (let k = 0; k < C8.length; k++) C8[k] = Math.round(clamp(d.C[k], 0, 1) * 255);
-      out.push({ V, N, C: C8, T: Uint16Array.from(gg.T) }); tris += gg.T.length / 3;
+      out.push({ V, N, C: C8, T: u32 ? Uint32Array.from(gg.T) : Uint16Array.from(gg.T) }); tris += gg.T.length / 3;
     }
-    return { name: unit.name, parts: out, tris, bbox: [mnx, mny, mnz, mxx, mxy, mxz], big: diag > 5 };
+    return { name: unit.name, parts: out, tris, bbox: [mnx, mny, mnz, mxx, mxy, mxz], big: diag > 5 }; };
+    const res = mkPass(stdBudget, false);
+    /* a second, richer copy for previews and (optionally) the battle: High about 4x, Maximum about 12x the standard triangles, capped so the library stays a sensible size */
+    if (opt.hi === 'hi' || opt.hi === 'max') { const hb = opt.hi === 'max' ? (diag > 5 ? 250000 : 120000) : (diag > 5 ? 100000 : 40000); if (hb > stdBudget * 1.5) res.hi = mkPass(hb, true); }
+    return res;
   }
   return { parseOBJ, decodeTex, expand, decimate, build, mat };
 })();
@@ -350,11 +358,16 @@ const BDModels = (function () {
     }) };
   }
   async function load() { try { const d = await idbOpen(); index = await rq(tx(d, 'index').objectStore('index').getAll()); d.close(); } catch (e) { index = []; } cache.clear(); loading.clear(); poolCache.clear(); return index.length; }
-  function fetchFig(m) {
-    if (cache.has(m.key)) return cache.get(m.key); if (loading.has(m.key)) return null; loading.add(m.key);
-    idbOpen().then(async d => { const rec = await rq(tx(d, 'figs').objectStore('figs').get(m.key)); d.close(); if (!rec) console.warn('[BDModels] indexed but not stored:', m.key, m.name); if (rec) { if (cache.size > 350) cache.delete(cache.keys().next().value); cache.set(m.key, prep(rec)); } loading.delete(m.key); ping(); }).catch(e => { loading.delete(m.key); console.warn('[BDModels] could not load', m.name, e); });
+  const figOf = new WeakMap(), hiOrder = []; let hiLeft = 0;
+  function fetchFig(m, hi) {
+    const k = hi ? m.key + '#hi' : m.key;
+    if (cache.has(k)) return cache.get(k); if (loading.has(k)) return null; loading.add(k);
+    idbOpen().then(async d => { const rec = await rq(tx(d, 'figs').objectStore('figs').get(k)); d.close(); if (!rec) console.warn('[BDModels] indexed but not stored:', k, m.name); if (rec) { if (hi) { hiOrder.push(k); while (hiOrder.length > 40) cache.delete(hiOrder.shift()); } else if (cache.size > 350) cache.delete(cache.keys().next().value); const fg = prep(rec); figOf.set(fg, m); cache.set(k, fg); } loading.delete(k); ping(); }).catch(e => { loading.delete(k); console.warn('[BDModels] could not load', m.name, e); });
     return null;
   }
+  /* the richer copy of a model you already hold (previews): it arrives a moment later and the preview refreshes */
+  function upgrade(fig) { if (!fig || get('hiPrev', '1') !== '1') return fig; const m = figOf.get(fig); if (!m || !m.hi) return fig; return fetchFig(m, true) || fig; }
+  const frame = n => { hiLeft = n == null ? 450000 : n; };
   /* datasheet name (+faction) -> which stored models may stand in for it */
   const DG = f => /death guard/i.test(f || ''), ANY = () => true;
   const RULES = [
@@ -410,7 +423,10 @@ const BDModels = (function () {
     if (idx > 0 && idx % 4 === 3 && spec.length) return spec;
     return plain.length ? plain : p;
   }
-  function pick(ds, faction, key, idx, n) { if (!index.length || get('on', '1') !== '1') return null; let p = pool(ds, faction); if (!p) return null; p = roleFilter(p, idx | 0, n | 0); const m = p[hash(String(key)) % p.length]; return fetchFig(m) || cache.get(m.key) || null; }
+  function pick(ds, faction, key, idx, n, hi) { if (!index.length || get('on', '1') !== '1') return null; let p = pool(ds, faction); if (!p) return null; p = roleFilter(p, idx | 0, n | 0); const m = p[hash(String(key)) % p.length];
+    /* battle: use the richer copy while the scene stays within a triangle budget (so a big army never stalls the redraw); the standard copy fills in until it has loaded */
+    if (hi && m.hi && hiLeft >= m.hi) { const f = fetchFig(m, true); if (f) { hiLeft -= m.hi; return f; } }
+    const f0 = fetchFig(m) || cache.get(m.key) || null; if (f0 && !figOf.has(f0)) figOf.set(f0, m); return f0; }
   function add(mb, fig, x, y, z, yaw) {
     const cy = Math.cos(yaw), sy = Math.sin(yaw);
     for (const g of fig.parts) {
@@ -449,7 +465,7 @@ const BDModels = (function () {
           const r = await MODELIMP.build(u, getMesh, getTex, opt); if (!r.parts.length) { bad++; (why[fac.name] = why[fac.name] || []).push(u.name + ': empty' + (MODELIMP.build.err ? ' (' + MODELIMP.build.err + ')' : '')); continue; }
           let hy = 0; for (const p of r.parts) for (let k = 1; k < p.V.length; k += 3) if (p.V[k] > hy) hy = p.V[k];
           const key = fac.name + '|' + i, rec = { key, faction: fac.name, name: u.name, big: r.big, tris: r.tris, parts: r.parts.map(p => ({ V: p.V, N: p.N, C: p.C, T: p.T })) };
-          const t = tx(d, ['figs', 'index'], 'readwrite'); t.objectStore('figs').put(rec); t.objectStore('index').put({ key, faction: fac.name, name: u.name, h: hy, tris: r.tris }); await done(t); ok++;
+          const t = tx(d, ['figs', 'index'], 'readwrite'); t.objectStore('figs').put(rec); if (r.hi) t.objectStore('figs').put({ key: key + '#hi', faction: fac.name, name: u.name, big: r.big, tris: r.hi.tris, parts: r.hi.parts.map(p => ({ V: p.V, N: p.N, C: p.C, T: p.T })) }); t.objectStore('index').put({ key, faction: fac.name, name: u.name, h: hy, tris: r.tris, hi: r.hi ? r.hi.tris : 0 }); await done(t); ok++;
         } catch (e) { bad++; (why[fac.name] = why[fac.name] || []).push(u.name + ': ' + (e && e.message || e)); console.warn('model skipped', u.name, e); }
         if (i % 4 === 0) await new Promise(r => setTimeout(r, 0));
       }
@@ -458,7 +474,7 @@ const BDModels = (function () {
   }
   async function clearAll() { const d = await idbOpen(); const t = tx(d, ['figs', 'index'], 'readwrite'); t.objectStore('figs').clear(); t.objectStore('index').clear(); await done(t); d.close(); index = []; cache.clear(); poolCache.clear(); ping(); }
   const factions = () => { const c = {}; for (const m of index) c[m.faction] = (c[m.faction] || 0) + 1; return c; };
-  return { debug: (ds, fac) => { const t = toks(ds).filter(w => w.length > 3)[0] || toks(ds)[0] || '', hits = index.filter(f => toks(f.name).some(w => w === t || w.includes(t))); const mine = index.filter(f => String(f.faction).toLowerCase() === String(fac).toLowerCase()); return 'faction has ' + mine.length + ' models' + (mine.length ? ' (tallest ' + Math.max(...mine.map(f => f.h)).toFixed(2) + ')' : '') + '; name hits for "' + t + '": ' + (hits.length ? hits.slice(0, 3).map(f => f.faction + ': ' + f.name + ' h=' + f.h.toFixed(2)).join(' | ') : 'none'); }, variants: (ds, fac) => pool(ds, fac) || [], fig: m => fetchFig(m) || cache.get(m.key) || null, why: (ds, fac) => { const p = pool(ds, fac); return p ? p.map(f => f.faction + ': ' + f.name) : 'no match among ' + index.length + ' models'; }, load, pick, add, scan, importFactions, clearAll, factions, on: () => index.length > 0 && get('on', '1') === '1', count: () => index.length, get, set, reprep: async () => { cache.clear(); poolCache.clear(); ping(); } };
+  return { debug: (ds, fac) => { const t = toks(ds).filter(w => w.length > 3)[0] || toks(ds)[0] || '', hits = index.filter(f => toks(f.name).some(w => w === t || w.includes(t))); const mine = index.filter(f => String(f.faction).toLowerCase() === String(fac).toLowerCase()); return 'faction has ' + mine.length + ' models' + (mine.length ? ' (tallest ' + Math.max(...mine.map(f => f.h)).toFixed(2) + ')' : '') + '; name hits for "' + t + '": ' + (hits.length ? hits.slice(0, 3).map(f => f.faction + ': ' + f.name + ' h=' + f.h.toFixed(2)).join(' | ') : 'none'); }, variants: (ds, fac) => pool(ds, fac) || [], fig: m => fetchFig(m) || cache.get(m.key) || null, why: (ds, fac) => { const p = pool(ds, fac); return p ? p.map(f => f.faction + ': ' + f.name) : 'no match among ' + index.length + ' models'; }, load, pick, add, scan, importFactions, clearAll, factions, on: () => index.length > 0 && get('on', '1') === '1', count: () => index.length, get, set, reprep: async () => { cache.clear(); hiOrder.length = 0; poolCache.clear(); ping(); }, upgrade, frame, hiCount: () => index.filter(m => m.hi).length, hiTris: () => index.reduce((n, m) => n + (m.hi || 0), 0) };
 })();
 window.BDModels = BDModels; window.MODELIMP = MODELIMP;
 
@@ -487,6 +503,7 @@ window.BDModels = BDModels; window.MODELIMP = MODELIMP;
     e = { h: h || 1, r: r || 1 }; ext.set(fig, e); return e;
   }
   function upload(fig) {
+    fig = BDModels.upgrade(fig);
     R.clear(); const mb = new BF.MB(), e = extent(fig), cx = 30, cz = 22, rd = Math.max(e.r * 1.25, .8);
     for (let k = 0; k < 28; k++) { const a = k / 28 * 6.2832, b = (k + 1) / 28 * 6.2832, base = mb.n; mb.vtx([cx, .004, cz], [0, 1, 0], [.17, .17, .19], [0, 0]); mb.vtx([cx + Math.cos(a) * rd, .004, cz + Math.sin(a) * rd], [0, 1, 0], [.13, .13, .15], [0, 0]); mb.vtx([cx + Math.cos(b) * rd, .004, cz + Math.sin(b) * rd], [0, 1, 0], [.13, .13, .15], [0, 0]); mb.I.push(base, base + 2, base + 1); }
     BDModels.add(mb, fig, cx, 0, cz, 0); R.upload(mb, 'solid');
@@ -591,7 +608,7 @@ window.BDModels = BDModels; window.MODELIMP = MODELIMP;
       const solo = box.classList.contains('sch-3d');
       if (box._bd3 || box.closest('.tip-pop') || box.closest('#modal-box')) return;
       for (let i = cards.length - 1; i >= 0; i--) if (cards[i].box === box) cards.splice(i, 1);
-      const head = solo ? box : box.querySelector('.ds-head'); if (!head) return; const fig = BDModels.pick(box.dataset.ds3, box.dataset.fac3, box.dataset.key3); if (!fig) return; box._bd3 = 1;
+      const head = solo ? box : box.querySelector('.ds-head'); if (!head) return; const fig = BDModels.upgrade(BDModels.pick(box.dataset.ds3, box.dataset.fac3, box.dataset.key3)); if (!fig) return; box._bd3 = 1;
       const c2 = document.createElement('canvas'); c2.style.cssText = 'display:block;width:100%;height:100%;border-radius:inherit;touch-action:none'; let V;
       const sv = [R, cam, cv];
       try { cv = c2; R = new BF.Renderer(c2); R.q.shadow = 512; R.q.dpr = Math.min(window.devicePixelRatio || 1, 1.5); R.makeShadow(); cam = new BF.Cam(); cam.pitch = .38; upload(fig); V = { box, cv: c2, R, cam }; } catch (e) { console.warn('card 3D unavailable', e); R = sv[0]; cam = sv[1]; cv = sv[2]; return; }
@@ -16689,7 +16706,7 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
     addEventListener('blur', () => keys.clear());
     /* controls */
     const bar = document.createElement('div'); bar.id = 'b-3dbar'; bar.hidden = true;
-    bar.innerHTML = '<button type="button" id="b-3dmore" aria-expanded="false" title="3D view options and controls">View options \u25BE</button><div id="b-3dpanel"><select id="b-3dtheme" aria-label="Terrain theme"><option value="auto">Theme: auto</option><option value="desert">Desert ruins</option><option value="base">Hive base</option><option value="marsh">Rot marsh</option><option value="ice">Frozen hive</option><option value="forge">Forge world</option><option value="jungle">Death world</option><option value="hive">Hive city</option></select><button type="button" data-o="zones" aria-pressed="true" title="Show or hide the deployment zones">Zones</button><button type="button" data-o="objs" aria-pressed="true" title="Show or hide the objective markers">Objectives</button><button type="button" data-o="dice" aria-pressed="true" title="Show or hide the dice trays">Dice trays</button><button type="button" data-o="guides" aria-pressed="true" title="Show or hide the placement guides: 8 inch rings and the 6 inch edge band">Guides</button><button type="button" data-o="badges" aria-pressed="true" title="Health pips and status markers over each unit">Unit badges</button><button type="button" data-o="fx" aria-pressed="true" title="Tracers, muzzle flashes, impacts and damage numbers when attacks resolve">Combat effects</button><button type="button" id="b-3dsight" aria-pressed="true" title="Show or hide sight lines, with the distance to every enemy">Sight lines</button><select id="b-3dq" aria-label="Graphics quality" title="Graphics quality"><option value="low">Quality: low</option><option value="std">Quality: standard</option><option value="high">Quality: high</option><option value="auto">Quality: auto</option></select><button type="button" id="b-3dfps" title="Show frame time, resolution and draw load">Stats</button><button type="button" id="b-3dchk" title="List which 3D model each unit on the board matched">Model check</button><button type="button" id="b-3dtop" title="Top-down view">Top</button><button type="button" id="b-3dtab" title="Tabletop view">Table</button><span id="b-3dnote">Drag = select units · Alt-drag = turn models · right-drag = orbit · WASD move · Q/E turn view · Z/X zoom · right-click or 1 = datasheet</span></div>';
+    bar.innerHTML = '<button type="button" id="b-3dmore" aria-expanded="false" title="3D view options and controls">View options \u25BE</button><div id="b-3dpanel"><select id="b-3dtheme" aria-label="Terrain theme"><option value="auto">Theme: auto</option><option value="desert">Desert ruins</option><option value="base">Hive base</option><option value="marsh">Rot marsh</option><option value="ice">Frozen hive</option><option value="forge">Forge world</option><option value="jungle">Death world</option><option value="hive">Hive city</option></select><button type="button" data-o="zones" aria-pressed="true" title="Show or hide the deployment zones">Zones</button><button type="button" data-o="objs" aria-pressed="true" title="Show or hide the objective markers">Objectives</button><button type="button" data-o="dice" aria-pressed="true" title="Show or hide the dice trays">Dice trays</button><button type="button" data-o="guides" aria-pressed="true" title="Show or hide the placement guides: 8 inch rings and the 6 inch edge band">Guides</button><button type="button" data-o="badges" aria-pressed="true" title="Health pips and status markers over each unit">Unit badges</button><button type="button" data-o="fx" aria-pressed="true" title="Tracers, muzzle flashes, impacts and damage numbers when attacks resolve">Combat effects</button><button type="button" id="b-3dsight" aria-pressed="true" title="Show or hide sight lines, with the distance to every enemy">Sight lines</button><select id="b-3dq" aria-label="Graphics quality" title="Graphics quality"><option value="low">Quality: low</option><option value="std">Quality: standard</option><option value="high">Quality: high</option><option value="auto">Quality: auto</option></select><button type="button" id="b-3dfps" title="Show frame time, resolution and draw load">Stats</button><button type="button" id="b-3dchk" title="List which 3D model each unit on the board matched">Model check</button><button type="button" id="b-3dhi" title="Use the high-detail copy of each model on the board (needs models imported with a high-detail copy)">High detail</button><button type="button" id="b-3dtop" title="Top-down view">Top</button><button type="button" id="b-3dtab" title="Tabletop view">Table</button><span id="b-3dnote">Drag = select units · Alt-drag = turn models · right-drag = orbit · WASD move · Q/E turn view · Z/X zoom · right-click or 1 = datasheet</span></div>';
     bar.querySelector('#b-3dmore').addEventListener('click', () => { const o = bar.classList.toggle('open'); bar.querySelector('#b-3dmore').setAttribute('aria-expanded', String(o)); });
     holder.appendChild(bar);
     bar.querySelectorAll('[data-o]').forEach(b => b.addEventListener('click', () => { BF3D.opt[b.dataset.o] = !BF3D.opt[b.dataset.o]; try { localStorage.setItem(OPT_KEY, JSON.stringify(BF3D.opt)); } catch (e) { } applyOpts(); if (b.dataset.o === 'guides') buildGhost(); }));
@@ -16698,6 +16715,9 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
     { const qs = bar.querySelector('#b-3dq'), Rn = BF3D.R; qs.value = Rn.q.auto ? 'auto' : Rn.q.level === 0 ? 'low' : Rn.q.level === 2 ? 'high' : 'std';
       qs.addEventListener('change', () => { const v = qs.value; Rn.q.auto = v === 'auto'; try { localStorage.setItem('bd.q', v); } catch (e) { } gfxLevel(Rn, v === 'auto' ? (Rn.q.level == null ? 1 : Rn.q.level) : v === 'low' ? 0 : v === 'high' ? 2 : 1); Rn.q.fr = []; });
       bar.querySelector('#b-3dfps').addEventListener('click', () => { BF3D.stats = !BF3D.stats; BF3D.dirty = true; kick(); }); }
+    { const hb = bar.querySelector('#b-3dhi'), sync = () => { const has = window.BDModels && BDModels.hiCount && BDModels.hiCount() > 0, on = has && BDModels.get('hiBattle', '1') === '1'; hb.hidden = !(window.BDModels && BDModels.on && BDModels.on()); hb.setAttribute('aria-pressed', on ? 'true' : 'false'); hb.title = has ? (on ? 'High-detail models are on. Click to use the lighter standard models.' : 'Use the high-detail copy of each model on the board') : 'No high-detail copies yet. In the desktop settings (the gear), pick a level under "Also keep a high-detail copy" and import your models again.'; hb.style.opacity = has ? '' : '.55'; };
+      hb.addEventListener('click', () => { if (!(BDModels.hiCount && BDModels.hiCount())) { sync(); return; } BDModels.set('hiBattle', BDModels.get('hiBattle', '1') === '1' ? '0' : '1'); sync(); try { window.dispatchEvent(new Event('bd-models-changed')); } catch (e) { } });
+      sync(); window.addEventListener('bd-models-changed', sync); }
     bar.querySelector('#b-3dchk').addEventListener('click', () => {
       const B = window.BDModels, L = [];
       if (!B) L.push('Model library code is not loaded.'); else {
@@ -16762,6 +16782,7 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
   function nearestFoe(u) { let best = null, bd = 1e9; for (const o of G.units) { if (!o.alive || !o.placed || o.side === u.side) continue; const d = Math.hypot(o.x - u.x, o.y - u.y); if (d < bd) { bd = d; best = o; } } return best; }
   const defFace = u => { const foe = nearestFoe(u); return foe ? Math.atan2(foe.y - u.y, foe.x - u.x) : (u.side === 'player' ? -1.5708 : 1.5708); };
   function buildDyn() {
+    try { if (window.BDModels && BDModels.frame) BDModels.frame(BDModels.get('hiBattle', '1') === '1' ? 450000 : 0); } catch (e) { }
     const mb = new BFX.MB(), H = BF3D.map ? BF3D.map.H : () => 0, S = (typeof mmOn === 'function' && G.mm && mmOn()) ? G.mm : null, mu = S ? mmUnit() : null, units = alive().concat(mu && !mu.placed && !S.fresh ? [mu] : []), total = units.reduce((s, u) => s + (u.mods ? u.mods.length : 1), 0), lo = total > 30;
     const occ = BF3D.occ = []; const bad = new Set(); if (S) { try { for (const v of mmCheck()) for (const id of (v.ids || [])) bad.add(id); } catch (e) { } }
     const generic = (p, m, sh, side, selm) => { const gy = (H(p.x, p.y) + (p.e || 0)), col = selm ? [1, .82, .3] : (SIDEC[side] || [1, 1, 1]), hull = !!(sh.hw || sh.hh), rr = hull ? Math.max(sh.hw, sh.hh || 0) + sh.rho : m.r; if (hull) BFX.box(mb, p.x, gy + .7, p.y, (sh.hw + sh.rho) * 2, 1.4, (sh.hh + sh.rho) * 2 || sh.rho * 2, -(sh.rot || 0), shade3(SIDEC[side] || [1, 1, 1], .55), [.1, 0]); else BFX.tube(mb, [p.x, gy, p.y], [p.x, gy + 1.5, p.y], m.r * .7, m.r * .5, 10, shade3(SIDEC[side] || [1, 1, 1], .55), [.1, 0], true); ring(mb, p.x, gy + .05, p.y, rr * .96, rr + .22, col, 24); };
@@ -16772,7 +16793,7 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
       let drawn = 0;
       if (u.mods && u.mods.length) for (const m of u.mods) {
         const sp = (S && mu === u && !S.fresh) ? S.pos.get(m.id) : null, p = sp ? { x: sp.x, y: sp.y, e: elevOf(u) } : { x: u.x + m.dx, y: u.y + m.dy, e: elevOf(u) }, rv = sp ? (S.rot.get(m.id) || 0) : (m.rot || 0), sh = shAt(m, p, sp ? rv : undefined), a = m.leader ? lArchOf(u, m, larch) : arch; occ.push({ x: p.x, y: p.y, r: ((sh.hw || sh.hh) ? Math.max(sh.hw, sh.hh || 0) + (sh.rho || 0) : m.r) + .12 });
-        const _rf = (window.BDModels && BDModels.on()) ? BDModels.pick(m.leader && u.leader ? ((leadersOf(u)[m.lid || 0] || u.leader).ds || (leadersOf(u)[m.lid || 0] || u.leader).name) : (u.ds || u.name), miniFactionOf(u), u.id + ':' + m.id, m.leader ? 0 : u.mods.indexOf(m) , m.leader ? 1 : u.mods.length) : null;
+        const _rf = (window.BDModels && BDModels.on()) ? BDModels.pick(m.leader && u.leader ? ((leadersOf(u)[m.lid || 0] || u.leader).ds || (leadersOf(u)[m.lid || 0] || u.leader).name) : (u.ds || u.name), miniFactionOf(u), u.id + ':' + m.id, m.leader ? 0 : u.mods.indexOf(m) , m.leader ? 1 : u.mods.length, true) : null;
         if (_rf) { const hull0 = !!(sh.hw || sh.hh), gy0 = (H(p.x, p.y) + (p.e || 0)), fa0 = (m.face !== undefined ? m.face : (u.face !== undefined ? u.face : face)) + rv; BDModels.add(mb, _rf, p.x, gy0, p.y, hull0 ? 1.5708 - (sh.rot || 0) : 1.5708 - fa0); if (!hull0 && BF3D.rot && BF3D.rot.has(m)) arrow(mb, p.x, gy0, p.y, fa0, m.r);
           const rc = (S && mu === u && bad.has(m.id)) ? [1, .25, .2] : (S && mu === u && S.sel.has(m.id)) ? [1, .82, .3] : (SIDEC[side] || [1, 1, 1]);
           if (!hull0) ring(mb, p.x, gy0 + .13, p.y, m.r * .96, m.r + .22, rc, 24); else ring(mb, p.x, gy0 + .13, p.y, Math.max(sh.hw, sh.hh || 0) + sh.rho * .9, Math.max(sh.hw, sh.hh || 0) + sh.rho + .2, SIDEC[side] || [1, 1, 1], 32); drawn++; continue; }
