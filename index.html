@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.20-0033';
+  const VERSION = '2026.11.21-0201';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -15928,7 +15928,9 @@ function wallRun(mb, a, b, o, rng) {
     let y = 0; const off = (rng() - .5) * .06, nx = -uz * off, nz = ux * off;
     while (y < top - .02) { const ch = Math.min(top - y, .5 + rng() * .35); box(mb, cx + nx, y, cz + nz, w, ch, o.th * (1 + (rng() - .5) * .12), ry, vary(o.col, rng, o.var || .1), [o.grit == null ? .9 : o.grit, 0], .025, rng); y += ch; }
     if (win && o.lintel && hh > (o.sill || 1) + 1.9) { const y0 = (o.sill || 1) + 1.8; box(mb, cx, y0, cz, w, hh - y0, o.th, ry, vary(shade(o.col, .95), rng, .08), [.9, 0], .02, rng); }
-    if (o.moss && !win && rng() < .6) blob(mb, cx, top - .05, cz, w * .75, .22 + rng() * .15, o.th * .85, o.moss, [.8594, 0], rng, .4);
+    if (o.moss && !win && rng() < (o.damp ? .78 : .6)) blob(mb, cx, top - .05, cz, w * .78, .24 + rng() * .2, o.th * .9, o.moss, [.8594, 0], rng, .4);
+    if (o.damp) { box(mb, cx + nx, 0, cz + nz, w * 1.01, .2 + rng() * .24, o.th * 1.08, ry, vary(o.damp, rng, .2), [.9, 0], .03, rng); if (rng() < .3) blob(mb, cx + nx, .1, cz + nz, w * .5, .3, o.th * 1.15, vary(o.damp, rng, .3), [.86, 0], rng, .5); }
+    if (o.vines && !win && rng() < .14) { const sd2 = rng() < .5 ? 1 : -1, fx = cx - uz * sd2 * (o.th / 2 + .03), fz = cz + ux * sd2 * (o.th / 2 + .03), ln = Math.min(top - .2, .9 + rng() * 1.9); for (let q = 0; q < 2; q++) tube(mb, [fx + ux * (q - .5) * .25, top - .02, fz + uz * (q - .5) * .25], [fx + ux * (q - .5) * .3, top - ln * (.7 + q * .3), fz + uz * (q - .5) * .3], .035, .012, 3, [.1, .22, .07], [.4, 0], false); }
   }
 }
 function pillar(mb, x, z, h, r, col, rng, m) { const hh = h * (.7 + rng() * .3); tube(mb, [x, 0, z], [x + (rng() - .5) * .1, hh, z], r, r * .86, 7, col, m || [.9, 0]); blob(mb, x, hh, z, r * 1.05, .22, r * 1.05, shade(col, .92), m || [.9, 0], rng, .5); }
@@ -15997,22 +15999,38 @@ function propsBase(mb, r, rng, i) {
 function scatterBase(mb, rng, ok, H) { for (let i = 0; i < 70; i++) { const x = rng() * BW, z = rng() * BH; if (!ok(x, z, .6)) continue; const s = .03 + rng() * .06; box(mb, x, 0, z, s * 2, s, s * 1.4, rng() * 3, vary([.22, .22, .23], rng, .2), [.8, 0], .01, rng); } }
 
 /* ---------- theme: Rot Marsh (Death Guard) ---------- */
-const MOSSY = [.2, .22, .18], MOSS = [.07, .13, .05];
+const MOSSY = [.2, .18, .155], MOSS = [.1, .22, .06], DAMP = [.06, .1, .055];
 let DECAL = null;
 function deadTree(mb, x, z, h, rng) {
   let p = [x, 0, z], th = .36; const bark = [.14, .11, .08];
   for (let k = 0; k < 3; k++) { const q = [p[0] + (rng() - .5) * .5, p[1] + h / 3, p[2] + (rng() - .5) * .5]; tube(mb, p, q, th, th * .72, 6, bark, [.9, 0], k === 2); p = q; th *= .72; }
   for (let k = 0; k < 4; k++) { const a = rng() * 6.283, s = p[1] * (.45 + rng() * .35), st = [x, s, z], en = [x + Math.cos(a) * (1.2 + rng()), s + .5 + rng() * 1.2, z + Math.sin(a) * (1.2 + rng())]; tube(mb, st, en, .13, .03, 5, bark, [.9, 0]); }
+  /* gnarled buttress roots, hanging vines and moss clots so the dead trees read as old and wet */
+  for (let k = 0; k < 4; k++) { const a = rng() * 6.283, L = .7 + rng() * .8; tube(mb, [x + Math.cos(a) * .1, .6 + rng() * .3, z + Math.sin(a) * .1], [x + Math.cos(a) * L, 0, z + Math.sin(a) * L], .2, .07, 5, bark, [.9, 0]); }
+  for (let k = 0; k < 6; k++) { const a = rng() * 6.283, s = p[1] * (.45 + rng() * .4), bx = x + Math.cos(a) * (.5 + rng() * .9), bz = z + Math.sin(a) * (.5 + rng() * .9), by = s + .3 + rng() * .7, ln = 1 + rng() * 1.7; tube(mb, [bx, by, bz], [bx + (rng() - .5) * .2, Math.max(.15, by - ln), bz + (rng() - .5) * .2], .03, .012, 3, [.1, .22, .07], [.4, 0], false); if (rng() < .5) blob(mb, bx, by, bz, .1, .06, .1, [.14, .3, .08], [.4, 0], rng, .5); }
+  blob(mb, x, .15, z, .5, .2, .5, [.1, .22, .06], [.86, 0], rng, .5);
 }
 function propsMarsh(mb, r, rng, i) {
   box(mb, r.x + r.w / 2, 0, r.y + r.h / 2, r.w - .3, .08, r.h - .3, 0, [.12, .13, .11], [.9, 0], .05, rng);
-  for (const s of r.walls) { const [a, b] = sideIn(r, s, .28); wallRun(mb, a, b, { h: 3.8 + rng() * 1.6, th: .55, col: MOSSY, windows: 1 + Math.floor(rng() * 2), sill: .9, lintel: true, moss: MOSS, var: .12 }, rng); }
+  for (const s of r.walls) { const [a, b] = sideIn(r, s, .28); wallRun(mb, a, b, { h: 3.8 + rng() * 1.6, th: .55, col: MOSSY, windows: 1 + Math.floor(rng() * 2), sill: .9, lintel: true, moss: MOSS, damp: DAMP, vines: 1, var: .12 }, rng); }
   const cx = r.walls.includes('left') ? r.x + .6 : r.x + r.w - .6, cz = r.walls.includes('top') ? r.y + .6 : r.y + r.h - .6; pillar(mb, cx, cz, 5.2, .6, shade(MOSSY, 1.1), rng);
   const px = r.x + r.w * (.35 + rng() * .3), pz = r.y + r.h * (.35 + rng() * .3); ground(mb, px, pz, 1.1 + rng() * .8, .9 + rng() * .6, 14, [.1, .26, .1], [0, .3], .06, null, rng, .5);
   for (let k = 0; k < 5; k++) { const a = rng() * 6.28, d = 1.2 + rng() * 1.3; blob(mb, px + Math.cos(a) * d, .1, pz + Math.sin(a) * d, .2 + rng() * .2, .18 + rng() * .2, .2 + rng() * .2, [.55, .6, .35], [.2, .35], rng, .4); }
   deadTree(mb, r.walls.includes('left') ? r.x + r.w - .6 : r.x + .6, r.walls.includes('top') ? r.y + r.h - .6 : r.y + .6, 4 + rng() * 2, rng);
   rubble(mb, r.x + r.w / 2, r.y + r.h / 2, rng, MOSSY, 5, Math.min(r.w, r.h) * .4, .33);
   for (let k = 0; k < 2; k++) { const x = r.x + 1 + rng() * (r.w - 2), z = r.y + 1 + rng() * (r.h - 2); tube(mb, [x, 0, z], [x + (rng() - .5) * .3, .9, z], .3, .3, 9, [.28, .15, .09], [.8, 0]); }
+}
+/* swamp dressing: glossy puddles, mud, glowing fungus, toxic sludge barrels, and a few sickly point lights that carve silhouettes out of the shadow (looks only) */
+function marshDetail(solid, decal, rng, ok, H) {
+  const lights = [], pl = (m, tries) => { for (let t = 0; t < (tries || 40); t++) { const x = 3 + rng() * (BW - 6), z = 3 + rng() * (BH - 6); if (ok(x, z, m)) return [x, z]; } return null; };
+  for (let i = 0; i < 26; i++) { const q = pl(2.2); if (!q) continue; const R = 1.3 + rng() * 2.4; ground(decal, q[0], q[1], R * 1.25, R * (.8 + rng() * .5), 22, [.12, .1, .07], [.45, 0], .06, H, rng, .5); }
+  for (let i = 0; i < 14; i++) { const q = pl(2.4); if (!q) continue; const rx = .8 + rng() * 1.5, rz = .6 + rng() * 1.1; ground(decal, q[0], q[1], rx * 1.3, rz * 1.3, 18, [.09, .08, .055], [.5, 0], .064, H, rng, .45); ground(solid, q[0], q[1], rx, rz, 18, [.05, .085, .08], [4.4, 0], .075, H, rng, .35); }
+  const glow = [];
+  for (let i = 0; i < 9; i++) { const q = pl(1.6); if (!q) continue; const [x, z] = q, y = H(x, z); for (let k = 0, n = 3 + Math.floor(rng() * 4); k < n; k++) { const a = rng() * 6.283, d = rng() * .55, mx = x + Math.cos(a) * d, mz = z + Math.sin(a) * d, h = .22 + rng() * .5, cr = .1 + rng() * .16; tube(solid, [mx, y, mz], [mx + (rng() - .5) * .1, y + h, mz], .035, .03, 5, [.72, .7, .52], [.5, 0]); blob(solid, mx, y + h, mz, cr * 1.3, cr * .55, cr * 1.3, vary([.45, .9, .42], rng, .2), [0, .85], rng, .2); }
+    ground(decal, x, z, 1.5, 1.5, 16, [.28, .6, .28], [.12, 0], .07, H, rng, .35); if (glow.length < 3) glow.push([x, z]); }
+  for (const [x, z] of glow) lights.push({ x, y: .8, z, r: 7, c: [.3, .85, .45] });
+  for (let i = 0; i < 7; i++) { const q = pl(1.6); if (!q) continue; const [x, z] = q, y = H(x, z), n = 1 + Math.floor(rng() * 3); ground(decal, x, z, 1.9, 1.9, 18, [.18, .5, .1], [.2, .3], .072, H, rng, .45); for (let k = 0; k < n; k++) { const bx = x + (rng() - .5) * 1.1, bz = z + (rng() - .5) * 1.1, tilt = (rng() - .5) * .5, ry = rng() < .3; tube(solid, [bx, y, bz], [bx + tilt * .8, y + (ry ? .45 : .9), bz], .3, .3, 10, ry ? [.3, .2, .08] : [.26, .3, .12], [.7, 0]); tube(solid, [bx + tilt * .8, y + (ry ? .45 : .9), bz], [bx + tilt * .8, y + (ry ? .47 : .92), bz], .24, .24, 10, [.35, .85, .2], [0, .8]); box(solid, bx, y + (ry ? .2 : .45), bz, .62, .06, .62, 0, [.12, .1, .06], [.6, 0], 0, rng); } if (i < 3) lights.push({ x, y: 1.1, z, r: 8, c: [.5, .95, .25] }); }
+  return lights;
 }
 function scatterMarsh(mb, rng, ok, H) {
   for (let i = 0; i < 90; i++) { const x = rng() * BW, z = rng() * BH; if (!ok(x, z, .8)) continue; const y = H(x, z); for (let k = 0; k < 4; k++) tube(mb, [x + (rng() - .5) * .3, y, z + (rng() - .5) * .3], [x + (rng() - .5) * .4, y + .2 + rng() * .2, z + (rng() - .5) * .4], .035, .01, 3, [.17, .25, .1], [.3, 0], false); }
@@ -16028,8 +16046,8 @@ const THEMES = {
     env: { sun: [.5, .5, -.45], sunC: [.55, .68, 1.0], ambT: [.07, .09, .14], ambB: [.04, .045, .055], fog: [.02, .03, .045], fogD: .007, dust: 0 },
     ground: (x, z, h, n) => { let c = mixc([.09, .095, .1], [.17, .175, .18], n); const gx = Math.abs(((x / 6) % 1 + 1) % 1 - .5), gz = Math.abs(((z / 6) % 1 + 1) % 1 - .5); if (gx > .485 || gz > .485) c = shade(c, .6); return c; } },
   marsh: { name: 'Rot Marsh', sub: 'Mossy ruins, dead trees and bile pools', props: propsMarsh, scatter: scatterMarsh, amp: .3, freq: .12, seed: 37,
-    env: { sun: [-.4, .45, .6], sunC: [.75, 1.05, .55], ambT: [.06, .11, .08], ambB: [.035, .05, .03], fog: [.035, .065, .04], fogD: .011, dust: 0 },
-    ground: (x, z, h, n) => mixc([.06, .085, .05], [.14, .15, .09], clamp(n * 1.3, 0, 1)) }
+    env: { sun: [-.4, .45, .6], sunC: [.8, 1.05, .62], ambT: [.105, .17, .15], ambB: [.065, .095, .085], fog: [.05, .085, .072], fogD: .0148, dust: 0 },
+    ground: (x, z, h, n) => { let c = mixc([.06, .085, .05], [.14, .15, .09], clamp(n * 1.3, 0, 1)); const m = fbm(x * .085 + 31, z * .085 + 7); if (m > .56) c = mixc(c, [.17, .12, .075], clamp((m - .56) * 6, 0, .85)); else if (m < .36) c = mixc(c, [.03, .06, .05], clamp((.36 - m) * 5, 0, .6)); return c; } }
 };
 
 /* ---------- polygon terrain areas (the official layouts) ---------- */
@@ -16136,7 +16154,7 @@ function dressing(solid, decal, rng, ok, H, th, key) {
 const GOLD = [1, .78, .3];
 THEMES.desert.poly = { wall: { h: [3.2, 5], th: .5, col: STONE, floor: [.17, .13, .09] }, pillar: (mb, x, z, rng) => pillar(mb, x, z, 4 + rng() * 2, .5, STONE, rng), clutter: (mb, x, z, rng, k) => { if (k % 3 === 0) { const a = rng() * 3; tube(mb, [x, .38, z], [x + Math.cos(a) * 2.6, .38, z + Math.sin(a) * 2.6], .38, .38, 8, shade(STONE, 1.05), [.9, 0]); } else rubble(mb, x, z, rng, STONE, 5, 1.1, .34); } };
 THEMES.base.poly = { wall: { h: [1, 1.2], th: .6, col: CONC, floor: [.15, .16, .17] }, pillar: null, clutter: (mb, x, z, rng, k) => { const m = k % 4; if (m === 3) { const a = rng() * 3, d = [Math.cos(a), Math.sin(a)]; for (let q = 0; q < 3; q++) profileRun(mb, [x + d[0] * q * 1.9, z + d[1] * q * 1.9], [x + d[0] * (q * 1.9 + 1.8), z + d[1] * (q * 1.9 + 1.8)], JB, vary(CONC, rng, .1), [.9, 0], 1.12); } else if (m === 2 && rng() < .6) container(mb, x, z, rng() * 3, rng); else { const s = .9 + rng() * .7, ry = rng() * 1.5; crate(mb, x, 0, z, s, ry, CRATE[Math.floor(rng() * 4)], rng); if (rng() < .5) crate(mb, x, s * .92, z, s * .85, ry + .3, CRATE[Math.floor(rng() * 4)], rng); } } };
-THEMES.marsh.poly = { wall: { h: [3.4, 5.2], th: .55, col: MOSSY, floor: [.11, .12, .1], moss: MOSS }, pillar: (mb, x, z, rng) => pillar(mb, x, z, 4.5 + rng() * 1.5, .55, MOSSY, rng), clutter: (mb, x, z, rng, k) => { if (k % 3 === 0) deadTree(mb, x, z, 3.8 + rng() * 2, rng); else if (k % 3 === 1) { ground(mb, x, z, 1 + rng() * .8, .8 + rng() * .5, 14, [.1, .26, .1], [0, .3], .06, null, rng, .5); for (let q = 0; q < 4; q++) { const a = rng() * 6.28, d = 1.1 + rng() * 1; blob(mb, x + Math.cos(a) * d, .1, z + Math.sin(a) * d, .2 + rng() * .2, .18 + rng() * .2, .2 + rng() * .2, [.55, .6, .35], [.2, .35], rng, .4); } } else rubble(mb, x, z, rng, MOSSY, 4, 1, .32); } };
+THEMES.marsh.poly = { wall: { h: [3.4, 5.2], th: .55, col: MOSSY, floor: [.1, .105, .095], moss: MOSS, damp: DAMP, vines: 1 }, pillar: (mb, x, z, rng) => pillar(mb, x, z, 4.5 + rng() * 1.5, .55, MOSSY, rng), clutter: (mb, x, z, rng, k) => { if (k % 3 === 0) deadTree(mb, x, z, 3.8 + rng() * 2, rng); else if (k % 3 === 1) { ground(mb, x, z, 1 + rng() * .8, .8 + rng() * .5, 14, [.1, .26, .1], [0, .3], .06, null, rng, .5); for (let q = 0; q < 4; q++) { const a = rng() * 6.28, d = 1.1 + rng() * 1; blob(mb, x + Math.cos(a) * d, .1, z + Math.sin(a) * d, .2 + rng() * .2, .18 + rng() * .2, .2 + rng() * .2, [.55, .6, .35], [.2, .35], rng, .4); } } else rubble(mb, x, z, rng, MOSSY, 4, 1, .32); } };
 
 /* ---------- more environments, and tabletop-style two-storey ruins ---------- */
 /* a raised floor on pillars over the walled half of a ruin, with a low parapet, like the multi-level ruins on a gaming table (looks only; the rules still treat the footprint as one area) */
@@ -16429,7 +16447,7 @@ function buildMap(spec) {
   for (let i = 0; i < nx; i++) for (let j = 0; j < nz; j++) { const a = base + idx(i, j), b = base + idx(i + 1, j), c = base + idx(i + 1, j + 1), d = base + idx(i, j + 1); solid.I.push(a, d, c, a, c, b); }
   const tv0 = solid.n;
   rects.forEach((r, i) => { const rr = mulberry(seed * 101 + i * 17 + th.seed); if (r.poly && r.cat === 'light') propsLowPoly(solid, r, rr, th.poly); else if (r.poly) propsPoly(solid, r, rr, i, th.poly); else if (r.cat && r.cat !== 'dense') propsLow(solid, r, rr, i); else th.props(solid, r, rr, i); });
-  { const warm = !(spec.theme === 'desert' || spec.theme === 'forge' || spec.theme === 'hive'), tn = warm ? [1.14, 1.02, .84] : [.86, .98, 1.16]; for (let v = tv0; v < solid.n; v++) for (let k = 0; k < 3; k++) solid.C[v * 3 + k] = Math.min(1, solid.C[v * 3 + k] * tn[k]); }
+  { const warm = !(spec.theme === 'desert' || spec.theme === 'forge' || spec.theme === 'hive' || spec.theme === 'marsh'), tn = warm ? [1.14, 1.02, .84] : spec.theme === 'marsh' ? [.99, 1.0, .98] : [.86, .98, 1.16]; for (let v = tv0; v < solid.n; v++) for (let k = 0; k < 3; k++) solid.C[v * 3 + k] = Math.min(1, solid.C[v * 3 + k] * tn[k]); }
   /* no random open-ground scatter or dressing: the table shows only the layout's own terrain */
   surround(solid, decal, mulberry(seed * 53 + th.seed), H, spec.theme, th);
   const floodT = spec.theme === 'base' || spec.theme === 'hive', floods = [];
@@ -16439,8 +16457,8 @@ function buildMap(spec) {
     for (let i = 0; i < 0; i++) { const px = 3 + fr() * (BW - 6), pz = 3 + fr() * (BH - 6); if (!ok(px, pz, 2)) continue; const red = pz < BH / 2; ground(solid, px, pz, 1 + fr() * 1.4, .7 + fr() * .9, 16, [.012, .02, .035], [6, 0], .067, H, fr, .3); ground(decal, px, pz, .55, .4, 12, red ? [.9, .2, .15] : [.2, .45, 1], [.16, 0], .068, H, fr, .3); }
     for (let i = 0; i < 0; i++) { const px = 3 + fr() * (BW - 6), pz = 3 + fr() * (BH - 6); if (ok(px, pz, 2)) ground(decal, px, pz, .9 + fr() * .8, .7 + fr() * .6, 14, [.01, .01, .014], [.5, 0], .066, H, fr, .4); }
   }
-  const forgeL = spec.theme === 'forge' ? rects.filter(r => !r.poly).slice(0, 8).flatMap((r, i) => [{ x: r.x + r.w / 2, y: 1.3, z: r.y + r.h / 2, r: 9, c: [1.25, .5, .12] }].concat(i % 2 ? [{ x: r.x + 1, y: 2.8, z: r.y + 1, r: 7, c: [.1, .62, 1.05] }] : [])) : [];
-  const chaosOn = spec.chaos !== false && localStorage.getItem('bd.chaos') === '1', lights = floods.concat(forgeL, chaosOn ? chaosDetail(solid, decal, mulberry(seed * 37 + th.seed), ok, H, spec.theme) : []);
+  const marshL = spec.theme === 'marsh' ? marshDetail(solid, decal, mulberry(seed * 53 + th.seed), ok, H) : [], forgeL = spec.theme === 'forge' ? rects.filter(r => !r.poly).slice(0, 8).flatMap((r, i) => [{ x: r.x + r.w / 2, y: 1.3, z: r.y + r.h / 2, r: 9, c: [1.25, .5, .12] }].concat(i % 2 ? [{ x: r.x + 1, y: 2.8, z: r.y + 1, r: 7, c: [.1, .62, 1.05] }] : [])) : [];
+  const chaosOn = spec.chaos !== false && localStorage.getItem('bd.chaos') === '1', lights = floods.concat(forgeL, marshL, chaosOn ? chaosDetail(solid, decal, mulberry(seed * 37 + th.seed), ok, H, spec.theme) : []);
   /* what kind of cover each footprint is: heavy ruins read cold and pale, light cover reads warm and dark */
   rects.forEach((r, i) => { if (r.poly) return; const rr = mulberry(seed * 211 + i * 7 + th.seed), ex = [[r.x - .6, r.y - .6, r.w + 1.2, .9], [r.x - .6, r.y + r.h - .3, r.w + 1.2, .9], [r.x - .6, r.y - .6, .9, r.h + 1.2], [r.x + r.w - .3, r.y - .6, .9, r.h + 1.2]]; for (const [x, z, w, d] of ex) decal.quad([x, .066, z], [x, .066, z + d], [x + w, .066, z + d], [x + w, .066, z], [.01, .01, .01], [.32, 0]); for (let k = 0; k < 4; k++) { const x = r.x + rr() * r.w, z = rr() < .5 ? r.y - .3 : r.y + r.h + .3; rubbleAt(solid, rr, H, x, z, (th.poly && th.poly.wall && th.poly.wall.col) || [.3, .3, .3], .5 + rr() * .5); } });
   rects.forEach(r => { if (r.poly) return; const heavy = (r.walls || []).length >= 2, c = heavy ? [.56, .53, .47] : [.2, .16, .1]; decal.quad([r.x, .068, r.y], [r.x, .068, r.y + r.h], [r.x + r.w, .068, r.y + r.h], [r.x + r.w, .068, r.y], c, [heavy ? .22 : .3, 0]); });
@@ -16450,7 +16468,7 @@ function buildMap(spec) {
   if (spec.zones) { zoneTint(spec.zones.ai, [.95, .25, .2]); zoneTint(spec.zones.player, [.3, .55, 1], .5); }
   /* objectives: the ring (or the terrain-area outline), a faint fill and a flat marker */
   for (const o of OB) {
-    const ring = (pts) => { for (let k = 0; k < pts.length; k++) { const a = pts[k], c = pts[(k + 1) % pts.length], L = Math.hypot(c[0] - a[0], c[1] - a[1]) || 1, n = Math.max(1, Math.ceil(L / 1.2)), nn = [-(c[1] - a[1]) / L * .1, (c[0] - a[0]) / L * .1]; for (let q = 0; q < n; q++) { const t0 = q / n, t1 = (q + 1) / n, f = (t, s) => { const X = a[0] + (c[0] - a[0]) * t + nn[0] * s, Z = a[1] + (c[1] - a[1]) * t + nn[1] * s; return [X, H(X, Z) + .1, Z]; }; odec.quad(f(t0, -4), f(t1, -4), f(t1, 4), f(t0, 4), GOLD, [.12, 0]); odec.quad(f(t0, -1), f(t1, -1), f(t1, 1), f(t0, 1), GOLD, [.6, 0]); } } };
+    const ring = (pts) => { for (let k = 0; k < pts.length; k++) { const a = pts[k], c = pts[(k + 1) % pts.length], L = Math.hypot(c[0] - a[0], c[1] - a[1]) || 1, n = Math.max(1, Math.ceil(L / 1.2)), nn = [-(c[1] - a[1]) / L * .1, (c[0] - a[0]) / L * .1]; for (let q = 0; q < n; q++) { const t0 = q / n, t1 = (q + 1) / n, f = (t, s) => { const X = a[0] + (c[0] - a[0]) * t + nn[0] * s, Z = a[1] + (c[1] - a[1]) * t + nn[1] * s; return [X, H(X, Z) + .1, Z]; }; odec.quad(f(t0, -4), f(t1, -4), f(t1, 4), f(t0, 4), spec.theme === 'marsh' ? [.78, .56, .2] : GOLD, [.12, 0]); odec.quad(f(t0, -1), f(t1, -1), f(t1, 1), f(t0, 1), GOLD, [.6, 0]); } } };
     if (o.poly) { ring(o.poly); } else { const pts = []; for (let k = 0; k < 48; k++) pts.push([o.x + Math.cos(k / 48 * 6.283) * OR, o.y + Math.sin(k / 48 * 6.283) * OR]); ring(pts); ground(odec, o.x, o.y, OR, OR, 48, GOLD, [.08, 0], .085, H, rng, 0); }
     ground(odec, o.x, o.y, .5, .5, 20, GOLD, [.55, 0], .11, H, rng, 0);
   }
