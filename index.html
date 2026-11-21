@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.21-1413';
+  const VERSION = '2026.11.21-1515';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -22022,7 +22022,7 @@ async function persistDet(d) {
 }
 /* Space Marine chapters: units and detachments tied to one chapter can be hidden when you pick that chapter in the builder */
 const SM_CHAPS = [['Dark Angels', ['dark angels', 'deathwing', 'ravenwing']], ['Blood Angels', ['blood angels', 'death company']], ['Space Wolves', ['space wolves']], ['Deathwatch', ['deathwatch']], ['Black Templars', ['black templars']], ['Ultramarines', ['ultramarines']], ['Imperial Fists', ['imperial fists']], ['White Scars', ['white scars']], ['Raven Guard', ['raven guard']], ['Iron Hands', ['iron hands']], ['Salamanders', ['salamanders']], ['Crimson Fists', ['crimson fists']]];
-const SM_DET_CHAP = { 'angelic inheritors': 'Blood Angels', 'encarmine speartip': 'Blood Angels', 'wrath of the doomed': 'Blood Angels', 'liberator assault group': 'Blood Angels', 'rage-cursed onslaught': 'Blood Angels', 'champions of fenris': 'Space Wolves', 'saga of the beastslayer': 'Space Wolves', 'saga of the great wolf': 'Space Wolves', 'saga of the hunter': 'Space Wolves', 'saga of the bold': 'Space Wolves', 'inner circle task force': 'Dark Angels', 'unforgiven task force': 'Dark Angels', 'company of hunters': 'Dark Angels', "lion's blade task force": 'Dark Angels', 'darkflight pursuit': 'Dark Angels', 'black spear task force': 'Deathwatch', 'deathwatch support': 'Deathwatch', 'blade of ultramar': 'Ultramarines', "forgefather's seekers": 'Salamanders', 'shadowmark talon': 'Raven Guard', 'vow-sworn crusaders': 'Black Templars', 'fist of the god-emperor': 'Black Templars', "marshal's household": 'Black Templars' };
+const SM_DET_CHAP = { 'angelic inheritors': 'Blood Angels', 'encarmine speartip': 'Blood Angels', 'wrath of the doomed': 'Blood Angels', 'liberator assault group': 'Blood Angels', 'rage-cursed onslaught': 'Blood Angels', 'champions of fenris': 'Space Wolves', 'saga of the beastslayer': 'Space Wolves', 'saga of the great wolf': 'Space Wolves', 'saga of the hunter': 'Space Wolves', 'saga of the bold': 'Space Wolves', 'inner circle task force': 'Dark Angels', 'unforgiven task force': 'Dark Angels', 'company of hunters': 'Dark Angels', "lion's blade task force": 'Dark Angels', 'darkflight pursuit': 'Dark Angels', 'black spear task force': 'Deathwatch', 'deathwatch support': 'Deathwatch', 'blade of ultramar': 'Ultramarines', 'ceramite sentinels': 'Imperial Fists', 'spearpoint task force': 'White Scars', "medusa's wrath": 'Iron Hands', 'wrath of the rock': 'Dark Angels', "forgefather's seekers": 'Salamanders', 'shadowmark talon': 'Raven Guard', 'vow-sworn crusaders': 'Black Templars', 'fist of the god-emperor': 'Black Templars', "marshal's household": 'Black Templars' };
 const unitChaps = u => { const kw = (u.kw || []).map(k => String(k).toLowerCase()); return SM_CHAPS.filter(([, ks]) => ks.some(k => kw.includes(k))).map(c => c[0]); };
 function detChap(d) {
   const n = String(d.name || '').toLowerCase().replace(/[\u2019]/g, "'"); if (SM_DET_CHAP[n]) return SM_DET_CHAP[n];
