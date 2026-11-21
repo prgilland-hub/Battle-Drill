@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.21-1517';
+  const VERSION = '2026.11.21-1519';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -17894,6 +17894,17 @@ const SCH_LESSONS = {
 };
 
 /* ---- building a practice battle ---- */
+let SCH_MISS = [];
+/* an enemy for the School: the unit asked for, or (when it isn't in your library) the closest stand-in from your own datasheets, so a lesson never refuses to start */
+function schFoeUnit(fac, name, models) {
+  let u = schUnitFor(fac, name, models); if (u) return u;
+  const want = models || 5, pool = l => !l.legends && !(l.kw || []).some(k => /character|epic hero/i.test(k)) && (l.ranged || []).length;
+  let c = LIB.filter(l => l.faction === fac && l.name !== name && pool(l));
+  if (!c.length) c = LIB.filter(l => l.name !== name && pool(l));
+  if (!c.length) { SCH_MISS.push(name + ' (' + fac + ')'); return null; }
+  const inf = c.filter(l => (l.kw || []).some(k => /infantry/i.test(k))), pick = (inf.length ? inf : c).slice().sort((a, b) => Math.abs((a.baseModels || a.models) - want) - Math.abs((b.baseModels || b.models) - want))[0];
+  SCH_MISS.push(name + ' \u2192 using ' + pick.name); return unitFromLib(pick, models || pick.baseModels || pick.models);
+}
 function schUnitFor(fac, name, models, leaderName) {
   const lib = schLib(fac, name); if (!lib) return null;
   const u = unitFromLib(lib, models || lib.baseModels || lib.models);
@@ -17945,6 +17956,7 @@ function schBegin(spec) {
   if (spec.cpAi) G.cp.ai = Math.max(G.cp.ai, spec.cpAi);
   showTab('battle'); render();
   try { for (const m of (spec.missing || [])) log('<b>Library:</b> ' + escH(m) + '.'); } catch (e) { }
+  try { for (const m of (spec.subs || [])) log('<b>Library:</b> enemy ' + escH(m) + ' (not in your library).'); } catch (e) { }
   setTimeout(() => { try { if (localStorage.getItem('bd.camp3d') !== '0' && typeof BF3D !== 'undefined' && BF3D.set && !BF3D.on) BF3D.set(true); } catch (e) { } }, 250);
 }
 /* the scene for a staged lesson battle: fits the faction, and stays the same for the same unit */
@@ -18044,8 +18056,9 @@ function schHudClick(e) {
   schTick();
 }
 function schLaunch(spec) {
-  const s = spec.build();
-  if (!s) { alert('That unit is not in the library yet.' + (spec.camp && CAMP_MISS.length ? '\n\nMissing: ' + CAMP_MISS.join(', ') : '')); return; }
+  SCH_MISS = []; const s = spec.build();
+  if (!s) { const m = spec.camp ? CAMP_MISS : SCH_MISS; alert((spec.camp ? 'That unit is not in the library yet.' : 'Could not set up this practice battle.') + (m.length ? '\n\nMissing: ' + m.join(', ') : '')); return; }
+  if (!spec.camp && SCH_MISS.length) s.subs = SCH_MISS.slice();
   s.camp = spec.camp; s.missing = s.missing || []; s.lesson = spec.lesson; s.title = spec.title; s.goal = spec.goal; s.refs = spec.refs; s.key = spec.key; s.build = spec.build;
   schBegin(s);
 }
@@ -18400,8 +18413,8 @@ function schStartLesson(lib, L) {
   const key = `${lib.faction}|${lib.name}`;
   const refs = (lib.abilities || []).filter(a => !/^(leader|support)$/i.test(a.name)).map(a => ({ name: a.name, text: (a.text || '').replace(/\*+/g, '').slice(0, 220), sim: isSimAbility(a) }));
   schLaunch({ key, title: `${lib.name}: ${L.title}`, goal: L.goal, lesson: L, refs, build: () => {
-    const hero = schHero(lib, L); if (!hero) return null;
-    const foes = L.foes.map(f => { const p = SCH_FOES.find(x => x.id === f.id) || {}; const fac = f.fac || p.fac, name = f.name || p.name, models = f.models || p.models; const u = schUnitFor(fac, name, models); return u ? { unit: u, d: f.d, ang: f.ang, ai: f.ai, fac, from: f.from } : null; });
+    const hero = schHero(lib, L); if (!hero) { SCH_MISS.push('the unit this lesson uses with ' + lib.name + (schIsChar(lib) ? ' (' + (L.bg || SCH.sel.bg || leadsOf(lib)[0]) + ')' : '')); return null; }
+    const foes = L.foes.map(f => { const p = SCH_FOES.find(x => x.id === f.id) || {}; const fac = f.fac || p.fac, name = f.name || p.name, models = f.models || p.models; const u = schFoeUnit(fac, name, models); return u ? { unit: u, d: f.d, ang: f.ang, ai: f.ai, fac, from: f.from } : null; });
     if (foes.some(x => !x)) return null;
     return { hero: { faction: lib.faction, unit: hero }, foes, x: L.me.x, y: L.me.y, reserve: L.me.reserve, terrain: L.terrain, first: L.first, hurt: L.hurt, hurtLeader: L.hurtLeader, hurtSelf: L.hurtSelf, allies: (L.allies || []).map(a => ({ unit: schUnitFor(a.fac || lib.faction, a.name, a.models), dx: a.dx, dy: a.dy, embarked: a.embarked })).filter(a => a.unit) };
   } });
@@ -18410,7 +18423,7 @@ function schStartSandbox(lib) {
   const p = SCH_FOES.find(x => x.id === SCH.foe), key = `${lib.faction}|${lib.name}`;
   const refs = (lib.abilities || []).filter(a => !/^(leader|support)$/i.test(a.name)).map(a => ({ name: a.name, text: (a.text || '').replace(/\*+/g, '').slice(0, 220), sim: isSimAbility(a) }));
   schLaunch({ key: key + '|sandbox', title: `${lib.name}: sandbox against ${p.name}`, goal: 'Free play. Try each ability below, then use "Matchup numbers" to see what the unit is good and bad at. Restart to change nothing; go back to the School to change the enemy.', lesson: null, refs, build: () => {
-    const hero = schHero(lib, null), foe = schUnitFor(p.fac, p.name, p.models); if (!hero || !foe) return null;
+    const hero = schHero(lib, null), foe = schFoeUnit(p.fac, p.name, p.models); if (!hero || !foe) { if (!hero) SCH_MISS.push('bodyguard unit for ' + lib.name); return null; }
     return { hero: { faction: lib.faction, unit: hero }, foes: [{ unit: foe, d: SCH.dist, ai: SCH.ai, fac: p.fac }], x: 14, y: 22, terrain: [SCH_RUIN(22, 10), SCH_RUIN(22, 28)] };
   } });
 }
