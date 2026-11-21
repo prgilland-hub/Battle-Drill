@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.21-1358';
+  const VERSION = '2026.11.21-1405';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -1882,6 +1882,15 @@ html[data-look="cog"] .muted{color:var(--muted)}
 .kt-gc:not(.gc-float) .gc-pill,.kt-gc:not(.gc-float) .gc-nav,.kt-gc:not(.gc-float) .gc-hbtns{display:none}
 .kt-gc:not(.gc-float) .gc-card{display:block}
 
+/* Armies tab on a desktop: everything fits the window and nothing scrolls the page; the list and the army each scroll inside their own panel */
+@media (min-width:921px){
+  .wrap:has(#tab-armies.on){max-width:none;padding-bottom:10px}
+  .wrap:has(#tab-armies.on) > footer{display:none}
+  #tab-armies.on #arm-sub-armies .army-grid{height:calc(100vh - 118px);height:calc(100dvh - 118px);min-height:360px;align-items:stretch}
+  #tab-armies.on #arm-sub-armies .army-grid > .panel{overflow:auto;min-height:0;overscroll-behavior:contain}
+  #a-backup>summary{cursor:pointer;padding:6px 0}
+  #a-backup[open]>summary{margin-bottom:6px}
+}
 /* wider battle map: let the battle tab use the full width and size the map to the window height */
 @media (min-width:921px){
   .wrap:has(#tab-battle.on){max-width:none}
@@ -2232,8 +2241,8 @@ html[data-look="cog"] .muted{color:var(--muted)}
       <p class="muted" id="a-store" style="font-size:.85rem;margin:8px 0 0">Loading saved armies…</p>
       <div id="a-list"></div>
       <div id="a-warn"></div>
-      <div class="backup">
-        <h3>Backup and restore</h3>
+      <details class="backup" id="a-backup">
+        <summary><h3 style="display:inline;margin:0">Backup and restore</h3></summary>
         <p class="muted" style="font-size:.85rem;margin:0 0 8px">Keep a copy of your armies as text. Paste it back in, or load the file, to restore them anywhere.</p>
         <div class="row" style="justify-content:flex-start">
           <button class="btn" id="a-export">Export all armies</button>
@@ -2244,7 +2253,7 @@ html[data-look="cog"] .muted{color:var(--muted)}
         <textarea id="a-io" hidden spellcheck="false" aria-label="Army backup text"></textarea>
         <div class="row" id="a-io-actions" style="justify-content:flex-start;margin-top:6px" hidden></div>
         <div class="msgs" id="a-io-msg"></div>
-      </div>
+      </details>
     </div>
     <div class="panel" id="composer" hidden></div>
     <div class="panel" id="builder" hidden></div>
