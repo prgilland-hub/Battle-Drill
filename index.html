@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.21-0248';
+  const VERSION = '2026.11.21-1249';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -4112,6 +4112,8 @@ function tsButtons() {
       const avail = tsRitAvail('player').filter(r => tsRitTargets(u, r.key).length);
       const k = await askPlayer({ kind: 'choice', text: `${u.name}: choose a Ritual to attempt.`, options: avail.map(r => ({ label: `${r.name} (Warp Charge ${r.wc}): ${r.txt}`, value: r.key })).concat([{ label: 'Cancel', value: '' }]) });
       if (k) await tsRitual(u, k, false);
+      /* every prompt above clears the selection: put the unit back so it can still shoot this phase */
+      if (u.alive && !u.shot && G.stage === 'battle' && G.phase === 'shooting' && G.active === 'player' && !G.prompt) G.sel = u;
       render();
     } });
   }
