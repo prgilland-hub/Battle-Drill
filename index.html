@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.21-1519';
+  const VERSION = '2026.11.21-1643';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -18237,6 +18237,22 @@ function schRender() {
   if (lib) h += schCard(lib) + schBasics(lib) + schDetPanel(lib) + schLeadersPanel(lib);
   root.innerHTML = modeBar + h;
   if (lib) schLessonsUI(root, lib);
+  schFold(root);
+}
+/* every section after the unit card folds away (closed by default) so the page is not one long scroll; what you open stays open while you change unit */
+const SCH_OPEN = new Set();
+function schFold(root) {
+  const ps = [...root.children].filter(e => e.classList.contains('panel') && !e.classList.contains('sch-pick')); let first = true;
+  for (const p of ps) {
+    if (first) { first = false; continue; }
+    const h = p.querySelector('h2,h3'); if (!h) continue;
+    const title = h.textContent.replace(/\s+/g, ' ').trim(), d = document.createElement('details');
+    d.className = p.className + ' sch-fold'; if (p.id) d.id = p.id; if (SCH_OPEN.has(title)) d.open = true;
+    const sm = document.createElement('summary'); sm.innerHTML = h.innerHTML; sm.style.cssText = 'cursor:pointer;font-weight:700;font-size:1.05rem;padding:2px 0';
+    h.remove(); d.appendChild(sm); while (p.firstChild) d.appendChild(p.firstChild);
+    d.addEventListener('toggle', () => { if (d.open) SCH_OPEN.add(title); else SCH_OPEN.delete(title); });
+    p.replaceWith(d);
+  }
 }
 
 /* ---- generic stat tutorial, for every unit ---- */
