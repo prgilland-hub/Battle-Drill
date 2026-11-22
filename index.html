@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.22-0307';
+  const VERSION = '2026.11.22-0311';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -17582,7 +17582,11 @@ let SCH_FOE = false;   /* true while building the enemy, which never takes your 
 const schWgOf = lib => (!SCH_FOE && lib && lib.id && SCH.wg[lib.id]) || null;
 try { SCH.done = JSON.parse(localStorage.getItem(SCH_KEY) || '{}') || {}; } catch (e) { SCH.done = {}; }
 const schSave = () => { try { localStorage.setItem(SCH_KEY, JSON.stringify(SCH.done)); } catch (e) { } };
-const schLib = (fac, name) => LIB.find(l => l.faction === fac && l.name === name);
+/* the unit under that faction, or (Space Marine Chapters share datasheets) under a sibling Chapter, or by name alone, so an import filed under a different Chapter still works */
+const schLib = (fac, name) => {
+  const nm = String(name || '').toLowerCase(), fam = ['Space Marines', 'Salamanders', 'Black Templars', 'Dark Angels', 'Blood Angels', 'Space Wolves', 'Deathwatch'];
+  return LIB.find(l => l.faction === fac && l.name === name) || (fam.includes(fac) && LIB.find(l => fam.includes(l.faction) && l.name === name)) || LIB.find(l => l.faction === fac && l.name.toLowerCase() === nm) || (fam.includes(fac) && LIB.find(l => fam.includes(l.faction) && l.name.toLowerCase() === nm)) || null;
+};
 const schPlain = h => String(h || '').replace(/<[^>]*>/g, ' ').replace(/&[a-z#0-9]+;/g, ' ').replace(/\s+/g, ' ').toLowerCase();
 
 /* things to fight in the sandbox */
