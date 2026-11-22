@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.22-1750';
+  const VERSION = '2026.11.22-2126';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -2379,7 +2379,7 @@ Unit: Big Walker | models 1 | M 8 | T 10 | Sv 2 | Inv 5 | W 12 | Ld 6 | OC 4 | s
 <section class="tab" id="tab-kt"><div id="kt-root"></div></section>
 <section class="tab" id="tab-sim">
   <div class="panel">
-    <div class="row"><h2 style="margin:0">What isn't simulated yet</h2><span style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn" id="sim-dl">Download this log (.md)</button><button class="btn" id="sim-dl-all">Download every faction</button><button class="btn" id="sim-dl-json" data-tip="The feature backlog as JSON: feature ids, where each one would hook into the engine, and which datasheets need it.">Download the feature backlog (.json)</button></span></div>
+    <div class="row"><h2 style="margin:0">What isn't simulated yet</h2><span style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn" id="sim-copy" data-tip="Copies the full report (complete rule text, datasheet stats, detachment stratagems and enhancements) so you can paste it straight into a chat with Claude.">Copy full report</button><button class="btn" id="sim-dl">Download this log (.md)</button><button class="btn" id="sim-dl-all">Download every faction</button><button class="btn" id="sim-dl-json" data-tip="The feature backlog as JSON: feature ids, where each one would hook into the engine, and which datasheets need it.">Download the feature backlog (.json)</button></span></div>
     <p class="muted" style="margin:.3rem 0 .8rem;font-size:.92rem">Built live from your datasheet library, saved armies and detachments, so it updates whenever you import more. "Not simulated" means the datasheet or rule text shows in the app but has no effect in battle. Pick a faction to see its log; the mechanics that apply to every faction are at the bottom.</p>
     <div id="sim-over"></div>
     <div class="bld-top" style="max-width:420px"><label>Faction<select id="sim-fac"></select></label></div>
@@ -23428,9 +23428,9 @@ const CORE_GAPS = [
   ]]
 ];
 function simLogModel(f) {
-  const sim = new Map(), not = new Map(), kw = new Map(), seen = new Set();
+  const sim = new Map(), not = new Map(), kw = new Map(), seen = new Set(), info = new Map();
   const feed = (unit, u) => {
-    seen.add(unit);
+    seen.add(unit); if (!info.has(unit)) info.set(unit, { name: unit, models: u.baseModels || u.models || 1, W: u.W, T: u.T, Sv: u.Sv, M: u.M, OC: u.OC, Ld: u.Ld, inv: u.inv || 0, fnp: u.fnp || 0, kw: (u.kw || []).slice(0, 14), leads: (u.abilities || []).filter(a => /^leader$/i.test(a.name)).map(a => String(a.text || '').replace(/\s+/g, ' ').slice(0, 300)), ranged: (u.ranged || []).map(w => ({ n: w.name, r: w.range, A: w.A, s: w.skill, S: w.S, AP: w.AP, D: w.D, kw: w.xkw || [] })), melee: (u.melee || []).map(w => ({ n: w.name, A: w.A, s: w.skill, S: w.S, AP: w.AP, D: w.D, kw: w.xkw || [] })) });
     for (const a of (u.abilities || [])) {
       if (/^enhancement:/i.test(a.name)) continue;
       const map = isSimAbility(a) ? sim : not, key = a.name.toLowerCase();
@@ -23449,7 +23449,7 @@ function simLogModel(f) {
   const libN = LIB.filter(u => u.faction === f).length;
   for (const u of LIB) if (u.faction === f) feed(u.name, u);
   for (const b of userBuilds) if (b.faction === f) for (const u of b.units) { feed(u.ds || inferDs(u.name, f), u); if (u.leader) feed(u.leader.ds || u.leader.name, u.leader); }
-  const notArr = [...not.values()].map(e => ({ name: e.name, text: e.text, units: [...e.units].sort(), cat: simCat(e.text) })).sort((a, b) => b.units.length - a.units.length || a.name.localeCompare(b.name));
+  const notArr = [...not.values()].map(e => ({ name: e.name, text: e.text, units: [...e.units].sort(), cat: simCat(e.text), unitInfo: [...e.units].sort().map(n => info.get(n)).filter(Boolean) })).sort((a, b) => b.units.length - a.units.length || a.name.localeCompare(b.name));
   const byCat = {}; for (const e of notArr) (byCat[e.cat] = byCat[e.cat] || []).push(e);
   const per = new Map(); for (const e of notArr) for (const u of e.units) per.set(u, (per.get(u) || 0) + 1);
   const top = [...per.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 10);
@@ -23458,7 +23458,7 @@ function simLogModel(f) {
     for (const r of (b.armyRules || [])) add(r.name, r.text, RULE_SIM[r.name.toLowerCase()] ? 'simulated' : 'not simulated');
     for (const r of (b.rules || [])) add(r.replace(/\b\w/g, c => c.toUpperCase()), '', RULE_SIM[r] ? 'simulated' : RULE_APPROX[r] ? 'approximated' : 'not simulated', RULE_APPROX[r]);
   }
-  const dets = detsFor(f).map(d => ({ name: d.name, dp: d.dp || 0, rule: d.rule || '', hasText: !!d.ruleText, enh: (d.enh || []).length, strats: (d.strats || []).length, stratsSim: (d.strats || []).filter(x => DET_SIM.includes(slugOf(x.name))).length, note: d.simNote || '',
+  const dets = detsFor(f).map(d => ({ name: d.name, dp: d.dp || 0, rule: d.rule || '', hasText: !!d.ruleText, enh: (d.enh || []).length, strats: (d.strats || []).length, stratsSim: (d.strats || []).filter(x => DET_SIM.includes(slugOf(x.name))).length, note: d.simNote || '', ruleText: d.ruleText || '', enhList: (d.enh || []).map(x => ({ name: x.name, cost: x.pts != null ? x.pts : x.cost, text: x.text || x.rule || '' })), stratList: (d.strats || []).map(x => ({ name: x.name, cp: x.cp, when: x.when || x.phase || '', text: x.text || x.effect || x.rule || '', sim: DET_SIM.includes(slugOf(x.name)) })),
     status: (d.effects && d.effects.length) ? (d.simNote ? 'partly simulated' : 'simulated') : (String(d.rule || '').split(' / ').some(r => RULE_SIM[r.trim().toLowerCase()] || DET_RULE_SIM.includes(r.trim().toLowerCase())) ? 'simulated' : 'not simulated') }));
   const simN = sim.size, notN = notArr.length;
   return { faction: f, libN, units: seen.size, simN, notN, pct: simN + notN ? Math.round(simN * 100 / (simN + notN)) : 0, notArr, byCat, top, kw: [...kw.values()].map(e => ({ name: e.name, approx: e.approx, weapons: [...e.weapons].sort(), units: [...e.units].sort() })).sort((a, b) => b.units.length - a.units.length), rules: [...rules.values()], dets, features: featureModel(f) };
@@ -23474,24 +23474,35 @@ function simCoreMd() {
 function simLogMd(m) {
   const L = [`# ${m.faction}: mechanics not simulated in Battle Drill`, '', `_Generated ${new Date().toISOString().slice(0, 10)} from the datasheet library, saved armies and detachments. ${m.units} datasheets checked; ${m.simN} of ${m.simN + m.notN} distinct unit abilities are simulated (${m.pct}%)._`, ''];
   if (!m.units) { L.push('No datasheets are loaded for this faction yet, so nothing faction-specific can be logged. Import a New Recruit roster .json to add them.', ''); return L.join('\n'); }
-  if (m.rules.length) { L.push('## Army rules', ''); m.rules.forEach(r => L.push(`- **${r.name}**: ${r.status}${r.note ? '. ' + r.note : ''}${r.text ? ` _${mdT(r.text, 140)}_` : ''}`)); L.push(''); }
+  if (m.rules.length) { L.push('## Army rules', ''); m.rules.forEach(r => L.push(`- **${r.name}**: ${r.status}${r.note ? '. ' + r.note : ''}${r.text ? ` _${mdT(r.text, 1e6)}_` : ''}`)); L.push(''); }
   if (m.dets.length) {
     L.push('## Detachments', '', 'Enhancement effects are not simulated for any detachment. Stratagems are simulated only where marked below; the rest are reference only.', '');
     m.dets.forEach(d => L.push(`- **${d.name}**${d.dp ? ` (${d.dp} DP)` : ''}: rule ${d.rule ? '"' + d.rule + '" ' : ''}${d.status}${d.note ? '. ' + d.note.replace(/\.$/, '') : ''}. ${d.enh} enhancements and ${d.strats} stratagems entered${d.stratsSim ? ` (${d.stratsSim} of the stratagems simulated)` : ''}${d.hasText ? '' : '; rule text not entered yet (data gap)'}.`));
     L.push('');
+    const dd = m.dets.filter(d => d.ruleText || d.enhList.length || d.stratList.length);
+    if (dd.length) {
+      L.push('### Detachment text in full', '', 'Complete rule, enhancement and stratagem text for each detachment, with what the simulator covers. Enhancements are never simulated.', '');
+      for (const d of dd) {
+        L.push(`#### ${d.name}`, '');
+        if (d.ruleText) L.push(`- **Rule${d.rule ? ' (' + d.rule + ')' : ''}** (${d.status}): ${mdT(d.ruleText, 1e6)}`);
+        d.enhList.forEach(e => L.push(`- **Enhancement: ${e.name}**${e.cost ? ` (${e.cost} pts)` : ''} (not simulated): ${mdT(e.text, 1e6)}`));
+        d.stratList.forEach(x => L.push(`- **Stratagem: ${x.name}**${x.cp != null && x.cp !== '' ? ` (${x.cp} CP)` : ''} (${x.sim ? 'simulated' : 'reference only'}): ${mdT([x.when, x.text].filter(Boolean).join(' '), 1e6)}`));
+        L.push('');
+      }
+    }
   }
   L.push('## Unit abilities not simulated', '');
   if (!m.notArr.length) L.push('None found.', '');
   for (const cat of Object.keys(m.byCat).sort((a, b) => m.byCat[b].length - m.byCat[a].length)) {
     L.push(`### ${cat} (${m.byCat[cat].length})`, '');
-    m.byCat[cat].forEach(e => L.push(`- **${e.name}** (${e.units.length} ${e.units.length === 1 ? 'datasheet' : 'datasheets'}: ${listShort(e.units)}). ${mdT(e.text)}`));
+    m.byCat[cat].forEach(e => { L.push(`- **${e.name}** (${e.units.length} ${e.units.length === 1 ? 'datasheet' : 'datasheets'}: ${listShort(e.units, 8)}). Full text: ${mdT(e.text, 1e6)}`); for (const ui of e.unitInfo.slice(0, 4)) L.push(`  - ${ui.name}: ${ui.models} model${ui.models === 1 ? '' : 's'}, M${ui.M} T${ui.T} Sv${ui.Sv}+ W${ui.W} OC${ui.OC} Ld${ui.Ld}${ui.inv ? ' inv ' + ui.inv + '+' : ''}${ui.fnp ? ' FNP ' + ui.fnp + '+' : ''}; keywords: ${ui.kw.join(', ') || 'none'}${ui.leads.length ? '; leader text: ' + ui.leads[0] : ''}`); });
     L.push('');
   }
-  if (m.kw.length) { L.push('## Weapon keywords not simulated', ''); m.kw.forEach(k => L.push(`- **${k.name}**${k.approx ? ' (approximated)' : ''}: ${plural(k.weapons.length, 'weapon')} on ${plural(k.units.length, 'datasheet')} (${listShort(k.units, 4)})`)); L.push(''); }
+  if (m.kw.length) { L.push('## Weapon keywords not simulated', ''); m.kw.forEach(k => L.push(`- **${k.name}**${k.approx ? ' (approximated)' : ''}: ${plural(k.weapons.length, 'weapon')} (${k.weapons.slice(0, 6).join(', ')}) on ${plural(k.units.length, 'datasheet')} (${listShort(k.units, 6)})`)); L.push(''); }
   if (m.top.length) { L.push('## Datasheets most affected', ''); m.top.forEach(([u, n]) => L.push(`- ${u}: ${n} abilities not simulated`)); L.push(''); }
   if (m.features.todo.length) {
     L.push('## Feature backlog', '', 'Each line is something a datasheet does that the simulator does not handle yet, with where it would hook into the engine. Effort: S small, M medium, L large.', '');
-    m.features.todo.forEach(x => L.push(`- **${x.label}** (\`${x.id}\`, effort ${x.effort}; ${plural(x.units.length, 'datasheet')}: ${listShort(x.units, 4)}). Hook: ${x.hook || 'read the rule text'}. Example: ${mdT(x.examples[0], 140)}`));
+    m.features.todo.forEach(x => L.push(`- **${x.label}** (\`${x.id}\`, effort ${x.effort}; ${plural(x.units.length, 'datasheet')}: ${listShort(x.units, 4)}). Hook: ${x.hook || 'read the rule text'}. Example: ${mdT(x.examples[0], 1e6)}`));
     L.push('');
   }
   return L.join('\n');
@@ -23552,6 +23563,7 @@ if (typeof window !== 'undefined' && document.documentElement && document.docume
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && document.documentElement.dataset.sbm === 'open') sbDrawer(false); });
   window.addEventListener('resize', () => { if (!sbMobile()) sbDrawer(false); sbLabels(); });
 }
+$('#sim-copy').addEventListener('click', async () => { const f = $('#sim-fac').value, txt = simLogMd(simLogModel(f)), b = $('#sim-copy'), old = b.textContent; try { await navigator.clipboard.writeText(txt); b.textContent = 'Copied (' + Math.round(txt.length / 1000) + 'k characters)'; } catch (e) { simSave(`${slug(f)}-not-simulated.md`, txt); b.textContent = 'Saved as a file instead'; } setTimeout(() => { b.textContent = old; }, 2500); });
 $('#sim-dl').addEventListener('click', () => { const f = $('#sim-fac').value; simSave(`${slug(f)}-not-simulated.md`, simLogMd(simLogModel(f))); });
 $('#sim-dl-json').addEventListener('click', () => { const f = $('#sim-fac').value; simSave(`${slug(f)}-feature-backlog.json`, JSON.stringify(featureBacklogJson(f), null, 2)); });
 $('#sim-dl-all').addEventListener('click', () => { const fs = [...new Set([...ALL_FACTIONS, ...libFactions()])].sort().filter(x => libCount(x)); simSave('battle-drill-not-simulated.md', [simCoreMd(), ...fs.map(x => simLogMd(simLogModel(x)))].join('\n\n---\n\n')); });
