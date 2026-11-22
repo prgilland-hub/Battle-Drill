@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.22-0311';
+  const VERSION = '2026.11.22-0314';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -17585,7 +17585,7 @@ const schSave = () => { try { localStorage.setItem(SCH_KEY, JSON.stringify(SCH.d
 /* the unit under that faction, or (Space Marine Chapters share datasheets) under a sibling Chapter, or by name alone, so an import filed under a different Chapter still works */
 const schLib = (fac, name) => {
   const nm = String(name || '').toLowerCase(), fam = ['Space Marines', 'Salamanders', 'Black Templars', 'Dark Angels', 'Blood Angels', 'Space Wolves', 'Deathwatch'];
-  return LIB.find(l => l.faction === fac && l.name === name) || (fam.includes(fac) && LIB.find(l => fam.includes(l.faction) && l.name === name)) || LIB.find(l => l.faction === fac && l.name.toLowerCase() === nm) || (fam.includes(fac) && LIB.find(l => fam.includes(l.faction) && l.name.toLowerCase() === nm)) || null;
+  return LIB.find(l => l.faction === fac && l.name === name) || (fam.includes(fac) && LIB.find(l => fam.includes(l.faction) && l.name === name)) || LIB.find(l => l.faction === fac && l.name.toLowerCase() === nm) || (fam.includes(fac) && LIB.find(l => fam.includes(l.faction) && l.name.toLowerCase() === nm)) || (() => { const n = x => String(x || '').toLowerCase().replace(/[^a-z0-9]+/g, ''), k = n(name); if (!k) return null; const ok = l => (l.faction === fac || (fam.includes(fac) && fam.includes(l.faction))); return LIB.find(l => ok(l) && n(l.name) === k) || LIB.find(l => ok(l) && (n(l.name).startsWith(k) || k.startsWith(n(l.name))) && Math.min(n(l.name).length, k.length) >= 6) || null; })();
 };
 const schPlain = h => String(h || '').replace(/<[^>]*>/g, ' ').replace(/&[a-z#0-9]+;/g, ' ').replace(/\s+/g, ' ').toLowerCase();
 
@@ -18069,7 +18069,7 @@ function schHudClick(e) {
 }
 function schLaunch(spec) {
   SCH_MISS = []; const s = spec.build();
-  if (!s) { const m = spec.camp ? CAMP_MISS : SCH_MISS; alert((spec.camp ? 'That unit is not in the library yet.' : 'Could not set up this practice battle.') + (m.length ? '\n\nMissing: ' + m.join(', ') : '')); return; }
+  if (!s) { const m = spec.camp ? CAMP_MISS : SCH_MISS; alert((spec.camp ? 'That unit is not in the library yet.' : 'Could not set up this practice battle.') + (m.length ? '\n\nMissing: ' + m.join(', ') + (() => { try { const nm = String(m[0]).split(' (')[0].toLowerCase().split(/\s+/)[0].slice(0, 6); const sim = LIB.filter(l => l.name.toLowerCase().includes(nm)).slice(0, 6).map(l => l.name + ' (' + l.faction + ')'); return sim.length ? '\n\nSimilar in your library: ' + sim.join(', ') : '\n\nNothing with a similar name is in your library: import a roster that includes it.'; } catch (e) { return ''; } })() : '')); return; }
   if (!spec.camp && SCH_MISS.length) s.subs = SCH_MISS.slice();
   s.camp = spec.camp; s.missing = s.missing || []; s.lesson = spec.lesson; s.title = spec.title; s.goal = spec.goal; s.refs = spec.refs; s.key = spec.key; s.build = spec.build;
   schBegin(s);
