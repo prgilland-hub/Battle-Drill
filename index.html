@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.22-0314';
+  const VERSION = '2026.11.22-0319';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -1410,7 +1410,7 @@ html.fs-on{overflow:hidden}
 .ubreak{display:block;font-weight:400;font-size:.82rem;color:var(--muted);margin-top:2px}
 .det-card.over{opacity:.55;cursor:not-allowed;border-style:dashed}
 /* tooltips + backup */
-.tip-pop{position:fixed;z-index:60;max-width:380px;background:var(--surface);border:1px solid var(--line);box-shadow:0 8px 24px rgba(0,0,0,.28);border-radius:7px;padding:10px 12px;font-size:.88rem;line-height:1.4;pointer-events:none;display:none}
+.tip-pop{position:fixed;z-index:100000;max-width:380px;background:var(--surface);border:1px solid var(--line);box-shadow:0 8px 24px rgba(0,0,0,.28);border-radius:7px;padding:10px 12px;font-size:.88rem;line-height:1.4;pointer-events:none;display:none}
 .tip-pop .ucard{margin:0;border:0;padding:0;background:none}
 .tip-pop b.t{display:block;font:600 1.02rem "Barlow Condensed",system-ui,sans-serif;margin-bottom:2px}
 .deck{margin:8px 0 10px;font-size:.88rem}
