@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.22-0300';
+  const VERSION = '2026.11.22-0307';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -22087,7 +22087,7 @@ async function persistDet(d) {
 }
 /* Space Marine chapters: units and detachments tied to one chapter can be hidden when you pick that chapter in the builder */
 const SM_CHAPS = [['Dark Angels', ['dark angels', 'deathwing', 'ravenwing']], ['Blood Angels', ['blood angels', 'death company']], ['Space Wolves', ['space wolves']], ['Deathwatch', ['deathwatch']], ['Black Templars', ['black templars']], ['Ultramarines', ['ultramarines']], ['Imperial Fists', ['imperial fists']], ['White Scars', ['white scars']], ['Raven Guard', ['raven guard']], ['Iron Hands', ['iron hands']], ['Salamanders', ['salamanders']], ['Crimson Fists', ['crimson fists']]];
-const SM_DET_CHAP = { 'angelic inheritors': 'Blood Angels', 'encarmine speartip': 'Blood Angels', 'wrath of the doomed': 'Blood Angels', 'liberator assault group': 'Blood Angels', 'rage-cursed onslaught': 'Blood Angels', 'champions of fenris': 'Space Wolves', 'saga of the beastslayer': 'Space Wolves', 'saga of the great wolf': 'Space Wolves', 'saga of the hunter': 'Space Wolves', 'saga of the bold': 'Space Wolves', 'inner circle task force': 'Dark Angels', 'unforgiven task force': 'Dark Angels', 'company of hunters': 'Dark Angels', "lion's blade task force": 'Dark Angels', 'darkflight pursuit': 'Dark Angels', 'black spear task force': 'Deathwatch', 'deathwatch support': 'Deathwatch', 'blade of ultramar': 'Ultramarines', 'ceramite sentinels': 'Imperial Fists', 'spearpoint task force': 'White Scars', "medusa's wrath": 'Iron Hands', 'wrath of the rock': 'Dark Angels', "forgefather's seekers": 'Salamanders', 'shadowmark talon': 'Raven Guard', 'vow-sworn crusaders': 'Black Templars', 'fist of the god-emperor': 'Black Templars', "marshal's household": 'Black Templars' };
+const SM_DET_CHAP = { 'angelic inheritors': 'Blood Angels', 'encarmine speartip': 'Blood Angels', 'wrath of the doomed': 'Blood Angels', 'liberator assault group': 'Blood Angels', 'rage-cursed onslaught': 'Blood Angels', 'champions of fenris': 'Space Wolves', 'saga of the beastslayer': 'Space Wolves', 'saga of the great wolf': 'Space Wolves', 'saga of the hunter': 'Space Wolves', 'saga of the bold': 'Space Wolves', 'inner circle task force': 'Dark Angels', 'unforgiven task force': 'Dark Angels', 'company of hunters': 'Dark Angels', "lion's blade task force": 'Dark Angels', 'darkflight pursuit': 'Dark Angels', 'black spear task force': 'Deathwatch', 'deathwatch support': 'Deathwatch', 'blade of ultramar': 'Ultramarines', 'companions of vehemence': 'Black Templars', 'wrathful procession': 'Black Templars', 'righteous crusaders': 'Black Templars', 'vindication task force': 'Black Templars', 'ceramite sentinels': 'Imperial Fists', 'spearpoint task force': 'White Scars', "medusa's wrath": 'Iron Hands', 'wrath of the rock': 'Dark Angels', "forgefather's seekers": 'Salamanders', 'shadowmark talon': 'Raven Guard', 'vow-sworn crusaders': 'Black Templars', 'fist of the god-emperor': 'Black Templars', "marshal's household": 'Black Templars' };
 const unitChaps = u => { const kw = (u.kw || []).map(k => String(k).toLowerCase()); return SM_CHAPS.filter(([, ks]) => ks.some(k => kw.includes(k))).map(c => c[0]); };
 function detChap(d) {
   const n = String(d.name || '').toLowerCase().replace(/[\u2019]/g, "'"); if (SM_DET_CHAP[n]) return SM_DET_CHAP[n];
@@ -22097,9 +22097,9 @@ function detChap(d) {
 }
 const curChapter = () => B.faction === 'Salamanders' ? 'Salamanders' : B.faction === 'Black Templars' ? 'Black Templars' : (B.faction === 'Space Marines' ? (B.chapter || '') : '');
 const chapterOk = u => { const c = curChapter(); if (!c) return true; const uc = unitChaps(u); return !uc.length || uc.includes(c); };
-const detChapterOk = d => { if (B.faction !== 'Space Marines' && B.faction !== 'Salamanders') return true; const c = curChapter(); if (!c) return true; const dc = detChap(d); return !dc || dc === c; };
+const detChapterOk = d => { if (B.faction !== 'Space Marines' && B.faction !== 'Salamanders' && B.faction !== 'Black Templars') return true; const c = curChapter(); if (!c) return true; const dc = detChap(d); return !dc || dc === c; };
 function detsFor(f) {
-  const fs = f === 'Salamanders' ? ['Salamanders', 'Space Marines'] : [f];   /* Salamanders play with the Space Marine detachments */
+  const fs = f === 'Salamanders' || f === 'Black Templars' ? [f, 'Space Marines'] : [f];   /* Salamanders and Black Templars play with the Space Marine detachments (the chapter filter hides other Chapters' own) */
   const out = SEED_DETACH.filter(d => fs.includes(d.faction) && !DETS.some(x => x.id === d.id));
   const all = [...out, ...DETS.filter(d => fs.includes(d.faction))], seen = new Set();
   return all.filter(d => (f !== B.faction || detChapterOk(d)) && (() => { const k = d.name.toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; })()).sort((a, b) => a.name.localeCompare(b.name));
