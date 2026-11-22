@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.22-1729';
+  const VERSION = '2026.11.22-1750';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -3642,6 +3642,7 @@ const chargeBonus = u => -((typeof G !== 'undefined' && G && u.pinnedUntil && G.
 const auraAC = u => (!G || !u.side) ? 0 : (aliveSide(u.side).some(v => v !== u && fxGet(v, 'aura-ac').some(x => edge(u, v) <= +x.t[1] && auraKwOk(u, x.t[2]))) ? 1 : 0);
 const chargePen = t => fxGet(t, 'charge-penalty').reduce((m, x) => Math.max(m, +x.t[1] || 2), 0);
 const advBonus = u => -(isShaken(u) ? 2 : 0) + fxGet(u, 'advance+1').length + ledFx(u, 'advance+1-led').length + ntSurging(u) + ((u.dg && u.dg.advPlus) || 0) + (orkBonusAdv(u)) + auraAC(u);
+const aHalfOf = (on, e) => { if (!on || !e) return e; const avg = e.n ? e.n * (e.sides + 1) / 2 + e.flat : e.flat; return { n: 0, sides: 0, flat: Math.max(1, Math.ceil(avg / 2)) }; };
 const addFlat = (e, n) => e && n ? Object.assign({}, e, { flat: e.flat + n }) : e;
 const ledFx = (u, k) => fxGet(u, k).filter(x => x.src === 'leader');
 const permHas = (u, k) => fxGet(u, 'perm').some(x => x.t.includes(k)) || (k === 'charge-adv' && ((typeof isRiled === 'function' && isRiled(u)) || (G && u.advChargeTurn === G.turnNo)));
@@ -4751,7 +4752,8 @@ amRule(/^\(once per battle, per unit\) at the end of any phase, you can use this
 amRule(/^in your movement phase, when this unit ends a normal move, you can select one visible enemy unit within 12" of this unit and roll one d6:\s*-?\s*on a 3\+, that enemy unit suffers d3 mortal wounds/, m => [/place two bomb squig tokens/.test(m.input) ? 'bomb-squig 2' : 'bomb-squig 1']);
 amRule(/^once per battle, in your command phase, if this unit contains a cult demagogue model, it can use this ability/, ['dark-ritual']);
 amRule(/^(?!.*halved?)while this (?:model|unit)(?:'s [a-z]+ model)? has 1[-\u2011\u2013](\d+) wounds remaining,.*?subtract 1 from the hit roll/, m => { const oc = /subtract (\d+) from (?:this model's|its) objective control characteristic/.exec(m.input); return [`damaged ${m[1]}`].concat(oc ? [`damaged-oc ${m[1]} ${oc[1]}`] : []); });
-amRule(/^while this model has 1[-\u2011\u2013](\d+) wounds remaining, (?:subtract (\d+) from (?:this model's|its) objective control characteristic and )?(?:you can only select one|the attacks characteristics of all of its weapons are halved)/, m => m[2] ? [`damaged-oc ${m[1]} ${m[2]}`] : []);
+amRule(/^while this model has 1[-\u2011\u2013](\d+) wounds remaining, (?:subtract (\d+) from (?:this model's|its) objective control characteristic and )?(?:you can only select one|the attacks characteristics of all of its weapons are halved)/, m => { const fx = []; if (m[2]) fx.push(`damaged-oc ${m[1]} ${m[2]}`); if (/halved/.test(m[0])) fx.push(`damaged-half ${m[1]}`); return fx; });
+amRule(/^if this model is attached to a dominion squad during the declare battle formations step, it gains the scouts 6.{0,3} ability/, ['holy-mission']);
 amRule(/^the bearer has a wounds characteristic of (\d+)\.?$/, m => [`wound-set ${m[1]}`]);
 amRule(/^each time a model with this ability makes a normal, advance or fall back move, it can move over models/, ['walker-over']);
 amRule(/models in that unit can move through models \(including monster\/vehicle models, but excluding titanic models\)/, ['walker-over']);
@@ -5677,7 +5679,7 @@ function profile(u, w, t, shooting, cover) {
   const condOk = c => c === 'melee' ? !shooting : c === 'ranged' ? shooting : c === 'if-charged' ? !!u.charged
     : c === 'vs-objective' ? OBJ.some(o => objIn(t, o)) : c === 'vs-vehicle' ? (has(t, 'vehicle') || has(t, 'monster'))
     : c.startsWith('weapon=') ? c.slice(7) === wkey : true;
-  let lanceNow = false, cleaveAdd = 0, rapAdd = 0, modPrec = false, sAdd = 0, apAdd = 0, dAdd = 0, aAdd = 0, susMod = 0, rrDmg = false, noCover = false, ignoreMods = false, ignoreHit = false, skillAdj = 0, critAt = 6;
+  let lanceNow = false, cleaveAdd = 0, rapAdd = 0, modPrec = false, sAdd = 0, apAdd = 0, dAdd = 0, aAdd = 0, aHalf = false, susMod = 0, rrDmg = false, noCover = false, ignoreMods = false, ignoreHit = false, skillAdj = 0, critAt = 6;
   { const od = orderOf(u); if (od === 'aim' && shooting) { skillAdj -= 1; notes.push('Take Aim!'); } else if (od === 'bayonets' && !shooting) { skillAdj -= 1; notes.push('Fix Bayonets!'); } else if (od === 'rank' && shooting && w.rapid) { rapAdd += 1; notes.push('First Rank, Fire!'); } }
   for (const x of fxAll(u)) {
     const k = x.t[0];
@@ -5690,6 +5692,7 @@ function profile(u, w, t, shooting, cover) {
     if (k === 'grant-lethal' && x.src === 'leader' && !lethal) { lethal = true; notes.push(x.a.name); }
     if (k === 'stationary-dev' && shooting && u.stayed && x.t.slice(1).every(condOk) && !dev) { dev = true; notes.push(x.a.name); }
     if (k === 'damaged' && startModels(u) === 1 && u.cur <= +x.t[1]) { hitMod -= 1; notes.push('damaged'); }
+    if (k === 'damaged-half' && startModels(u) === 1 && u.cur <= +x.t[1]) { aHalf = true; notes.push('damaged: A halved'); }
     if (k === 'damaged-a' && !shooting && startModels(u) === 1 && u.cur <= +x.t[1]) { aAdd += +x.t[2]; notes.push('damaged +' + x.t[2] + ' A'); }
   }
   if (typeof G !== 'undefined' && G && G.oath && t.id !== undefined && G.oath[u.side] === t.id && armyRule(u.side, 'oath of moment')) { rrHit = 'all'; woundMod += 1; notes.push('Oath of Moment'); }
@@ -5806,7 +5809,7 @@ function profile(u, w, t, shooting, cover) {
   if (t.crystalPh && t.crystalPh === G.phaseNo && t.crystalSide === u.side && has(u, 'aeldari')) { apAdd += 1; note('Crystalline Targeting'); }
   if (shooting && hasFx(t, 'urban-warfare') && cover && !w.ignoresCover && !noCover && !ignoreMods) { dAdd -= 1; note('Urban Warfare'); }
   if (dgOn && dgFaction(t.side) && enhHolder(t, /rejuvenating swarm/i) && (w.S + (hv ? 1 : 0) + sAdd) > tT) { woundMod -= 1; note('Rejuvenating Swarm'); }
-  return { psy: isPsyW(w), shooting, models: nModels, Aexpr: addFlat((u.vengeful && !shooting && hasFx(u, 'vengeance') && /axe/i.test(w.name || '')) ? parseDice('6') : (!shooting && hasFx(u, 'extremis') && /arco-flail/i.test(w.name || '')) ? parseDice('6') : parseDice(w.A), aAdd), skill: w.torrent ? w.skill : clamp(w.skill + ((ignoreHit || ignoreMods) ? Math.min(skillAdj, 0) : skillAdj), 2, 6), S: w.S + (hv ? 1 : 0) + sAdd, AP: w.AP + (hv && leaderUp(u) ? 1 : 0) + apAdd, Dexpr: addFlat(parseDice(w.D), dAdd),
+  return { psy: isPsyW(w), shooting, models: nModels, Aexpr: aHalfOf(aHalf, addFlat((u.vengeful && !shooting && hasFx(u, 'vengeance') && /axe/i.test(w.name || '')) ? parseDice('6') : (!shooting && hasFx(u, 'extremis') && /arco-flail/i.test(w.name || '')) ? parseDice('6') : parseDice(w.A), aAdd)), skill: w.torrent ? w.skill : clamp(w.skill + ((ignoreHit || ignoreMods) ? Math.min(skillAdj, 0) : skillAdj), 2, 6), S: w.S + (hv ? 1 : 0) + sAdd, AP: w.AP + (hv && leaderUp(u) ? 1 : 0) + apAdd, Dexpr: addFlat(parseDice(w.D), dAdd),
     melta: half && w.melta ? w.melta : 0, meltaP: attackers && nModels ? attackers.nHalf / nModels : undefined, halfN: attackers ? attackers.nHalf : undefined, bonusA: half && ((w.rapid || 0) + rapAdd) ? (w.rapid || 0) + rapAdd : 0,
     allWoundCrit: !shooting && hasFx(u, 'swallow-whole') && /gaping maw/i.test(w.name) && (has(t, 'infantry') || has(t, 'mounted') || has(t, 'beast')), afU: (inG && u && u.placed && asIs(u)) ? u : null, cleave: (() => { const m = wKw(w).map(k => /^cleave\s*(\d+)/.exec(k)).find(Boolean); const base = m ? +m[1] : 0; return (!shooting || true) && (base || cleaveAdd) ? base + cleaveAdd : 0; })(), torrent: !!w.torrent, lethal, useLethal: true, dev, twin: !!w.twin, blast: !!w.blast, sustained: Math.max(w.sustained || 0, grantSus, susMod), susD3: (w.xkw || []).some(k => /sustained hits d3/i.test(k)) && Math.max(grantSus, susMod) <= 2,
     rrHit, rrWound, hitMod, woundMod, cover: shooting && (cover || indirectCover) && !w.ignoresCover && !noCover && !ignoreMods, notes,
@@ -6467,6 +6470,8 @@ function newGame() {
     if (u.faction === 'Adepta Sororitas' && !u.kw.includes('adepta sororitas')) u.kw.push('adepta sororitas');
     for (const a of u.abilities) if (!(a.fx && a.fx.length)) a.fx = autoFxFor(a, u);
     for (const LD of leadersOf(u)) for (const a of (LD.abilities || [])) if (!(a.fx && a.fx.length)) a.fx = autoFxFor(a, u);
+    /* Ministorum Priest, Holy Mission: with a Dominion Squad he gives the unit Scouts 6" (with a Sisters Novitiate Squad, Infiltrators) */
+    for (const LD of leadersOf(u)) if ((LD.abilities || []).some(a => /^holy mission/i.test(a.name))) { if (/dominion squad/i.test(u.name)) { u.scouts = Math.max(u.scouts || 0, 6); } else if (/sisters novitiate/i.test(u.name)) { u.infGrant = true; if (!u.kw.includes('infiltrators')) u.kw.push('infiltrators'); } }
     invFromAbilities(u); for (const LD of leadersOf(u)) invFromAbilities(LD);
     profInit(u);
     btSetup(u, side, side === 'player' ? pb : ab);
