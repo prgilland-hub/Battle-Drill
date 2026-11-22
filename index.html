@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.21-2010';
+  const VERSION = '2026.11.22-0300';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -17577,7 +17577,9 @@ async function fixUnitSizes() {
 /* ===================== Unit School: learn one unit by playing it ===================== */
 let NEXT_B = null;
 const SCH_KEY = 'battleDrill.school.v1';
-const SCH = { sel: { fac: '', unit: '', leader: '', bg: '', models: 0 }, foe: 'horde', ai: 'hold', dist: 18, done: {} };
+const SCH = { sel: { fac: '', unit: '', leader: '', bg: '', models: 0 }, foe: 'horde', ai: 'hold', dist: 18, done: {}, wg: {} };
+let SCH_FOE = false;   /* true while building the enemy, which never takes your wargear choices */
+const schWgOf = lib => (!SCH_FOE && lib && lib.id && SCH.wg[lib.id]) || null;
 try { SCH.done = JSON.parse(localStorage.getItem(SCH_KEY) || '{}') || {}; } catch (e) { SCH.done = {}; }
 const schSave = () => { try { localStorage.setItem(SCH_KEY, JSON.stringify(SCH.done)); } catch (e) { } };
 const schLib = (fac, name) => LIB.find(l => l.faction === fac && l.name === name);
@@ -17902,7 +17904,7 @@ const SCH_LESSONS = {
 let SCH_MISS = [];
 /* an enemy for the School: the unit asked for, or (when it isn't in your library) the closest stand-in from your own datasheets, so a lesson never refuses to start */
 function schFoeUnit(fac, name, models) {
-  let u = schUnitFor(fac, name, models); if (u) return u;
+  SCH_FOE = true; let u; try { u = schUnitFor(fac, name, models); } finally { SCH_FOE = false; } if (u) return u;
   const want = models || 5, pool = l => !l.legends && !(l.kw || []).some(k => /character|epic hero/i.test(k)) && (l.ranged || []).length;
   let c = LIB.filter(l => l.faction === fac && l.name !== name && pool(l));
   if (!c.length) c = LIB.filter(l => l.name !== name && pool(l));
@@ -17913,7 +17915,8 @@ function schFoeUnit(fac, name, models) {
 function schUnitFor(fac, name, models, leaderName) {
   const lib = schLib(fac, name); if (!lib) return null;
   const u = unitFromLib(lib, models || lib.baseModels || lib.models);
-  if (leaderName) { const cl = schLib(fac, leaderName); if (cl) attachLeader(u, unitFromLib(cl)); }
+  try { applyWargear(u, schWgOf(lib), u.models); } catch (e) { console.warn('wargear', e); }
+  if (leaderName) { const cl = schLib(fac, leaderName); if (cl) { const lu = unitFromLib(cl); try { applyWargear(lu, schWgOf(cl), lu.models); } catch (e) { } attachLeader(u, lu); } }
   return u;
 }
 const schIsChar = lib => !!lib && ((lib.kw || []).includes('character') || (lib.kw || []).includes('epic hero')) && leadsOf(lib).length > 0;
@@ -18241,8 +18244,36 @@ function schRender() {
   h += '</div></div>';
   if (lib) h += schCard(lib) + schBasics(lib) + schDetPanel(lib) + schLeadersPanel(lib);
   root.innerHTML = modeBar + h;
-  if (lib) schLessonsUI(root, lib);
+  if (lib) { schLessonsUI(root, lib); schWargearPanel(root, lib); }
   schFold(root);
+}
+/* the datasheet's own wargear options for the unit (and its chosen leader or bodyguard): the choice is used by every lesson and the sandbox */
+function schWargearPanel(root, lib) {
+  const sel = SCH.sel, parts = [];
+  const add = (l, models) => { if (l && (l.wgOpts || []).length && !parts.some(x => x.l === l)) parts.push({ l, models }); };
+  add(lib, sel.models || lib.baseModels || lib.models);
+  if (schIsChar(lib)) { const bg = schLib(lib.faction, sel.bg || leadsOf(lib)[0]); add(bg, sel.models || (bg && (bg.baseModels || bg.models))); }
+  else if (sel.leader) add(schLib(lib.faction, sel.leader), 1);
+  if (!parts.length) return;
+  const sum = l => { const u = unitFromLib(l, 0); try { applyWargear(u, schWgOf(l), u.models); } catch (e) { } const f = w => escH(w.name) + (w.count ? ' x' + w.count : ''); return [...(u.ranged || []), ...(u.melee || [])].map(f).join(', '); };
+  let h = '<div class="panel sch-wg"><h3>Wargear options</h3><p class="muted" style="margin:0 0 6px">Pick a loadout from the datasheet. It is used in every lesson and the sandbox for this unit, and the datasheet in battle shows what you chose. Points are not changed.</p>';
+  for (const { l, models } of parts) {
+    const W = SCH.wg[l.id] || { opt: {} };
+    h += `<div class="sch-wg-unit" style="margin:0 0 8px"><b>${escH(l.name)}</b>${optionsHtml({ key: l.id, models: +models || l.models }, l, W)}<div class="muted" style="font-size:.82rem">Loadout: ${sum(l)}</div></div>`;
+  }
+  h += '<button type="button" class="btn" data-wg-reset="1">Reset to the standard loadout</button></div>';
+  const el = document.createElement('div'); el.innerHTML = h; const pn = el.firstChild;
+  const card = [...root.children].filter(e => e.classList.contains('panel') && !e.classList.contains('sch-pick'))[0];
+  if (card && card.nextSibling) root.insertBefore(pn, card.nextSibling); else root.appendChild(pn);
+  if (!root._wgBound) { root._wgBound = 1;
+    root.addEventListener('change', e => {
+      const t = e.target.closest && e.target.closest('.sch-wg [data-wg-opt]'); if (!t) return; const [id, rid] = t.dataset.wgOpt.split('|'), w = SCH.wg[id] = SCH.wg[id] || { opt: {} };
+      const v = t.tagName === 'SELECT' ? t.value : String(Math.max(0, Math.floor(+t.value) || 0));
+      if (v === '' || v === '0') delete w.opt[rid]; else w.opt[rid] = t.tagName === 'SELECT' ? v : +v;
+      schRender();
+    });
+    root.addEventListener('click', e => { if (e.target.closest && e.target.closest('.sch-wg [data-wg-reset]')) { const L = schLib(SCH.sel.fac, SCH.sel.unit); for (const id of Object.keys(SCH.wg)) delete SCH.wg[id]; schRender(); } });
+  }
 }
 /* every section after the unit card folds away (closed by default) so the page is not one long scroll; what you open stays open while you change unit */
 const SCH_OPEN = new Set();
