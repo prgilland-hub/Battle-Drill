@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.22-0319';
+  const VERSION = '2026.11.22-1729';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -2381,6 +2381,7 @@ Unit: Big Walker | models 1 | M 8 | T 10 | Sv 2 | Inv 5 | W 12 | Ld 6 | OC 4 | s
   <div class="panel">
     <div class="row"><h2 style="margin:0">What isn't simulated yet</h2><span style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn" id="sim-dl">Download this log (.md)</button><button class="btn" id="sim-dl-all">Download every faction</button><button class="btn" id="sim-dl-json" data-tip="The feature backlog as JSON: feature ids, where each one would hook into the engine, and which datasheets need it.">Download the feature backlog (.json)</button></span></div>
     <p class="muted" style="margin:.3rem 0 .8rem;font-size:.92rem">Built live from your datasheet library, saved armies and detachments, so it updates whenever you import more. "Not simulated" means the datasheet or rule text shows in the app but has no effect in battle. Pick a faction to see its log; the mechanics that apply to every faction are at the bottom.</p>
+    <div id="sim-over"></div>
     <div class="bld-top" style="max-width:420px"><label>Faction<select id="sim-fac"></select></label></div>
     <div id="sim-body"></div>
   </div>
@@ -23515,8 +23516,20 @@ function renderSimLog(force) {
   sel.innerHTML = (has.length ? `<optgroup label="Datasheets loaded">${has.map(o).join('')}</optgroup>` : '') + `<optgroup label="No datasheets yet">${none.map(o).join('')}</optgroup>`;
   sel.value = cur;
   $('#sim-body').innerHTML = simLogHtml(simLogModel(cur));
+  try { $('#sim-over').innerHTML = simOverviewHtml(has); } catch (e) { console.warn('sim overview', e); }
   refreshTheme();
 }
+/* one row per faction you have datasheets for: how much of it the app actually simulates */
+function simOverviewHtml(has) {
+  if (!has.length) return '';
+  const rows = has.map(f => { const m = simLogModel(f), dets = m.dets || [], dS = dets.filter(d => d.status !== 'not simulated').length, stT = dets.reduce((a, d) => a + (d.strats || 0), 0), stS = dets.reduce((a, d) => a + (d.stratsSim || 0), 0), rl = (m.rules || []), rS = rl.filter(r => r.status !== 'not simulated').length;
+    return { f, m, dets: dets.length, dS, stT, stS, rl: rl.length, rS }; });
+  const tot = rows.reduce((a, r) => { a.s += r.m.simN; a.n += r.m.notN; a.dT += r.dets; a.dS += r.dS; a.sT += r.stT; a.sS += r.stS; return a; }, { s: 0, n: 0, dT: 0, dS: 0, sT: 0, sS: 0 });
+  const pc = (a, b) => b ? Math.round(a * 100 / b) + '%' : '-', bar = (a, b) => `<span style="display:inline-block;width:70px;height:7px;background:var(--raised);border:1px solid var(--line);vertical-align:middle;margin-right:6px"><span style="display:block;height:100%;width:${b ? Math.round(a * 100 / b) : 0}%;background:var(--brass)"></span></span>`;
+  rows.sort((a, b) => (a.m.pct - b.m.pct) || a.f.localeCompare(b.f));
+  return `<details open style="margin:0 0 12px"><summary style="cursor:pointer;font-weight:700">Coverage at a glance (your library)</summary><p class="muted" style="margin:4px 0 6px;font-size:.88rem">All factions with datasheets: ${tot.s} of ${tot.s + tot.n} distinct unit abilities simulated (${pc(tot.s, tot.s + tot.n)}), ${tot.dS} of ${tot.dT} detachments with a simulated rule, ${tot.sS} of ${tot.sT} stratagems simulated (${pc(tot.sS, tot.sT)}). Lowest coverage first; click a row for its full list.</p><div style="overflow:auto"><table style="border-collapse:collapse;width:100%;font-size:.86rem"><thead><tr style="text-align:left"><th style="padding:3px 8px 3px 0">Faction</th><th style="padding:3px 8px">Datasheets</th><th style="padding:3px 8px">Unit abilities simulated</th><th style="padding:3px 8px">Detachment rules</th><th style="padding:3px 8px">Stratagems</th></tr></thead><tbody>${rows.map(r => `<tr data-simfac="${escH(r.f)}" style="border-top:1px solid var(--line);cursor:pointer"><td style="padding:3px 8px 3px 0;white-space:nowrap"><b>${escH(r.f)}</b></td><td style="padding:3px 8px">${r.m.units}</td><td style="padding:3px 8px;white-space:nowrap">${bar(r.m.simN, r.m.simN + r.m.notN)}${r.m.simN}/${r.m.simN + r.m.notN} (${r.m.pct}%)</td><td style="padding:3px 8px">${r.dets ? r.dS + '/' + r.dets : '-'}</td><td style="padding:3px 8px">${r.stT ? r.stS + '/' + r.stT : '-'}</td></tr>`).join('')}</tbody></table></div></details>`;
+}
+document.addEventListener('click', e => { const tr = e.target.closest && e.target.closest('tr[data-simfac]'); if (tr) { renderSimLog(tr.dataset.simfac); window.scrollTo({ top: 0 }); } });
 async function simSave(filename, text) {
   if (Store.downloads) { try { await Store.downloads.save({ filename, data: text }); return; } catch (e) { if (e && e.code === 'declined') return; } }
   openModal(`<div class="row"><h2 style="margin:0">${escH(filename)}</h2><button class="btn" id="m-close">Close</button></div><textarea readonly style="width:100%;min-height:50vh;background:var(--raised);color:var(--ink);border:1px solid var(--line);border-radius:5px;padding:8px;font:13px/1.45 ui-monospace,Menlo,Consolas,monospace">${escH(text)}</textarea>`);
