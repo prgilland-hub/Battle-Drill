@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.22-2126';
+  const VERSION = '2026.11.23-0145';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -2476,7 +2476,7 @@ function resolve(p, def, rec) {
     if (!ok) continue;
     if (crit && p.dev) st.dev++; else normal++;
   }
-  st.wounds = normal + st.dev;
+  st.wounds = normal + st.dev; st.mwW = p.mwW ? st.wounds : 0;
   const body = { Sv: def.Sv !== undefined ? def.Sv : p.Sv, inv: def.inv !== undefined ? def.inv : p.inv, invR: def.invR || 0, fnp: def.fnp !== undefined ? def.fnp : p.fnp, dm: def.dm || 0, fnpPsy: def.fnpPsy || 0, half: !!def.half, svR: !!def.svR, mantle: !!def.mantle };
   const Ls = def.leaders || (def.leader ? [def.leader] : []), front = () => Ls.find(x => x.alive) || null;
   let precL = null;
@@ -2528,6 +2528,11 @@ function resolve(p, def, rec) {
     const dmg = rollDmg(p);
     const inf = hurt(P, dmg); st.dmg += inf;
     if (rec) rec.dmg.push({ d: dmg, inf, mw: true });
+  }
+  for (let i = 0; i < st.mwW; i++) {  // Rapturous Blows: 1 mortal wound for each wound scored, in addition to normal damage
+    const P = who(); if (!P) break;
+    const inf = hurt(P, 1); st.dmg += inf;
+    if (rec) rec.dmg.push({ d: 1, inf, mw: true });
   }
   st.killed = st.start - def.models + (st.leaderKilled || 0);
   return st;
@@ -3910,6 +3915,7 @@ amRule(/^(?:- )?this unit has stealth\.? ?(?:- )?melee attacks that target this 
 amRule(/^if this model is on the battlefield at the start of your command phase, you can choose one of the following/, ['fiery']);
 amRule(/^once per battle, in the fight phase, this model can use this ability\. if it does, until the end of the phase, improve the strength and attacks characteristics of melee weapons equipped by this model by 3/, ['zealot']);
 amRule(/^while this model is leading a unit, each time a model in that unit makes an attack, you can re-roll the hit roll and you can re-roll the wound roll/, ['mod rr-hit-all', 'mod rr-wound-all']);
+amRule(/^each time this model.s unit is selected to fight, you can discard 1 miracle dice\. if you do, then until the end of the phase, each time a melee attack made by this model scores a wound, the target of that attack suffers 1 mortal wound/, ['rapt']);
 amRule(/^each time this model's unit is selected to shoot or fight, you can discard 1 miracle dice\. if you do, until the end of the phase, add 3 to the attacks characteristic of fidelis and the lance of illumination/, ['repugnance']);
 amRule(/^each time a model in this unit makes an attack that targets a monster or vehicle unit, add 1 to the hit roll and add 1 to the wound roll/, ['mod hit+1 vs-mv', 'mod wound+1 vs-mv']);
 amRule(/^while this unit contains a repentia superior model, each time a sisters repentia model in this unit makes a melee attack, you can re-roll the hit roll and you can re-roll the wound roll/, ['mod rr-hit-all melee', 'mod rr-wound-all melee']);
@@ -5679,7 +5685,7 @@ function profile(u, w, t, shooting, cover) {
   const condOk = c => c === 'melee' ? !shooting : c === 'ranged' ? shooting : c === 'if-charged' ? !!u.charged
     : c === 'vs-objective' ? OBJ.some(o => objIn(t, o)) : c === 'vs-vehicle' ? (has(t, 'vehicle') || has(t, 'monster'))
     : c.startsWith('weapon=') ? c.slice(7) === wkey : true;
-  let lanceNow = false, cleaveAdd = 0, rapAdd = 0, modPrec = false, sAdd = 0, apAdd = 0, dAdd = 0, aAdd = 0, aHalf = false, susMod = 0, rrDmg = false, noCover = false, ignoreMods = false, ignoreHit = false, skillAdj = 0, critAt = 6;
+  let lanceNow = false, cleaveAdd = 0, rapAdd = 0, modPrec = false, sAdd = 0, apAdd = 0, dAdd = 0, aAdd = 0, aHalf = false, mwWflag = false, susMod = 0, rrDmg = false, noCover = false, ignoreMods = false, ignoreHit = false, skillAdj = 0, critAt = 6;
   { const od = orderOf(u); if (od === 'aim' && shooting) { skillAdj -= 1; notes.push('Take Aim!'); } else if (od === 'bayonets' && !shooting) { skillAdj -= 1; notes.push('Fix Bayonets!'); } else if (od === 'rank' && shooting && w.rapid) { rapAdd += 1; notes.push('First Rank, Fire!'); } }
   for (const x of fxAll(u)) {
     const k = x.t[0];
@@ -5698,6 +5704,7 @@ function profile(u, w, t, shooting, cover) {
   if (typeof G !== 'undefined' && G && G.oath && t.id !== undefined && G.oath[u.side] === t.id && armyRule(u.side, 'oath of moment')) { rrHit = 'all'; woundMod += 1; notes.push('Oath of Moment'); }
   if (u.tyrant && shooting && w.range && edge(u, t) <= w.range / 2) { rrHit = better(rrHit, leaderUp(u) ? 'all' : '1s'); notes.push('Conquering Tyrant'); }
   if (G && u.ritualTurn === G.turnNo) { hitMod += 1; woundMod += 1; notes.push('Dark Ritual'); }
+  if (!shooting && u.dg && u.dg.rapt && (!leaderUp(u) || w.leader)) { mwWflag = true; notes.push('Rapturous Blows'); }
   if (u.spoor && isDC(u)) { if (belowStart(t)) { hitMod += 1; notes.push('Spoor of Frailty'); } if (belowHalf(t)) woundMod += 1; }
   if (t.masked) { hitMod -= 1; notes.push('Masks of Death'); }
   if (shooting && (elevOf(u) >= 3 || (has(u, 'towering') && edge(u, t) <= 12)) && elevOf(t) === 0 && !(typeof wIsIndirect === 'function' && wIsIndirect(w))) { skillAdj -= 1; notes.push('Plunging Fire'); }
@@ -5809,7 +5816,7 @@ function profile(u, w, t, shooting, cover) {
   if (t.crystalPh && t.crystalPh === G.phaseNo && t.crystalSide === u.side && has(u, 'aeldari')) { apAdd += 1; note('Crystalline Targeting'); }
   if (shooting && hasFx(t, 'urban-warfare') && cover && !w.ignoresCover && !noCover && !ignoreMods) { dAdd -= 1; note('Urban Warfare'); }
   if (dgOn && dgFaction(t.side) && enhHolder(t, /rejuvenating swarm/i) && (w.S + (hv ? 1 : 0) + sAdd) > tT) { woundMod -= 1; note('Rejuvenating Swarm'); }
-  return { psy: isPsyW(w), shooting, models: nModels, Aexpr: aHalfOf(aHalf, addFlat((u.vengeful && !shooting && hasFx(u, 'vengeance') && /axe/i.test(w.name || '')) ? parseDice('6') : (!shooting && hasFx(u, 'extremis') && /arco-flail/i.test(w.name || '')) ? parseDice('6') : parseDice(w.A), aAdd)), skill: w.torrent ? w.skill : clamp(w.skill + ((ignoreHit || ignoreMods) ? Math.min(skillAdj, 0) : skillAdj), 2, 6), S: w.S + (hv ? 1 : 0) + sAdd, AP: w.AP + (hv && leaderUp(u) ? 1 : 0) + apAdd, Dexpr: addFlat(parseDice(w.D), dAdd),
+  return { mwW: mwWflag, psy: isPsyW(w), shooting, models: nModels, Aexpr: aHalfOf(aHalf, addFlat((u.vengeful && !shooting && hasFx(u, 'vengeance') && /axe/i.test(w.name || '')) ? parseDice('6') : (!shooting && hasFx(u, 'extremis') && /arco-flail/i.test(w.name || '')) ? parseDice('6') : parseDice(w.A), aAdd)), skill: w.torrent ? w.skill : clamp(w.skill + ((ignoreHit || ignoreMods) ? Math.min(skillAdj, 0) : skillAdj), 2, 6), S: w.S + (hv ? 1 : 0) + sAdd, AP: w.AP + (hv && leaderUp(u) ? 1 : 0) + apAdd, Dexpr: addFlat(parseDice(w.D), dAdd),
     melta: half && w.melta ? w.melta : 0, meltaP: attackers && nModels ? attackers.nHalf / nModels : undefined, halfN: attackers ? attackers.nHalf : undefined, bonusA: half && ((w.rapid || 0) + rapAdd) ? (w.rapid || 0) + rapAdd : 0,
     allWoundCrit: !shooting && hasFx(u, 'swallow-whole') && /gaping maw/i.test(w.name) && (has(t, 'infantry') || has(t, 'mounted') || has(t, 'beast')), afU: (inG && u && u.placed && asIs(u)) ? u : null, cleave: (() => { const m = wKw(w).map(k => /^cleave\s*(\d+)/.exec(k)).find(Boolean); const base = m ? +m[1] : 0; return (!shooting || true) && (base || cleaveAdd) ? base + cleaveAdd : 0; })(), torrent: !!w.torrent, lethal, useLethal: true, dev, twin: !!w.twin, blast: !!w.blast, sustained: Math.max(w.sustained || 0, grantSus, susMod), susD3: (w.xkw || []).some(k => /sustained hits d3/i.test(k)) && Math.max(grantSus, susMod) <= 2,
     rrHit, rrWound, hitMod, woundMod, cover: shooting && (cover || indirectCover) && !w.ignoresCover && !noCover && !ignoreMods, notes,
@@ -11019,6 +11026,7 @@ function asPreAttack(u, t, shooting) {
   if (!shooting && enhHolder(u, /righteous rage/i) && !u.dg.rageDone && pool.length) { u.dg.rageDone = true; pool.sort((a, b) => a - b); let n = 0; while (pool.length && pool[0] <= 3 && n < 3) { pool.shift(); n++; } if (n) { u.dg.rage = n; log(`Righteous Rage: ${u.name} discards ${plural(n, 'Miracle dice')}: +${n} Attacks and Strength on its melee weapons.`, u.side); } }
   if (!shooting && hasFx(u, 'zealot') && !u.zealotUsed) { u.zealotUsed = true; u.dg.mods = (u.dg.mods || []).concat([{ fx: 'mod a+3 melee self', name: 'Zealot' }, { fx: 'mod s+3 melee self', name: 'Zealot' }]); log(`Zealot: ${u.name} improves its Attacks and Strength by 3 this fight.`, u.side); }
   if (!shooting && hasFx(u, 'deliverance') && !u.deliveranceUsed) { u.deliveranceUsed = true; u.dg.mods = (u.dg.mods || []).concat([{ fx: 'mod a+3 melee self', name: 'Divine Deliverance' }, { fx: 'mod dev melee self', name: 'Divine Deliverance' }]); log(`Divine Deliverance: ${u.name} adds 3 Attacks and has Devastating Wounds this fight.`, u.side); }
+  if (!shooting && hasFx(u, 'rapt') && !u.dg.raptDone && pool.length) { pool.sort((a, b) => a - b); if (pool[0] <= 3) { pool.shift(); u.dg.raptDone = true; u.dg.rapt = true; log(`Rapturous Blows: ${u.name} discards a Miracle dice: each wound its leader scores in melee also inflicts a mortal wound this fight.`, u.side); } }
   if (hasFx(u, 'repugnance') && !u.dg.repDone && pool.length) { pool.sort((a, b) => a - b); if (pool[0] <= 3) { pool.shift(); u.dg.repDone = true; u.dg.mods = (u.dg.mods || []).concat([{ fx: 'mod a+3 wn:fidelis', name: 'Righteous Repugnance' }, { fx: 'mod a+3 wn:lance_of_illumination', name: 'Righteous Repugnance' }]); u.dg.gainKill = 'Righteous Repugnance'; log(`Righteous Repugnance: ${u.name} discards a Miracle dice for +3 Attacks on Fidelis and the Lance of Illumination.`, u.side); } }
 }
 Object.assign(ENH_FX, { 'symphonic payload': [] });
