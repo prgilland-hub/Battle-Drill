@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.23-0207';
+  const VERSION = '2026.11.24-0924';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -3575,13 +3575,15 @@ function applyMortal(u, n) {
 function destroyed(u) {
   if (!u.alive) return;
   if (dgPreventDeath(u)) return;
+  const asFR = asFinalRedemptionPre(u);
   if (G && G.phase === 'fight' && G.curAtt && G.curAtt.side !== u.side && G.curAtt.leader && (G.curAtt.leader.abilities || []).some(a => (a.fx || []).some(f => /feast/.test(f)))) G.curAtt.fnp = G.curAtt.fnp ? Math.min(G.curAtt.fnp, 5) : 5;
   u.alive = false; u.diedPh = G ? G.phaseNo : 0; if (G && has(u, 'vehicle')) for (const v of G.units) if (v.alive && v.side === u.side && v !== u && v.placed && !v.reserve && hasFx(v, 'vengeance') && edge(u, v) <= 12 && (has(u, 'adeptus mechanicus') || has(u, 'astra militarum'))) v.vengeful = true; noteKill(u); if (G && G.curAtt) G.curAtt.killPh = G.phaseNo; if (G && G.curAtt && G.phase === 'fight' && has(u, 'character') && hasFx(G.curAtt, 'exemplar') && G.curAtt.side !== u.side) { G.cp[G.curAtt.side]++; G.curAtt.exemplarA = (G.curAtt.exemplarA || 0) + 1; log(`Inspiring Exemplar: ${G.curAtt.name} destroys ${u.name}: ${G.curAtt.side === 'player' ? 'you gain' : 'the AI gains'} 1 CP and its Nemesis force weapon gets +1 Attacks for the rest of the battle.`, G.curAtt.side); } tsOnDestroyed(u); execShock(u); if (G && G.curAtt && has(u, 'character') && hasFx(G.curAtt, 'feeder-cp')) { G.cp[G.curAtt.side]++; log(`Feeder Tendrils: ${G.curAtt.side === 'player' ? 'you gain' : 'the AI gains'} 1 CP for destroying ${u.name}.`, G.curAtt.side); } if (typeof campKill === 'function') campKill(u); log(`${u.name} is destroyed.`, u.side);
-  asOnDestroyed(u); asQuarryLost(u); if (G.curAtt && asIs(u)) { const L = (G.asKilledBy[u.side] = G.asKilledBy[u.side] || []); if (!L.includes(G.curAtt.id)) L.push(G.curAtt.id); }
+  asOnDestroyed(u); asQuarryLost(u); asFinalRedemptionQ(u, asFR); if (G.curAtt && asIs(u)) { const L = (G.asKilledBy[u.side] = G.asKilledBy[u.side] || []); if (!L.includes(G.curAtt.id)) L.push(G.curAtt.id); }
   boom(.45);
   emergencyDisembark(u);
   if (!u.leader) queueRevenant(u, 'unit');
   queueReclaim(u);
+  if (asImmolationQ(u)) return;
   if (!dgDestroyedHooks(u)) dgDeadlyDemise(u, false);
 }
 /* 11th edition (Rules Appendix 01.02.01): 'below half-strength' is strictly less than half; 'at or below' also includes exactly half */
@@ -5735,6 +5737,7 @@ function profile(u, w, t, shooting, cover) {
     if (!shooting && hasFx(u, 'quarry') && quarryOf(u) === t) { rrHit = 'all'; rrWound = 'all'; note('Monarch of the Hunt'); }
     if (hasFx(u, 'quarry-w') && quarryOf(u) === t) { rrWound = 'all'; note('Designated foe'); }
     if (hasFx(u, 'quarry-dev') && quarryOf(u) === t) { dev = true; note('Headhunters'); }
+    if (shooting && u.dg && u.dg.reprise && u.dg.reprise.includes(t.id)) { dev = true; note('Devastating Reprise'); }
     if (hasFx(u, 'quarry-lethal') && quarryOf(u) === t) { lethal = true; note('Designated foe'); }
     if (hasFx(u, 'quarry-w1') && quarryOf(u) === t) { woundMod += 1; note('Mark'); }
     if (u.shocked && aliveSide(other(u.side)).some(v => v.placed && !v.reserve && v.models > 0 && hasFx(v, 'psych-sab') && edge(u, v) <= 12)) { hitMod -= 1; note('Psychological Saboteur'); }
@@ -6994,7 +6997,7 @@ const usableRanged = u => {
 };
 const canShoot = u => u.alive && u.placed && !u.shot && (!u.fellBack || docU(u, 'tactical') || permHas(u, 'shoot-fb') || smFbShoot(u) || (G && u.fbShootTurn === G.turnNo)) && (!isEngaged(u) || cqEligible(u) || (u.dg && u.dg.allRot)) && usableRanged(u).length > 0;
 const shootTargets = u => targetsForWeapons(u, usableRanged(u));
-const canCharge = u => u.alive && u.placed && !u.chargeTried && !(G && u.flickerTurn === G.turnNo) && !tsAetherUsed(u) && !isAircraft(u) && (!u.advanced || docU(u, 'assault') || permHas(u, 'charge-adv') || u.permChargeAdv || smAdvCharge(u)) && (!u.fellBack || docU(u, 'tactical') || permHas(u, 'charge-fb') || smFbCharge(u) || (G && u.fbChargeTurn === G.turnNo)) && !isEngaged(u) && aliveSide(other(u.side)).some(e => edge(u, e) <= 12);
+const canCharge = u => u.alive && u.placed && !u.chargeTried && !(G && u.flickerTurn === G.turnNo) && !tsAetherUsed(u) && !isAircraft(u) && (!u.advanced || docU(u, 'assault') || permHas(u, 'charge-adv') || u.permChargeAdv || smAdvCharge(u)) && (!u.fellBack || docU(u, 'tactical') || permHas(u, 'charge-fb') || smFbCharge(u) || (G && u.fbChargeTurn === G.turnNo && !(u.fbXor === G.turnNo && u.shot))) && !isEngaged(u) && aliveSide(other(u.side)).some(e => edge(u, e) <= 12);
 const grenadeTargets = u => aliveSide(other(u.side)).filter(e => edge(u, e) <= 8 && visible(u, e) && !isEngaged(e));
 function shootReason(u) {
   if (u.shot) return 'it has already shot';
@@ -7399,6 +7402,7 @@ async function resolveFight(u, t, choice) {
   asPreAttack(u, t, false);
   await ntPreAttack(u, t, false);
   let targets = engagedWith(u);
+  { const tn = targets.filter(e => e.dg && e.dg.taunt); if (tn.length) { targets = tn; if (!u.dg.tauntLog) { u.dg.tauntLog = true; log(`Suffering and Sacrifice: ${u.name} must target ${tn[0].name}.`, u.side); } } }
   if (!targets.length) {
     const near = aliveSide(other(u.side)).filter(e => edge(u, e) <= (u.pitiless ? 8 : 5)).sort((a, b) => edge(u, a) - edge(u, b));
     if (near.length) { pileIn(u, near[0]); targets = engagedWith(u); }
@@ -7857,9 +7861,11 @@ async function runAI() {
   await playerHeroic(); if (stop()) return;
   await btPerfervid(); if (stop()) return;
   setPhase('fight');
+  await asStartFight(); if (stop()) return;
   await new Promise(res => startFight(res));
   if (stop()) return;
   await reactMoves('fightend'); if (stop()) return; await reactMoves('oppfightend'); if (stop()) return;
+  await asAngelicDescent(); if (stop()) return;
   await dgTalismanPlayer(); if (stop()) return;
   G.busy = false;
   endTurn();
@@ -8674,7 +8680,7 @@ function transportButtons(u) {
   if (G.stage !== 'battle' || G.phase !== 'movement' || G.active !== 'player' || G.busy || !tcfg(u)) return out;
   const moved = u.moved || u.advanced;
   for (const x of cargoOf(u)) {
-    if (u.advanced && !hasFx(u, 'transport-adv')) { out.push(btn(`${x.name}: can't disembark, ${u.name} Advanced`, () => { }, false, true)); continue; }
+    if (u.advanced && !hasFx(u, 'transport-adv') && u.cfTurn !== G.turnNo) { out.push(btn(`${x.name}: can't disembark, ${u.name} Advanced`, () => { }, false, true)); continue; }
     out.push(btn(`Disembark ${x.name}${moved ? ' (can\'t charge unless the transport allows it)' : ' (then it can move and charge)'}`, () => playerDisembark(u, x, moved ? 'rapid' : 'tactical'), false, false, `Set up within 3" of ${u.name}.`));
     if (isEngaged(u)) out.push(btn(`Combat disembark ${x.name} (within 6", Hazard rolls, battle-shocked)`, () => playerDisembark(u, x, 'combat')));
   }
@@ -8702,7 +8708,7 @@ function aiDisembark() {
     const cargo = cargoOf(t); if (!cargo.length) continue;
     const near = Math.min(...foes.map(e => edge(t, e)));
     if (!(G.round >= 2 || near <= 24 || isEngaged(t))) continue;
-    if (t.advanced && !hasFx(t, 'transport-adv')) continue;
+    if (t.advanced && !hasFx(t, 'transport-adv') && t.cfTurn !== G.turnNo) continue;
     for (const u of cargo) {
       const eng = isEngaged(t), spots = landingSpots(t, u, eng ? 6 : 3, eng); if (!spots.length) continue;
       const tg = foes.slice().sort((a, b) => edge(t, a) - edge(t, b))[0];
@@ -9098,20 +9104,24 @@ async function reactAfterPlayerFight(u, t, beforeHalf) {
 /* Protocol of the Eternal Revenant: a fallen Infantry Character returns at the end of the phase */
 function queueRevenant(unit, kind) {
   btYieldQueue(unit, kind);
-  if (!G || !G.offers || unit.side !== 'player' || !detFind('protocol-of-the-eternal-revenant')) return;
+  if (!G || !G.offers || unit.side !== 'player') return;
   const model = kind === 'leader' ? unit.leader : unit;
   if (!model || model.revived) return;
   const kw = model.kw || [];
-  if (!(kw.includes('infantry') && kw.includes('character'))) return;
-  G.offers.push({ unit, kind, lead: kind === 'leader' ? unit.leader : null, x: unit.x, y: unit.y, name: model.name });
+  const rev = !!detFind('protocol-of-the-eternal-revenant') && kw.includes('infantry') && kw.includes('character');
+  const di = !!detFind('divine-intervention') && unit.faction === 'Adepta Sororitas' && kw.includes('character') && !/celestine/i.test(model.name) && !(G.diUsed && G.diUsed.includes(model.name));
+  if (!rev && !di) return;
+  G.offers.push({ unit, kind, lead: kind === 'leader' ? unit.leader : null, x: unit.x, y: unit.y, name: model.name, rev, di });
 }
 async function flushOffers() {
-  await btFlush();
+  await btFlush(); await dgFlush();
   await flushReclaim();
   await flushHazards();
   const list = (G.offers || []).splice(0), s = detFind('protocol-of-the-eternal-revenant');
   for (const o of list) {
-    if (!s || G.stage !== 'battle' || !canStrat('player', s.slug, s.cost)) continue;
+    if (G.stage !== 'battle') continue;
+    if (o.di && await asDivineAsk(o)) continue;
+    if (o.rev === false || !s || !canStrat('player', s.slug, s.cost)) continue;
     if (await askStrat(s, `${o.name} has been destroyed. Use Protocol of the Eternal Revenant (${s.cost} CP)? At the end of the phase it returns near where it fell, as its own unit, with half its wounds.`, false) && useDetStrat(s)) G.revenants.push(o);
   }
 }
@@ -9126,13 +9136,13 @@ function materializeRevenants() {
       nu = { name: src.name, M: src.M, T: src.T, Sv: src.Sv, inv: src.inv || 0, W: src.W, Ld: src.Ld, OC: src.OC, fnp: src.fnp || 0, kw: [...(src.kw || [])], scouts: 0, abilities: JSON.parse(JSON.stringify(src.abilities || [])), ranged: o.unit.ranged.filter(w => w.leader && (w.lid || 0) === (src.lid || 0)).map(strip), melee: o.unit.melee.filter(w => w.leader && (w.lid || 0) === (src.lid || 0)).map(strip) };
     } else nu = JSON.parse(JSON.stringify(o.unit));
     const nid = Math.max(...G.units.map(v => v.id)) + 1;
-    Object.assign(nu, { id: nid, side: 'player', alive: true, placed: true, models: 1, start: 1, cur: Math.max(1, Math.ceil(nu.W / 2)), revived: true, shocked: false, reserve: false, faction: o.unit.faction, tag: unitTag(nu.name), r: 1.6, x: o.x, y: o.y });
+    Object.assign(nu, { id: nid, side: 'player', alive: true, placed: true, models: 1, start: 1, cur: o.wounds ? Math.max(1, Math.min(nu.W, o.wounds)) : Math.max(1, Math.ceil(nu.W / 2)), revived: true, shocked: false, reserve: false, faction: o.unit.faction, tag: unitTag(nu.name), r: 1.6, x: o.x, y: o.y });
     delete nu.leader; resetFlags(nu);
     let ok = false;
     for (let ring = 0; ring <= 9 && !ok; ring += .75) for (let a = 0; a < 6.3 && !ok; a += .5) { const x = o.x + Math.cos(a) * ring, y = o.y + Math.sin(a) * ring; if (posOk(nu, x, y, false)) { nu.x = x; nu.y = y; ok = true; } }
     if (!ok) { log(`There is no room for ${nu.name} to return.`, 'player'); continue; }
     G.units.push(nu); G._nameRe = null;
-    log(`${nu.name} returns as its own unit with ${nu.cur} wounds (Protocol of the Eternal Revenant).`, 'player');
+    log(`${nu.name} returns as its own unit with ${nu.cur} wounds (${o.di ? 'Divine Intervention' : 'Protocol of the Eternal Revenant'}).`, 'player');
   }
 }
 
@@ -9522,12 +9532,12 @@ async function dgOffer(side, slug, text, u) {
 const rectDist = (e, t) => distPointRect(e.x, e.y, t) - e.r;
 const bigFoe = (u, pred) => aliveSide(other(u.side)).filter(pred).sort((a, b) => totalModels(b) - totalModels(a))[0];
 /* ---- Deadly Demise, Putrid Detonation and other things that happen when a unit is destroyed ---- */
-function dgDeadlyDemise(u, auto) {
+function dgDeadlyDemise(u, auto, why) {
   for (const x of fxGet(u, 'deadly-demise')) {
     if (!auto) { const r = d6(); const need = (G && G.curAtt && G.curAtt.side !== u.side && hasFx(G.curAtt, 'armour-obl')) ? 3 : hasFx(u, 'dd-unstable') ? 4 : 6; if (r < need) { log(`${u.name}: Deadly Demise roll of ${r}, no explosion.`, u.side); continue; } log(`${u.name}: Deadly Demise roll of 6! Every unit within 6" suffers mortal wounds.`, u.side); }
-    else log(`${u.name}: Putrid Detonation, so Deadly Demise goes off automatically. Every unit within 6" suffers mortal wounds.`, u.side);
+    else log(`${u.name}: ${why || 'Putrid Detonation'}, so Deadly Demise goes off automatically. Every unit within 6" suffers mortal wounds.`, u.side);
     const e = parseDice(x.t[1] || 'D3') || parseDice('D3');
-    for (const v of alive()) if (edge(u, v) <= 6) { const n = rollExpr(e); log(`${v.name} suffers ${plural(n, 'mortal wound')}.`, v.side); applyMortal(v, n); if (auto && v.side !== u.side) afflict(v, 'nextTurn'); }
+    for (const v of alive()) if (edge(u, v) <= 6) { const n = rollExpr(e); log(`${v.name} suffers ${plural(n, 'mortal wound')}.`, v.side); applyMortal(v, n); if (auto && !why && v.side !== u.side) afflict(v, 'nextTurn'); }
   }
 }
 function dgDestroyedHooks(u) {
@@ -9702,7 +9712,7 @@ function dgAfterAttack2(u, w, t, shooting, st, killed, before, leaderDied) {
   if (shooting && isPox(u) && enhHolder(u, /sorrowsyphon/i) === 'leader' && /plague wind/i.test(w.name)) { const n = Math.ceil(d6() / 2); log(`Sorrowsyphon: ${plural(n, 'Poxwalker')} in ${u.name} are consumed by the blast.`, u.side); smKillModels(u, n); }
   if (!shooting && dgEngine(u) && enhHolder(u, /parasitic woe-reaper/i) && u.healPhase !== G.phaseNo) { u.healPhase = G.phaseNo; const n = Math.ceil(d6() / 2), h = healUnit(u, n); if (h.wounds || h.leader) log(`Parasitic Woe-Reaper: ${u.name} heals ${plural(h.wounds + (h.leader || 0), 'wound')}.`, u.side); }
 }
-const freeAdvReroll = u => !!((u.sudden && leaderUp(u)) || (dgFaction(u.side) && (enhHolder(u, /vile vigour/i) || (abIn(u, /^sickening vitality/i) && leaderUp(u)))) || (isSM(u) && ((enhHolder(u, /portents of wisdom/i) === 'leader' && leaderUp(u)) || (enhHolder(u, /fire discipline/i) === 'leader' && leaderUp(u) && docU(u, 'devastator')))));
+const freeAdvReroll = u => !!((u.cfTurn && G && u.cfTurn === G.turnNo) || (u.sudden && leaderUp(u)) || (dgFaction(u.side) && (enhHolder(u, /vile vigour/i) || (abIn(u, /^sickening vitality/i) && leaderUp(u)))) || (isSM(u) && ((enhHolder(u, /portents of wisdom/i) === 'leader' && leaderUp(u)) || (enhHolder(u, /fire discipline/i) === 'leader' && leaderUp(u) && docU(u, 'devastator')))));
 
 /* the AI spends Command Points on a few of these */
 /* The AI uses simple unit-targeted detachment stratagems of its own army (the ones that set a flag on one unit for the phase). */
@@ -10980,6 +10990,7 @@ function asPhaseStart(ph) {
 }
 function asAfterAttack(u, t, before, shooting) {
   if (!G || !asIs(u) || !t) return;
+  if (shooting && u.side === 'player' && ntIs(u, 'exorcist') && !has(t, 'monster') && !has(t, 'vehicle')) { const R = (G.reprise && G.reprise.phase === G.phaseNo) ? G.reprise : (G.reprise = { phase: G.phaseNo, foes: [] }); if (!R.foes.includes(t.id)) R.foes.push(t.id); }
   const killedModels = !t.alive || totalModels(t) < before, killedUnit = !t.alive;
   u.dg = u.dg || {};
   if (killedModels && u.dg.gainKill && !u.dg.gainDone) { u.dg.gainDone = true; asGain(u.side, 1, u.dg.gainKill); }
@@ -11068,6 +11079,7 @@ async function asMwFlush(o) {
   if (s && v && canStrat('player', s.slug, s.cost, u) && await askStrat(s, `${u.name} suffered a mortal wound. Use ${s.name} (${s.cost} CP)? Feel No Pain ${v}+ against mortal wounds until the end of the phase.`) && useDetStrat(s, u)) { u.dg = u.dg || {}; u.dg.mfnp = v; log(`${u.name} has Feel No Pain ${v}+ against mortal wounds until the end of the phase.`, 'player'); }
 }
 async function asReactAfter(att, t, before, phase) {
+  if (G && G.stage === 'battle' && t.side === 'player' && att.side === 'ai' && phase === 'shooting') await asBlazingIre(att, t);
   if (!G || G.stage !== 'battle' || t.side !== 'player' || att.side !== 'ai' || !t.alive || phase !== 'shooting' || !asDetIs('player', 'Penitent Host') || !has(t, 'penitent') || isEngaged(t) || totalModels(t) >= before) return;
   const s = detFind('devout-fanaticism'); if (!s || !canStrat('player', s.slug, s.cost, t)) return;
   if (!(await askStrat(s, `The AI's ${att.name} hurt your ${t.name}. Use Devout Fanaticism (${s.cost} CP)? It surges D6" toward the attacker.`)) || !useDetStrat(s, t)) return;
@@ -11075,6 +11087,103 @@ async function asReactAfter(att, t, before, phase) {
   log(`Devout Fanaticism: ${t.name} surges ${mv.toFixed(1)}" toward ${att.name} (rolled ${n}).`, 'player'); render();
 }
 DET_SIM.push(...Object.keys(AS_CARDS), 'shield-of-aversion', 'blinding-radiance', 'bastion-of-faith', 'purity-of-suffering', 'shield-of-faith', 'shield-of-denial', 'faithful-fortitude', 'devout-fanaticism');
+
+/* ===== Sororitas stratagems with their own timing ===== */
+async function asOffer(slug, text, u) {
+  const s = detFind(slug); if (!s || !canStrat('player', s.slug, s.cost, u || null)) return false;
+  return (await askStrat(s, text, false)) && useDetStrat(s, u || undefined);
+}
+const asPicks = (list, none) => list.map(u => ({ label: `${u.name} (${plural(totalModels(u), 'model')})`, value: String(u.id) })).concat([{ label: none || 'No', value: '', primary: true }]);
+const asFall = (m, ph) => !!m && G.phase === ph;
+/* Boundless Zeal, Indefatigable Dedication: eligible to shoot / charge after Falling Back */
+DET_UNIT['boundless-zeal'] = { dg: true, flag: 'as_boundless-zeal', ctx: m => asFall(m, 'movement'), advice: 'Select a Sororitas unit that has just Fallen Back, in your Movement phase.', pred: u => asIs(u) && u.alive && !!u.fellBack, apply: u => { const t = G.turnNo; u.fbShootTurn = t; u.fbChargeTurn = t; if (!has(u, 'penitent')) u.fbXor = t; }, log: u => `${u.name} is eligible to shoot ${has(u, 'penitent') ? 'and declare a charge' : 'or declare a charge (not both)'} this turn even though it Fell Back.` };
+DET_UNIT['indefatigable-dedication'] = { dg: true, flag: 'as_indefatigable', ctx: m => asFall(m, 'movement'), advice: 'Select a Sororitas unit that has just Fallen Back, in your Movement phase.', pred: u => asIs(u) && u.alive && !!u.fellBack, apply: u => { const t = G.turnNo; u.fbShootTurn = t; if (isRighteous(u)) u.fbChargeTurn = t; }, log: u => `${u.name} is eligible to shoot${isRighteous(u) ? ' and declare a charge' : ''} this turn even though it Fell Back.` };
+/* Carry Forth the Faithful: Transport re-rolls Advance rolls and units can disembark after it Advances */
+DET_UNIT['carry-forth-the-faithful'] = { dg: true, flag: 'as_carry-forth', ctx: m => asFall(m, 'movement'), advice: 'Select one of your Sororitas Transports that has not moved yet, in your Movement phase.', pred: u => asIs(u) && u.alive && !!tcfg(u) && !u.moved && !u.advanced, apply: u => { u.cfTurn = G.turnNo; }, log: u => `${u.name} can re-roll its Advance roll this turn, and units can disembark from it even if it Advances (as a shock disembark).` };
+/* Suffering and Sacrifice: enemy models in Engagement Range must target the unit (the AI honours it in its fight target choice) */
+DET_UNIT['suffering-and-sacrifice'] = { dg: true, flag: 'as_suffering', ctx: m => asFall(m, 'fight'), advice: 'Select an Infantry or Walker unit that is in combat, at the start of the Fight phase.', pred: u => asIs(u) && u.alive && (has(u, 'infantry') || has(u, 'walker')) && isEngaged(u), apply: u => { (u.dg = u.dg || {}).taunt = true; }, log: u => `${u.name}: until the end of the phase, enemy models within Engagement Range of it must select it as the target of their attacks.` };
+/* Devastating Reprise: after one of your Exorcists has shot, an Infantry Fly unit's ranged attacks against the units it hit have Devastating Wounds */
+const asRepriseOn = () => !!G && !!G.reprise && G.reprise.phase === G.phaseNo && G.reprise.foes.length > 0;
+DET_UNIT['devastating-reprise'] = { dg: true, flag: 'as_reprise', ctx: m => asFall(m, 'shooting') && asRepriseOn(), advice: 'Shoot with an Exorcist first. Then select an Infantry Fly unit that can shoot.', pred: u => asIs(u) && u.alive && has(u, 'infantry') && has(u, 'fly') && canShoot(u) && asRepriseOn(), apply: u => { (u.dg = u.dg || {}).reprise = G.reprise.foes.slice(); }, log: u => `${u.name}: its ranged attacks against ${G.reprise.foes.map(id => (G.units.find(x => x.id === id) || {}).name).filter(Boolean).join(' and ')} have Devastating Wounds this phase.` };
+/* Suffering and Sacrifice at the start of the AI's Fight phase */
+async function asStartFight() {
+  const s = detFind('suffering-and-sacrifice'); if (!s || !G || G.stage !== 'battle') return;
+  const c = aliveSide('player').filter(u => asIs(u) && u.placed && !u.reserve && (has(u, 'infantry') || has(u, 'walker')) && isEngaged(u) && canStrat('player', s.slug, s.cost, u));
+  if (!c.length) return;
+  const v = await askPlayer({ kind: 'choice', strat: s.slug, text: `Start of the Fight phase. Use Suffering and Sacrifice (${s.cost} CP)? Pick a unit: until the end of the phase, enemy models within Engagement Range of it must target it with their attacks.`, options: asPicks(c) });
+  const u = c.find(x => String(x.id) === String(v)); if (!u || !useDetStrat(s, u)) return;
+  (u.dg = u.dg || {}).taunt = true; log(`${u.name}: enemy models within Engagement Range of it must select it as the target of their attacks this phase (Suffering and Sacrifice).`, 'player'); render();
+}
+/* Angelic Descent: end of the opponent's Fight phase, a Jump Pack unit not in combat goes into Strategic Reserves */
+async function asAngelicDescent() {
+  const s = detFind('angelic-descent'); if (!s || !G || G.stage !== 'battle') return;
+  for (let n = 0; n < 5; n++) {
+    const c = aliveSide('player').filter(u => asIs(u) && has(u, 'jump pack') && u.placed && !u.reserve && !u.embarkedIn && !isEngaged(u) && canStrat('player', s.slug, s.cost, u));
+    if (!c.length) return;
+    const v = await askPlayer({ kind: 'choice', strat: s.slug, text: `End of the AI's Fight phase. Use Angelic Descent (${s.cost} CP)? Pick a Jump Pack unit to take off the battlefield and put into Strategic Reserves.`, options: asPicks(c) });
+    const u = c.find(x => String(x.id) === String(v)); if (!u || !useDetStrat(s, u)) return;
+    u.placed = false; u.reserve = true; u.x = -50; u.y = -50; u.arrived = false;
+    log(`Angelic Descent: ${u.name} rises into the skies and goes into Strategic Reserves.`, 'player'); render();
+  }
+}
+/* Blazing Ire: just after an enemy unit has shot at your Transport, an embarked unit disembarks and shoots only that enemy unit */
+function asIreSpot(t, c, att) {
+  const all = landingSpots(t, c, 3, false), keep = { x: c.x, y: c.y, placed: c.placed, e: c.embarkedIn };
+  let best = null, bd = 1e9;
+  try {
+    c.embarkedIn = null; c.placed = true;
+    for (const sp of all) { c.x = sp.x; c.y = sp.y; const d = edge(c, att); if (d >= bd || !visible(c, att) || !usableRanged(c).some(w => d <= w.range)) continue; bd = d; best = sp; }
+  } finally { c.x = keep.x; c.y = keep.y; c.placed = keep.placed; c.embarkedIn = keep.e; }
+  return best;
+}
+async function asBlazingIre(att, t) {
+  const s = detFind('blazing-ire');
+  if (!s || !att.alive || !t.alive || !asIs(t) || !has(t, 'transport') || !tcfg(t) || !canStrat('player', s.slug, s.cost, t)) return;
+  const cands = cargoOf(t).filter(c => asIs(c) && c.alive && c.ranged.length && !c.shocked).map(c => ({ c, spot: asIreSpot(t, c, att) })).filter(x => x.spot);
+  if (!cands.length) return;
+  if (!(await askStrat(s, `The AI's ${att.name} shot at your ${t.name}. Use Blazing Ire (${s.cost} CP)? One embarked unit disembarks and shoots only ${att.name}.`, false))) return;
+  let pick = cands[0];
+  if (cands.length > 1) { const v = await askPlayer({ kind: 'choice', strat: s.slug, text: `Blazing Ire: which unit disembarks from ${t.name}?`, options: cands.map(x => ({ label: `${x.c.name} (${plural(totalModels(x.c), 'model')})`, value: String(x.c.id) })) }); pick = cands.find(x => String(x.c.id) === String(v)) || cands[0]; }
+  if (!useDetStrat(s, t)) return;
+  const c = pick.c; doDisembark(t, c, 'tactical', pick.spot); c.moved = true;
+  log(`Blazing Ire: ${c.name} bursts out of ${t.name} and fires at ${att.name}.`, 'player'); render();
+  const ws = usableRanged(c).filter(w => edge(c, att) <= w.range);
+  if (c.alive && att.alive && ws.length && visible(c, att)) { c.shot = true; await doShoot(c, att, ws); } else log(`${att.name} is not an eligible target for ${c.name}, so it only disembarks.`, 'player');
+}
+/* Final Redemption: a destroyed Penitent unit's objective stays yours until the enemy takes it */
+function asFinalRedemptionPre(u) {
+  if (!G || G.stage !== 'battle' || u.side !== 'player' || !asIs(u) || !has(u, 'penitent') || !detFind('final-redemption')) return null;
+  const os = OBJ.filter(o => objIn(u, o) && controller(o) === 'player'); return os.length ? os : null;
+}
+function asFinalRedemptionQ(u, os) {
+  if (!os) return;
+  dgQ(async () => {
+    if (!(await asOffer('final-redemption', `${u.name} was destroyed on ${os.map(o => o.name).join(' and ')}, which you control.`, u))) return;
+    for (const o of os) o.sticky = 'player';
+    log(`Final Redemption: ${os.map(o => o.name).join(' and ')} stay${os.length === 1 ? 's' : ''} under your control until the enemy takes ${os.length === 1 ? 'it' : 'them'} at the start or end of a turn.`, 'player'); render();
+  });
+}
+/* Sanctified Immolation: a destroyed Sororitas Vehicle's Deadly Demise goes off without a roll */
+function asImmolationQ(u) {
+  if (!G || G.stage !== 'battle' || u.side !== 'player' || !asIs(u) || !has(u, 'vehicle') || !fxGet(u, 'deadly-demise').length || !detFind('sanctified-immolation')) return false;
+  dgQ(async () => { const go = await asOffer('sanctified-immolation', `${u.name} was destroyed. Its Deadly Demise is about to be rolled for.`, u); dgDeadlyDemise(u, go, go ? 'Sanctified Immolation' : undefined); });
+  return true;
+}
+/* Divine Intervention: a destroyed Character returns at the end of the phase with D3 + (Miracle dice discarded) wounds */
+async function asDivineAsk(o) {
+  const s = detFind('divine-intervention'), pool = asPool('player');
+  if (!s || !pool.length || !canStrat('player', s.slug, s.cost)) return false;
+  const opts = []; for (let n = 1; n <= Math.min(3, pool.length); n++) opts.push({ label: `Discard ${n} Miracle dice (D3 + ${n} wounds)`, value: String(n) });
+  opts.push({ label: 'No', value: '', primary: true });
+  const n = +(await askPlayer({ kind: 'choice', strat: s.slug, text: `${o.name} has been destroyed. Use Divine Intervention (${s.cost} CP)? Discard 1-3 Miracle dice and, at the end of the phase, it returns near where it fell as its own unit with D3 wounds, plus 1 for each dice discarded.`, options: opts }));
+  if (!n || !useDetStrat(s)) return false;
+  pool.sort((a, b) => a - b); pool.splice(0, n);
+  const r = Math.ceil(d6() / 2); o.wounds = r + n; o.di = true; (G.diUsed = G.diUsed || []).push(o.name);
+  G.revenants.push(o);
+  log(`Divine Intervention: ${n} Miracle dice discarded and a D3 of ${r}. ${o.name} will return at the end of the phase with ${o.wounds} wounds (up to its full wounds).`, 'player'); render();
+  return true;
+}
+DET_SIM.push('boundless-zeal', 'indefatigable-dedication', 'carry-forth-the-faithful', 'suffering-and-sacrifice', 'devastating-reprise', 'angelic-descent', 'blazing-ire', 'final-redemption', 'sanctified-immolation', 'divine-intervention');
 
 /* ---- Sororitas: abilities that act just before a unit attacks ---- */
 function asPreAttack(u, t, shooting) {
@@ -23501,7 +23610,7 @@ const CORE_GAPS = [
     'Individual models (Settings, on by default): every model is drawn on its own base at its true size. Base sizes are estimated from the datasheet (keywords and Wounds, with a table for common units: 25mm gaunts and Gretchin, 28mm Poxwalkers, 32mm Infantry, 40mm Terminators, bigger Monsters and Vehicles) because the datasheets do not list them. A unit keeps a footprint circle that encloses its models, so older checks such as path blocking still use that circle. Measured model to model: range to a target, engagement (2"), charges (the unit ends 0.5" from its target), the 8" and 12" distance rules, objective control (OC is counted for each model within 3" of the marker), cover (every model must be inside a ruin) and line of sight (sampled from up to five models of each unit). Casualties remove the models farthest from the attacker, leaders last. Moving: choose Normal, Advance, Fall Back or Desperate Escape, then drag the whole unit (or press and hold a model on a touch screen, double-click, use the Select the whole unit button, or drag a box). Releasing a whole-unit drag drops every model on the nearest legal spot: within its own reach, off other bases, out of ruins (non-Infantry), outside 2" of enemies, on the board and in coherency (within 2" of one model and 9" of all). Single models can then be adjusted; an illegal placement is flagged with the reason and Confirm stays disabled, or snapped to a legal spot if you chose that in Settings. Zoom with the wheel, the + and - buttons or a pinch; pan with the right mouse button or two fingers. Charging: after your charge roll and target choice, the unit is wrapped around the target for you; adjust any model, then confirm. A charge must end with the unit engaged with its target and not engaged with any other enemy, every model must end closer to the target than it started, and a model that could have ended within 1" must (flagged only when a free spot was reachable); each model moves up to the charge roll, less any penalty, and the target does not block the route. Heroic Intervention uses the same placement. Pile-in (at the start of the Fight phase) and consolidation (at the end) are placed by you too, one unit at a time, with Confirm, Place the models for me, Skip and Place the rest for me buttons (Settings can hand both back to the app): each model moves up to 3" (6" with Shock Onslaught), models in base contact cannot move, every moved model must end closer to the enemy it moves toward, the unit must end engaged, and a model that started engaged with an enemy must still be engaged with it; a consolidation by a unit that is not engaged goes onto an objective within 3" and must end unengaged and in range. Engaging consolidation is simulated: a unit that is not engaged but has an enemy within 3" consolidates toward it (you pick which unit when there are several) and must end engaged with that unit; any enemy unit it is now engaged with that has not fought gets to fight before the Fight phase ends. A moved model must end engaged if it could (flagged when a free spot was reachable). Otherwise a unit with no enemy within 3" goes onto an objective within 3". Wounds: one model at a time carries the damage, shown as a ring and a count such as 2/3 on its base; when it dies it is the model removed, and other casualties come from the models farthest from the attacker, keeping coherency where they can. At the end of each turn a unit that is out of coherency loses models until it is coherent. Weapon range and visibility are per model: a model only makes ranged attacks if its target is in range and visible to it, and only models engaged with the target make melee attacks; a weapon carried by only some models goes to the best-placed ones; Rapid Fire and Melta apply only to the models within half range; if no model can attack, the log says so. Deployment, arrival from reserves and scout moves also place individual models: the first tap puts the unit down, then drag any model; every model must be wholly in your deployment zone (or, for Infiltrators and arrivals, more than 8\" from the enemy), set up unengaged, not overlapping, in coherency, and a unit arriving from reserves must be wholly within 6\" of a board edge (Deep Strike excepted). A revived model comes back with one wound and is the wounded model. Base shapes: round bases are circles, bikes and Tomb Blades are ovals (90x52mm, or 75x42mm), and vehicles without a base are hulls (rounded rectangles): Rhinos and Trukks 115x70mm, Predators 105x75, Land Raiders 150x90, Battlewagons 190x100, Ghost and Doomsday Arks 190x90, other vehicles sized from their Wounds; walkers, Monsters and Titanic models stay round. Every measurement uses the real outline: engagement, charges, range, overlaps, coherency, objective range (any part within 3\") and deployment zones. Ovals and hulls are placed pointing up the board; use Turn left and Turn right (or [ and ]) to rotate the selected models, or the whole unit, in 15 degree steps (hold Shift for 5). The sizes are estimates because the datasheets have no base sizes; a datasheet can carry its own with a baseShape of kind (circle, oval or hull), l and w in millimetres. The AI moves models individually (Settings can switch it back to moving each unit as one block): it still decides where a unit is heading, then every model is placed on its own spot by the same legaliser a player\'s placement uses (within its reach, off other bases, out of ruins, more than 2\" from enemies, in coherency, with bent routes counted), a unit taking an objective is pulled so as many models as possible stand within 3\" of the marker, a charge wraps the models around the target, and a pile-in or consolidation moves each model closer to the enemy where it can. A move that would be illegal falls back to moving the unit as one block. An assaulting unit now stops 2\" from the nearest enemy model instead of at the edge of a circle around the unit, so it gets closer than before. The AI also deploys and arrives from reserves model by model: it picks where it wants the unit, tries the nearest candidate spots in order, and the legaliser puts every model wholly inside the deployment zone (or more than 8\" from the enemy for Infiltrators and arrivals), within 6\" of a board edge for reserves (Deep Strike excepted), unengaged, off other bases and in coherency; if no candidate works it sets the unit down as one block. Because models are fitted individually, big units can now stand right up to the edge of the zone instead of being held back by a circle around the unit. Not yet model-level: the rest of the simplifications above. Routes bend at most once around obstacles, and enemy units block a route by their footprint circle. Line of sight is measured from the middle of a model.',
     'Core rules conformance (checked against the June 2026 Core Rules and Rules Appendix): Below half-strength now means strictly less than half, and the Command phase battle-shock roll covers units at or below half-strength. Insane Bravery is used before the roll and makes it automatic; Command Re-roll cannot be used on battle-shock rolls. A battle-shocked unit cannot be targeted by stratagems (except Know No Fear). Engaged Monsters and Vehicles can be shot at (not with Blast weapons) at -1 to hit. A Desperate Escape makes a hazard roll for every model (3 mortal wounds per failure for Monsters and Vehicles) and a battle-shock roll afterwards. Charge rolls are capped at 12. Strategic Reserves can be worth at most half your points limit. In an Incursion a 3 DP detachment can be your only detachment, and Heavy weapons get no bonus on a turn the unit arrived or disembarked.',
     'Space Marines and Salamanders (Salamanders now offer the Space Marine detachments, since they use the same ones): detachment stratagems simulated as cards for your own units: Heroes of the Chapter, No Threat Too Great, Battle Drill Recall, Purgation Doctrine, Codex Discipline, Light of Vengeance (Battleline only), Priority Strike, Augmented Targeting (Sustained Hits), Crucible of Battle, Immolation Protocols, Onslaught of Fire, Honour the Chapter, Storm of Fire, Target Weak Point, Kill Shot, Unbowed Conviction, Mercy is Weakness, Tactical Decapitation, Shock Onslaught, Surgical Strikes, Strike from the Shadows (Vanguard Spearhead), Blitzing Fusillade, Shock Assault, Meteoric Onslaught, Know No Fear and Duty and Honour. Prompts when the AI attacks: Armour of Contempt, Angels Defiant, Ride Hard Ride Fast, Legendary Fortitude, Stand to the End and Only in Death Does Duty End. Shoot-back prompts after the AI shoots you: Hail of Vengeance, Machine Vengeance and Power of the Machine Spirit (the Below Half-strength check is approximate). Not simulated (they move units in or out of Reserves, Transports or use Actions and auspex scans): Rigid Discipline, Not One Backwards Step, Machine Wrath, Rapid Embarkation, Ceramite Sledgehammer, Advanced Deployment, the auspex, pinned and suppressed stratagems, Heresy Undone, Unyielding Might, Evasive Repositioning, Squad Tactics and the other reactive moves, Orbital Teleportarium, Anti-grav Surge, Adaptive Strategy and Combat Doctrine choices, Rapid Gunnery, Vengeful Animus, Ancient Fury, Auto-sense Coordination, Blind Screen, Terrifying Proficiency, A Deadly Prize, Suppression Strafing, Calculated Feint and Guerrilla Tactics. Leaders: every Leader can now be attached in the builder for every faction, from its datasheet list or, when that is empty, from the Leader ability text.',
-    'Adepta Sororitas (11th edition faction pack v1.2, all eight detachments loaded, 33 datasheets imported). Acts of Faith and Miracle dice are simulated: you and the AI gain a Miracle dice at the start of every turn and each time one of your units is destroyed (Litany of Deeds re-rolls low ones, Saintly Example and Recount the Deeds add more, Solemn Procession makes the first one a 6). Your Miracle dice show in the CP line on the map (e.g. "✦ 6 5 2"). A unit makes an Act of Faith by swapping one dice for a roll: Advance rolls are not offered, but Battle-shock tests, Charge rolls, Hit rolls, Wound rolls, Damage rolls and saving throws are. The sim decides for you when a dice clearly helps (the best dice for the job, and more freely when the pool is large) and a button in your Command phase switches that to Hold, to save them. One Act per phase, or two under Army of Faith or near the Simulacrum of the Ebon Chalice. Per-model rolls are approximated: one dice is swapped into one roll in the attack, not one per group. Detachment rules simulated: The Blood of Martyrs, Desperate for Redemption (The Path of the Penitent and Absolution in Battle; Death Before Disgrace is not), Fervent Purgation, Sacred Rites, Righteous Purpose (you pick up to 3 units with buttons in your Command phase; the AI picks its three most expensive), Holy Quest and Hymns of Battle (the +1 Leadership only). Angelic Judgement is simulated: in your Shooting phase a Condemn button appears for each hidden enemy unit that is visible and within 12\" of one of your Sisters Infantry Fly units (one enemy per Sisters unit each phase; the AI condemns hidden units too). A condemned unit has +3\" detection range, so a hidden unit can be seen from 18\" instead of 15\". The rule gives no end, so the condemnation lasts for the rest of the battle. Not simulated: the Hagiomnifex choices. Enhancements simulated: Saintly Example, Through Suffering Strength, Chaplet of Sacrifice, Mantle of Ophelia, Psalm of Righteous Judgement, Refrain of Enduring Faith, Catechism of Divine Penitence, Righteous Rage, Manual of Saint Griselda, Fire and Fury, Iron Surplice of Saint Istalela, Litanies of Faith, Blade of Saint Ellynor, Divine Aspect, Triptych of the Macharian Crusade, Triptych of Judgement, Mark of Devotion, Eyes of the Oracle (Precision only), Symphonic Payload, Writ of Compunction and Perfervid Haste. Not simulated: Verse of Holy Piety, Sanctified Amulet and Clarion of Urgency. Stratagem cards for your own units: Righteous Vengeance, Righteous Blows (without the Battle-shock test on a kill), Cleansing Flames, Rites of Fire (without the Battle-shock test), Faith and Fury, Divine Guidance, Light of the Emperor (blessed), To the Heart of Heresy, Suffer Not the Unfaithful, Path of the Righteous, Passion of the Penitent, Sanctified Blows, Harmonised Exorcism, Lash of Guilt, Unflinching Determination and Inspirational Battle Canticles. Asked when the moment comes: Shield of Aversion, Blinding Radiance, Bastion of Faith, Purity of Suffering, Devout Fanaticism, and Shield of Faith, Shield of Denial and Faithful Fortitude (after a mortal wound lands, so they cover the rest of the phase). Not simulated: Divine Intervention, Suffering and Sacrifice, Sanctified Immolation, Spirit of the Martyr, Praise the Fallen, Final Redemption, Boundless Zeal, Carry Forth the Faithful, Blazing Ire, the Jump Pack parts of Light of the Emperor, Shield of Faith and Blinding Radiance, Angelic Descent, Indefatigable Dedication, Devastating Reprise, the fall-back part of Unflinching Determination, and the Reserves, Transport and fall-back stratagems generally. Datasheet abilities simulated include Cherub and Cherubs, Defenders of the Faith, Divine Deliverance, The Emperor\'s Grace, Rites of Castigation, Rituale Nullificatus, Virtue of Intolerance, Sworn Protectors, Holy Judgement, Laud Hailer, Stirring Rhetoric, Executioner of Heretics, Devastating Refrain, Medicus Ministorum, Sacred Healing, Litany of Deeds, Stanchion of Holy Martyrs, Purge and Cleanse, Righteous Denunciation, Judged for Execution, The Pulpit of Saint Holline\'s Basilica, Fiery Conviction, Zealot, Abbess Sanctorum, Righteous Repugnance, Righteous Paragons, Overseer of Redemption, Storm of Retribution, Ministorum Sermon, Salvationist Medikit, Self Repair, Solemn Procession, Embodied Prophecy and the Relics of the Matriarchs auras (Triumph of Saint Katherine always has the Simulacrum of the Ebon Chalice and the Petals of the Bloody Rose, since the sim picks for her; Embodied Prophecy always gives both Sustained and Lethal Hits when charging). Rituale Nullificatus counts for mortal wounds only, because psychic attacks are not tracked. Also simulated: Holy Mission (Scouts and Infiltrators), Rapturous Blows (a Miracle dice of 3 or less is discarded when the Palatine\'s unit fights), Damaged: 1-6 Wounds Remaining, Denuncia Oratory (a Quarry button appears when the Insidiants\' quarry is destroyed, and in the first Command phase you can change the quarry; the AI picks its largest enemy unit), Consecrated Ground (the Battle Sanctum gives each Sisters unit within 1\" one more Act of Faith per phase; the setting-up and standing-on-the-floors parts are not modelled), Lifewards and Miraculous Intervention. Saint Celestine is tracked as her own model beside the Geminae: with a Geminae alive she has Feel No Pain 4+ against attacks, and the first time she is destroyed a D6 is rolled at the end of the phase, returning her on a 2+ with full wounds, as the unit\'s only model if the Geminae are gone. These work for Saint Celestine fielded as her own unit, not as a leader attached to Zephyrim or Seraphim, and the roll is made for you. Not simulated: Extremis Trigger Word, Holy Vanguard and Righteous Awareness. Destroyed models that stay in play are simulated for melee: Spirit of the Martyr, Death Before Disgrace (a third Vow), Anguish of the Unredeemed, Systematic Vigour (Cryptothralls), Death Blow, Death Frenzy, Enraged Reserves, Stand to the End and Only in Death Does Duty End. The destroyed model keeps fighting with its unit and is removed afterwards (or at the end of the phase). Not simulated: Hellblasters\' For the Chapter! (the same idea for shooting), and Praise the Fallen is now a shoot-back prompt.',
+    'Adepta Sororitas (11th edition faction pack v1.2, all eight detachments loaded, 33 datasheets imported). Acts of Faith and Miracle dice are simulated: you and the AI gain a Miracle dice at the start of every turn and each time one of your units is destroyed (Litany of Deeds re-rolls low ones, Saintly Example and Recount the Deeds add more, Solemn Procession makes the first one a 6). Your Miracle dice show in the CP line on the map (e.g. "✦ 6 5 2"). A unit makes an Act of Faith by swapping one dice for a roll: Advance rolls are not offered, but Battle-shock tests, Charge rolls, Hit rolls, Wound rolls, Damage rolls and saving throws are. The sim decides for you when a dice clearly helps (the best dice for the job, and more freely when the pool is large) and a button in your Command phase switches that to Hold, to save them. One Act per phase, or two under Army of Faith or near the Simulacrum of the Ebon Chalice. Per-model rolls are approximated: one dice is swapped into one roll in the attack, not one per group. Detachment rules simulated: The Blood of Martyrs, Desperate for Redemption (The Path of the Penitent and Absolution in Battle; Death Before Disgrace is not), Fervent Purgation, Sacred Rites, Righteous Purpose (you pick up to 3 units with buttons in your Command phase; the AI picks its three most expensive), Holy Quest and Hymns of Battle (the +1 Leadership only). Angelic Judgement is simulated: in your Shooting phase a Condemn button appears for each hidden enemy unit that is visible and within 12\" of one of your Sisters Infantry Fly units (one enemy per Sisters unit each phase; the AI condemns hidden units too). A condemned unit has +3\" detection range, so a hidden unit can be seen from 18\" instead of 15\". The rule gives no end, so the condemnation lasts for the rest of the battle. Not simulated: the Hagiomnifex choices. Enhancements simulated: Saintly Example, Through Suffering Strength, Chaplet of Sacrifice, Mantle of Ophelia, Psalm of Righteous Judgement, Refrain of Enduring Faith, Catechism of Divine Penitence, Righteous Rage, Manual of Saint Griselda, Fire and Fury, Iron Surplice of Saint Istalela, Litanies of Faith, Blade of Saint Ellynor, Divine Aspect, Triptych of the Macharian Crusade, Triptych of Judgement, Mark of Devotion, Eyes of the Oracle (Precision only), Symphonic Payload, Writ of Compunction and Perfervid Haste. Not simulated: Verse of Holy Piety, Sanctified Amulet and Clarion of Urgency. Stratagem cards for your own units: Righteous Vengeance, Righteous Blows (without the Battle-shock test on a kill), Cleansing Flames, Rites of Fire (without the Battle-shock test), Faith and Fury, Divine Guidance, Light of the Emperor (blessed), To the Heart of Heresy, Suffer Not the Unfaithful, Path of the Righteous, Passion of the Penitent, Sanctified Blows, Harmonised Exorcism, Lash of Guilt, Unflinching Determination and Inspirational Battle Canticles. Asked when the moment comes: Shield of Aversion, Blinding Radiance, Bastion of Faith, Purity of Suffering, Devout Fanaticism, and Shield of Faith, Shield of Denial and Faithful Fortitude (after a mortal wound lands, so they cover the rest of the phase). Also simulated: Boundless Zeal and Indefatigable Dedication (shoot or charge after falling back; Boundless Zeal is shoot-or-charge for non-Penitent units), Carry Forth the Faithful (Transport disembark after Advancing), Suffering and Sacrifice (enemies in Engagement Range must target the unit), Devastating Reprise (Devastating Wounds against targets an Exorcist just shot), Angelic Descent (a Jump Pack unit goes into Strategic Reserves at the end of the AI\'s Fight phase), Blazing Ire (an embarked unit bursts out and shoots back when the AI shoots your Transport), Final Redemption (an objective stays under your control), Sanctified Immolation (a destroyed Transport\'s Deadly Demise goes off automatically) and Divine Intervention (spend 1 to 3 Miracle dice; a destroyed Character returns at the end of the phase with the wounds they give). Not simulated: Spirit of the Martyr, Praise the Fallen, the Jump Pack parts of Light of the Emperor, Shield of Faith and Blinding Radiance, the fall-back part of Unflinching Determination, and the remaining Reserves, Transport and fall-back stratagems. Datasheet abilities simulated include Cherub and Cherubs, Defenders of the Faith, Divine Deliverance, The Emperor\'s Grace, Rites of Castigation, Rituale Nullificatus, Virtue of Intolerance, Sworn Protectors, Holy Judgement, Laud Hailer, Stirring Rhetoric, Executioner of Heretics, Devastating Refrain, Medicus Ministorum, Sacred Healing, Litany of Deeds, Stanchion of Holy Martyrs, Purge and Cleanse, Righteous Denunciation, Judged for Execution, The Pulpit of Saint Holline\'s Basilica, Fiery Conviction, Zealot, Abbess Sanctorum, Righteous Repugnance, Righteous Paragons, Overseer of Redemption, Storm of Retribution, Ministorum Sermon, Salvationist Medikit, Self Repair, Solemn Procession, Embodied Prophecy and the Relics of the Matriarchs auras (Triumph of Saint Katherine always has the Simulacrum of the Ebon Chalice and the Petals of the Bloody Rose, since the sim picks for her; Embodied Prophecy always gives both Sustained and Lethal Hits when charging). Rituale Nullificatus counts for mortal wounds only, because psychic attacks are not tracked. Also simulated: Holy Mission (Scouts and Infiltrators), Rapturous Blows (a Miracle dice of 3 or less is discarded when the Palatine\'s unit fights), Damaged: 1-6 Wounds Remaining, Denuncia Oratory (a Quarry button appears when the Insidiants\' quarry is destroyed, and in the first Command phase you can change the quarry; the AI picks its largest enemy unit), Consecrated Ground (the Battle Sanctum gives each Sisters unit within 1\" one more Act of Faith per phase; the setting-up and standing-on-the-floors parts are not modelled), Lifewards and Miraculous Intervention. Saint Celestine is tracked as her own model beside the Geminae: with a Geminae alive she has Feel No Pain 4+ against attacks, and the first time she is destroyed a D6 is rolled at the end of the phase, returning her on a 2+ with full wounds, as the unit\'s only model if the Geminae are gone. These work for Saint Celestine fielded as her own unit, not as a leader attached to Zephyrim or Seraphim, and the roll is made for you. Not simulated: Extremis Trigger Word, Holy Vanguard and Righteous Awareness. Destroyed models that stay in play are simulated for melee: Spirit of the Martyr, Death Before Disgrace (a third Vow), Anguish of the Unredeemed, Systematic Vigour (Cryptothralls), Death Blow, Death Frenzy, Enraged Reserves, Stand to the End and Only in Death Does Duty End. The destroyed model keeps fighting with its unit and is removed afterwards (or at the end of the phase). Not simulated: Hellblasters\' For the Chapter! (the same idea for shooting), and Praise the Fallen is now a shoot-back prompt.',
     'Necron detachments (11th edition faction pack, all twelve loaded): rules simulated are Command Protocols, Annihilation Protocol, Power Matrix (only your deployment zone counts as inside it), Worthy Foes (the biggest enemy unit is marked for you each Command phase), Relentless Onslaught, Technosorcerous Augmentations (Assault and Ignores Cover are always on; the other choices are not), Cold Fervour (the +2 Strength for Destroyer Cult only), Cosmic Distortion (the +1 AP aura only), Hypermotility Protocols (Assault only), Transdimensional Deployment and Empowered Engines (+6 Move for Titanic Fly units). Hyperphasing is not simulated. Enhancements simulated: Nether-Realm Casket, Phasal Subjugator, Enaegic Dermal Bond, Miniaturised Nebuloscope, Gauntlet of Compression, Arisen Tyrant, Osteoclave Fulcrum, Mark of the Nekrosor, Cursed Circlet, Destroyer Ankh, Murdermind, Deepening Madness, Eternal Conqueror, Unflinching Will, Tools of Dominion and Enlivened Sentinels, plus the Awakened Dynasty and Annihilation Legion sets from before. Stratagem cards for your own units: Cynosure of Eradication, Enslaved Artifice, Suffer No Rival, Merciless Reclamation, Molecular Targeting and Methodical Murder; Image of Death, Nanoassembly Protocols, Unyielding Forms and Quantum Deflection are asked when the AI attacks. Not simulated: the Necrodermal Bindings and the self-wounding for Pantheon of Woe, Reanimation-based stratagems (Protocol of the Undying Legions excepted), everything that moves units in or out of Reserves (Hypercrypt Legion), and the remaining enhancements.',
     'Move and charge penalties that other units inflict (pinned, disrupted, shaken, Gravitic Pulse) are not simulated. Charge and Advance bonuses, charge penalties against a unit (Gravitational Field), and mortal wounds on a charge are.',
     'Transports: units are loaded before deployment (a Dedicated Transport must carry a unit), disembark in the Movement phase (before the transport moves, after it moves, or into combat), can embark after a move, and make an emergency disembark if the transport is destroyed. Drop Pod, Termite and Tyrannocyte style transports start in reserve and can arrive from round 1. Emergency Combat Embarkation (Repressor) is simulated: when the AI picks one of your units as its charge target, you are asked whether that unit embarks (it must not be in combat and every model must be within 3\" of the Repressor; once per turn); when you charge an AI unit the AI decides for itself. Not simulated: shooting from inside a transport, Fire Support, Deployment Complete (sealed pods), and Night Scythe / Monolith reserve tricks.',
