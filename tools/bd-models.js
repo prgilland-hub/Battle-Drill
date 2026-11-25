@@ -177,7 +177,7 @@ const BDModels = (function () {
     [/poxbringer/, ANY, /^poxbringer/], [/sloppity|bilepiper/, ANY, /piper/], [/spoilpox/, ANY, /spoilpox/], [/slimux/, ANY, /slimux/], [/gnarlmaw/, ANY, /gnarlmaw/],
   ];
   /* every other faction: match the datasheet's words against the model names */
-  const ALIAS = [[/sword brethren/, ['bladeguard veteran', 'crusader', 'primaris crusader', 'intercessor']], [/execrator|grimaldus|castellan|marshal|champion/, ['chaplain', 'captain']], [/terminator assault|assault terminator/, ['terminator']]];
+  const ALIAS = [[/wolf guard terminator|wolf guard \w* ?terminator/, ['terminator']], [/battle leader|wolf lord|wolf guard|wolf priest|rune priest|njal|ragnar|logan|arjac|bjorn/, ['captain', 'lieutenant', 'primaris captain', 'chaplain']], [/sword brethren/, ['bladeguard veteran', 'crusader', 'primaris crusader', 'intercessor']], [/execrator|grimaldus|castellan|marshal|champion/, ['chaplain', 'captain']], [/terminator assault|assault terminator/, ['terminator']]];
   const WEAKHEAD = new Set(['sword', 'assault', 'heavy', 'storm', 'death', 'great', 'grand', 'high', 'lord', 'chaos', 'plague', 'imperial']);
   const STOP = new Set(['squad', 'unit', 'the', 'of', 'with', 'w', 'and', 'model', 'models', 'a', 'in', 'on']);
   const toks = s => String(s || '').toLowerCase().replace(/armour/g, 'armor').replace(/\bwargear\b/g, ' ').replace(/\[[^\]]*\]/g, ' ').replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(w => w && !STOP.has(w)).map(w => w.length > 3 && w.endsWith('s') && !w.endsWith('ss') ? w.slice(0, -1) : w);
