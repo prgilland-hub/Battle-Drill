@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.25-1303';
+  const VERSION = '2026.11.25-1545';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -2199,6 +2199,7 @@ html[data-look="cog"] .muted{color:var(--muted)}
         <div id="b-warn"></div>
         <div id="b-legal"></div>
         <label>Game type<select id="b-gtype"><option value="standard">Standard battle (your own armies)</option><option value="cp">Combat Patrol (pre-set patrols, 44" by 30" board)</option></select></label>
+        <label id="b-hot-l" hidden style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="b-hot"> <span>Two players, one device. The second army below is Player 2's, not the AI's.</span></label>
         <label id="b-army-p-l">Your army (Imperial Forces)<select id="b-army-p"></select></label>
         <label>AI army (Hostile Cogitator)<select id="b-army-a"></select></label>
         <label>Your Force Disposition<select id="b-disp-p"><option value="auto">From my army's detachment</option><option value="take and hold">Take and Hold</option><option value="purge the foe">Purge the Foe</option><option value="disruption">Disruption</option><option value="reconnaissance">Reconnaissance</option><option value="priority assets">Priority Assets</option></select></label>
@@ -5872,6 +5873,7 @@ function expDmg(u, ws, t, shooting, cover, rangeCheck, snap) {
 }
 
 function log(html, cls) {
+  if (G.hot && typeof html === 'string') { const me = hotName('player'), op = hotName('ai'); html = html.replace(/\bthe AI's\b/gi, op + "'s").replace(/\bthe AI\b/gi, op).replace(/\bAI\b/g, op).replace(/\bYour\b/g, me + "'s").replace(/\byour\b/g, me + "'s").replace(/\bYou\b/g, me).replace(/\byou\b/g, me); }
   G.log.unshift({ html, cls: cls || 'sys' });
   if (G.school) schLog(html);
   if (G.log.length > 250) G.log.pop();
@@ -6376,6 +6378,7 @@ const PRIMARIES = {
 const fdName = k => (DISPOSITIONS[k] || { name: k }).name;
 let NEXT_FD = null;
 let NEXT_CP = null; /* set to { } to start the next game as a Combat Patrol */
+let NEXT_HOT = false;
 /* the Force Dispositions an army can field: one per detachment it takes */
 function availDisps(b) {
   const d = b && b.detachment; if (!d) return [];
@@ -6485,12 +6488,12 @@ function missionTip(side) {
 function missionBar() {
   if (!G || !G.pri || !G.fd) return '';
   const one = (side, who) => G.pri[side] ? `<span class="mh-m"><span class="muted">${who}</span> <span class="mh-name" tabindex="0" data-tip="${escH(missionTip(side))}">${escH(G.pri[side])}</span> ${dispChip(G.fd[side])}</span>` : '';
-  return one('player', 'You') + one('ai', 'AI') + (G.map && G.map.layout ? `<span class="mh-m muted" data-tip="The official 11th edition layout for this pairing of Force Dispositions (Event Companion). Terrain areas are the objectives; deployment zones follow the layout.">${escH(G.map.name)}</span>` : '');
+  return one('player', G.hot ? escH(hotName('player')) : 'You') + one('ai', G.hot ? escH(hotName('ai')) : 'AI') + (G.map && G.map.layout ? `<span class="mh-m muted" data-tip="The official 11th edition layout for this pairing of Force Dispositions (Event Companion). Terrain areas are the objectives; deployment zones follow the layout.">${escH(G.map.name)}</span>` : '');
 }
 function priHtml(side, open) {
   const m = G.pri && G.pri[side]; if (!m) return '';
   const P = PRIMARIES[m];
-  return `<details${open ? ' open' : ''}><summary><b>${side === 'player' ? 'Your' : 'AI'} primary: ${escH(m)}</b> <span class="muted">(${escH(fdName(G.fd[side]))} vs ${escH(fdName(G.fd[other(side)]))}, ${G.vp[side].pri} VP)</span></summary>
+  return `<details${open ? ' open' : ''}><summary><b>${G.hot ? escH(hotName(side)) + "'s" : side === 'player' ? 'Your' : 'AI'} primary: ${escH(m)}</b> <span class="muted">(${escH(fdName(G.fd[side]))} vs ${escH(fdName(G.fd[other(side)]))}, ${G.vp[side].pri} VP)</span></summary>
     <ul style="margin:4px 0 4px 16px;padding:0">${P.c.map(k => `<li>${escH(k.text)}</li>`).join('')}</ul>
     ${priStatus(side)}
     ${P.todo ? `<p class="muted" style="margin:2px 0;font-size:.8rem">Not simulated: ${escH(P.todo)}.${side === 'player' ? ' Add those VP yourself with the buttons below.' : ' The AI gets nothing for it.'}</p>` : ''}
@@ -6575,6 +6578,7 @@ function newGame() {
     strat: freshStrat(), units: [...pu, ...au], log: [], sel: null, mode: null, fight: null, busy: false, msg: '', info: null,
     claims: new Set(), pri: null, fd: null, priRound: { player: {}, ai: {} }, lostLast: { player: 0, ai: 0 }, ctrl0: {}, gen: (G ? G.gen + 1 : 1), prompt: null, turnKilled: [], shockFails: [], deployTurn: null, pb, ab, roll: null, lastCharge: null,
     rules: { player: impliedRules(pb), ai: impliedRules(ab) }, oath: { player: null, ai: null }, waaagh: { player: { used: false, until: 0 }, ai: { used: false, until: 0 } }, orkRound: 0, miracle: { player: [], ai: [] }, righteous: { player: [], ai: [] }, vows: { player: null, ai: null }, quarry: { player: null, ai: null }, judged: { player: null, ai: null }, asKilledBy: { player: [], ai: [] }, asHold: false, righteousPending: false, hyper: { player: null, ai: null }, imp: { player: null, ai: null }, impUsed: { player: [], ai: [] }, marks: { player: null, ai: null }, stalk: { player: null, ai: null }, vow: { player: null, ai: null }, singular: { player: null, ai: null }, protean: { player: false, ai: false }, btQ: [], btRevive: [], doctrine: { player: null, ai: null }, docUsed: { player: [], ai: [] }, discount: { player: 0, ai: 0 }, revenants: [], offers: [], declined: new Set() };
+  G.hotFormDone = 0; G.hot = (cpOn && ((NEXT_HOT === true) || ($('#b-hot') && $('#b-hot').checked))) ? { names: [pb.name, ab.name], flip: false } : null;
   G.mkUnit = mk; G.cpMode = cpOn; G.cpL = cpOn ? lay.L : null; dgSetup(); smSetup();
   if (cpOn) { G.fd = { player: 'combat patrol', ai: 'combat patrol' }; G.pri = { player: pb.primary, ai: ab.primary }; log(`Combat Patrol: your <b>${pb.name}</b> against the AI's <b>${ab.name}</b>. Your primary mission is <b>${G.pri.player}</b>; the AI's is <b>${G.pri.ai}</b>.`, 'sys'); }
   else { const fp = fdP, fa = fdA; G.fd = { player: fp, ai: fa }; G.pri = { player: PRI_MATRIX[FD_ORDER.indexOf(fp)][FD_ORDER.indexOf(fa)], ai: PRI_MATRIX[FD_ORDER.indexOf(fa)][FD_ORDER.indexOf(fp)] };
@@ -6626,9 +6630,54 @@ function cpApplyRoles() {
   const dep = layoutDep(G.cpL, G.roles.player === 'attacker');
   OBJ = dep.objs; TERRAIN = dep.terr; G.map = Object.assign({ key: G.map.key }, dep);
 }
+
+/* ============ TWO PLAYERS, ONE DEVICE (Combat Patrol) ============
+   The engine is written as "you" against "the AI". For two people, the labels are swapped at every hand-over, so whoever is at the
+   screen is always "you" (side 'player'). A cover screen hides the board while the device is passed. */
+const hotName = side => { const h = G && G.hot; return h ? h.names[(side === 'player') !== h.flip ? 0 : 1] : (side === 'player' ? 'You' : 'The AI'); };
+function hotSwapState() {
+  const seen = new Set(), SKIP = new Set(['mkUnit', 'prompt', 'hot']), own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+  const flipStr = v => v === 'player' ? 'ai' : v === 'ai' ? 'player' : v;
+  const swapKeys = (o, a, b) => { const ha = own(o, a), hb = own(o, b); if (!ha && !hb) return; const va = o[a], vb = o[b]; delete o[a]; delete o[b]; if (ha) o[b] = va; if (hb) o[a] = vb; };
+  const walk = o => {
+    if (!o || typeof o !== 'object' || seen.has(o)) return; if (typeof Node !== 'undefined' && o instanceof Node) return; seen.add(o);
+    if (o instanceof Map) { const ents = [...o.entries()]; o.clear(); for (let [k, v] of ents) { k = flipStr(k); if (typeof v === 'string') v = flipStr(v); else walk(v); o.set(k, v); } return; }
+    if (o instanceof Set) { const vs = [...o]; o.clear(); for (const v of vs) { if (typeof v === 'string') o.add(flipStr(v)); else { walk(v); o.add(v); } } return; }
+    if (Array.isArray(o)) { for (let i = 0; i < o.length; i++) { if (typeof o[i] === 'string') o[i] = flipStr(o[i]); else walk(o[i]); } return; }
+    if (own(o, 'you') && own(o, 'ai') && !own(o, 'player')) swapKeys(o, 'you', 'ai'); else swapKeys(o, 'player', 'ai');
+    for (const k of Object.keys(o)) { if (SKIP.has(k)) continue; const v = o[k]; if (typeof v === 'string') o[k] = flipStr(v); else walk(v); }
+  };
+  const pb = G.pb, ab = G.ab; walk(G); walk(OBJ); walk(TERRAIN); G.pb = ab; G.ab = pb;
+  G.hot.flip = !G.hot.flip; G.sel = null; G.mode = null; G.pend = null; G.mm = null; G.hover = null;
+  hotView();
+}
+/* seat the camera on the side of the board the person at the screen deploys on */
+function hotView() {
+  let top = false;
+  try { if (G && G.roles) { const z = zoneOf('player'), ys = (z.pts || []).map(p => p[1]); top = ys.length && ys.reduce((a, b) => a + b, 0) / ys.length < BH / 2; } } catch (e) { }
+  if (typeof BF3D !== 'undefined' && BF3D) { BF3D.trayFlip = !!top; if (BF3D.cam) { BF3D.cam.yaw = top ? Math.PI : 0; BF3D.dirty = true; if (typeof kick === 'function') kick(); } BF3D.hotSeen = true; }
+}
+function hotOverlay(title, sub, label) {
+  return new Promise(res => {
+    document.getElementById('hot-pass') && document.getElementById('hot-pass').remove();
+    const d = document.createElement('div'); d.id = 'hot-pass';
+    d.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#0b0f0a;color:#d8e8c8;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;font-family:inherit';
+    d.innerHTML = `<div style="font-size:.85rem;letter-spacing:.2em;text-transform:uppercase;color:#7a9a6a">Pass the device</div><h1 style="margin:10px 0 6px;font-size:2rem">${title}</h1><p style="max-width:34em;margin:0 0 22px;color:#a9c19a">${sub}</p><button class="btn primary" id="hot-go" style="font-size:1.1rem;padding:12px 26px">${label}</button>`;
+    document.body.appendChild(d); d.querySelector('#hot-go').onclick = () => { d.remove(); res(); };
+  });
+}
+/* hand the device to the other player: cover screen first, then swap so they are "you" */
+async function hotPass(why) {
+  if (!G || !G.hot) return;
+  const nxt = hotName('ai'), bits = { turn: `Battle round ${G.round}. The board is hidden until you press the button.`, setup: 'The board is hidden until you press the button, so nobody sees the other player\'s choices.' };
+  G.busy = true; render();
+  await hotOverlay(escH(nxt), why === 'turn' ? bits.turn : bits.setup, `I am ${escH(nxt)}: show the board`);
+  hotSwapState(); G.busy = false; render();
+}
 function rollOffRoles() {
   let a, b; do { a = d6(); b = d6(); } while (a === b);
   G.roll = { you: a, ai: b };
+  if (G.hot) { log(`Roll-off for Attacker and Defender: you ${a}, AI ${b}. You choose.`, 'sys'); render(); if (a < b) hotPass('setup'); return; }
   if (a > b) { log(`Roll-off for Attacker and Defender: you ${a}, AI ${b}. You choose.`, 'sys'); }
   else {
     const pick = Math.random() < .5 ? 'attacker' : 'defender';
@@ -6678,6 +6727,12 @@ async function confirmFormations() {
     G.plague.player = k; G.plagueChosen = true; log(`You chose <b>${plagueName(k)}</b> as your Plague.`, 'player');
   }
   fixDedicated('player');
+  if (G.hot) {
+    if (!G.hotFormDone) { G.hotFormDone = 1; log('A player has declared their battle formations in secret.', 'sys'); await hotPass('setup'); return; }
+    const r1 = reserves('player'), r2 = reserves('ai');
+    log(`Battle formations revealed. ${hotName('player')} reserves: ${r1.length ? r1.map(u => u.name).join(', ') : 'none'}. ${hotName('ai')} reserves: ${r2.length ? r2.map(u => u.name).join(', ') : 'none'}.`, 'sys');
+    nextStep(); return;
+  }
   const aiRes0 = inArmy('ai').filter(u => dstrike(u) && !forcedReserve(u)).filter((u, i, arr) => arr.slice(0, i + 1).reduce((a, x) => a + unitPts(x), 0) + inArmy('ai').filter(x => forcedReserve(x)).reduce((a, x) => a + unitPts(x), 0) <= reservePtsCap('ai')).slice(0, G.cpMode ? Math.max(0, maxReserves('ai') - inArmy('ai').filter(x => x.reserve).length) : 99); aiRes0.forEach(u => u.reserve = true);
   aiLoadTransports();
   const aiRes = aiRes0;
@@ -6706,6 +6761,7 @@ async function continueDeploy() {
     if (!p && !a) { log('Both armies are deployed.', 'sys'); nextStep(); return; }
     if (G.deployTurn === 'player' && !p) G.deployTurn = 'ai';
     if (G.deployTurn === 'ai' && !a) G.deployTurn = 'player';
+    if (G.deployTurn === 'ai' && G.hot) { await hotPass('setup'); if (G.gen !== gen) return; continue; }
     if (G.deployTurn === 'ai') {
       G.busy = true; render(); await sleep(450); if (G.gen !== gen) return;
       const u = toDeploy('ai')[0];
@@ -6749,6 +6805,7 @@ function playerPlace(x, y) {
 function rollFirstTurn() {
   let a, b; do { a = d6(); b = d6(); } while (a === b);
   G.roll = { you: a, ai: b };
+  if (G.hot) { log(`Roll-off for the first turn: you ${a}, AI ${b}. You choose.`, 'sys'); render(); if (a < b) hotPass('setup'); return; }
   if (a > b) log(`Roll-off for the first turn: you ${a}, AI ${b}. You choose.`, 'sys');
   else { G.first = 'ai'; log(`Roll-off for the first turn: you ${a}, AI ${b}. The AI takes the first turn.`, 'sys'); }
   render();
@@ -6759,6 +6816,14 @@ function scoutOk(u, x, y) { return Math.hypot(x - u.x, y - u.y) <= u.scouts + 1e
 async function startScouts() {
   const order = [G.first, other(G.first)];
   if (!scoutUnits('player').length && !scoutUnits('ai').length) { log('No units have Scouts, so there are no scout moves.', 'sys'); render(); return; }
+  if (G.hot) {
+    for (let i = 0; i < 2; i++) {
+      const s = i === 0 ? G.first : other(G.first);
+      if (s === 'ai') { if (!scoutUnits('ai').length) continue; await hotPass('setup'); }
+      if (scoutUnits('player').length) { G.scoutPhase = true; render(); await new Promise(res => { G.scoutDone = res; }); G.scoutPhase = false; }
+    }
+    log('Scout moves are finished.', 'sys'); render(); return;
+  }
   for (const s of order) {
     if (s === 'ai') {
       for (const u of scoutUnits('ai')) {
@@ -6780,7 +6845,8 @@ async function startScouts() {
 async function startBattle() {
   G.stage = 'battle'; G.round = 1; G.active = G.first; smStartBattle();
   try { await tsScryer(); await tsUnearthly(); } catch (e) { }
-  log(`Battle round 1 begins. ${G.first === 'player' ? 'You go' : 'The AI goes'} first. <i>${FLAVOUR[Math.floor(Math.random() * FLAVOUR.length)]}</i>`, 'sys');
+  if (G.hot && G.active === 'ai') { log(`Battle round 1 begins. ${hotName('ai')} goes first.`, 'sys'); await hotPass('turn'); }
+  else log(`Battle round 1 begins. ${G.first === 'player' ? 'You go' : 'The AI goes'} first. <i>${FLAVOUR[Math.floor(Math.random() * FLAVOUR.length)]}</i>`, 'sys');
   beginTurn();
 }
 function beginTurn() {
@@ -7015,6 +7081,7 @@ async function endTurnTail() {
     log(`Battle round ${G.round} begins. <i>${FLAVOUR[Math.floor(Math.random() * FLAVOUR.length)]}</i>`, 'sys');
   }
   G.active = other(G.active);
+  if (G.hot && G.active === 'ai') await hotPass('turn');
   beginTurn();
 }
 function checkEnd() {
@@ -7028,6 +7095,7 @@ function finish() {
   G.stage = 'over'; G.busy = false; G.sel = null; G.mode = null; G.prompt = null;
   const p = inArmy('player').length, a = inArmy('ai').length, vp = vpTotal('player'), va = vpTotal('ai');
   let res;
+  if (G.hot) { const n1 = hotName('player'), n2 = hotName('ai'); res = !p && a ? `${n2} destroyed ${n1}'s whole army.` : !a && p ? `${n1} destroyed ${n2}'s whole army.` : vp > va ? `${n1} wins on victory points.` : va > vp ? `${n2} wins on victory points.` : 'It\'s a draw on victory points.'; G.result = `${res} ${n1}: ${vp} VP (${G.vp.player.pri} primary, ${G.vp.player.sec} secondary). ${n2}: ${va} VP (${G.vp.ai.pri} primary, ${G.vp.ai.sec} secondary).`; log(`Game over. ${G.result}`, 'sys'); render(); return; }
   if (!p && a) res = 'The AI destroyed your whole army.';
   else if (!a && p) res = 'You destroyed the AI\'s whole army.';
   else res = vp > va ? 'You win on victory points.' : va > vp ? 'The AI wins on victory points.' : 'It\'s a draw on victory points.';
@@ -8286,8 +8354,8 @@ function renderBoard() {
   if (G.stage === 'pre' && G.step === 'deploy' && G.deployTurn === 'player' && G.sel) {
     if (!infil(G.sel)) { s.push(zr(zp, 'reach')); if (zp.kind === 'quarter') s.push(`<circle class="b-bg" cx="${zp.cx}" cy="${zp.cy}" r="${zp.cut}"/>`); }
   }
-  if (zp.pts) s.push(`<text class="zone-t" x="${za.cx0.toFixed(1)}" y="${(za.cy0 - 1).toFixed(1)}" text-anchor="middle" font-size="1.2">AI deployment zone</text><text class="zone-t" x="${zp.cx0.toFixed(1)}" y="${(zp.cy0 + 1).toFixed(1)}" text-anchor="middle" font-size="1.2">Your deployment zone</text>`);
-  else s.push(`<text class="zone-t" x="${za.x + 1}" y="${za.y + 1.8}" font-size="1.2">AI deployment zone</text><text class="zone-t" x="${zp.x + 1}" y="${zp.y + zp.h - 1}" font-size="1.2">Your deployment zone</text>`);
+  if (zp.pts) s.push(`<text class="zone-t" x="${za.cx0.toFixed(1)}" y="${(za.cy0 - 1).toFixed(1)}" text-anchor="middle" font-size="1.2">${G.hot ? escH(hotName('ai')) + "'s" : 'AI'} deployment zone</text><text class="zone-t" x="${zp.cx0.toFixed(1)}" y="${(zp.cy0 + 1).toFixed(1)}" text-anchor="middle" font-size="1.2">${G.hot ? escH(hotName('player')) + "'s" : 'Your'} deployment zone</text>`);
+  else s.push(`<text class="zone-t" x="${za.x + 1}" y="${za.y + 1.8}" font-size="1.2">${G.hot ? escH(hotName('ai')) + "'s" : 'AI'} deployment zone</text><text class="zone-t" x="${zp.x + 1}" y="${zp.y + zp.h - 1}" font-size="1.2">${G.hot ? escH(hotName('player')) + "'s" : 'Your'} deployment zone</text>`);
   for (const t of TERRAIN) {
     if (t.poly) { const pts = t.poly.map(p => p[0] + ',' + p[1]).join(' '); s.push(`<polygon class="terrain ${terrCat(t)}" points="${pts}" stroke-linejoin="round"/><polygon points="${pts}" fill="url(#hatch)" opacity="${terrCat(t) === 'dense' ? .5 : .22}"/>`); for (const w of (t.wseg || [])) s.push(`<line class="ruin-wall${w.h <= 2 ? ' low' : ''}" x1="${w.a[0].toFixed(2)}" y1="${w.a[1].toFixed(2)}" x2="${w.b[0].toFixed(2)}" y2="${w.b[1].toFixed(2)}"/>`); continue; }
     s.push(`<rect class="terrain ${terrCat(t)}" x="${t.x}" y="${t.y}" width="${t.w}" height="${t.h}" rx=".3"/><rect x="${t.x}" y="${t.y}" width="${t.w}" height="${t.h}" fill="url(#hatch)" opacity="${terrCat(t) === 'dense' ? .5 : .22}" rx=".3"/>`);
@@ -8439,8 +8507,9 @@ function renderSide() {
   const pre = G.stage === 'pre';
   refreshTheme();
   $('#b-round').textContent = G.stage === 'over' ? 'Game over' : pre ? 'Before the battle' : `Round ${G.round} of 5`;
-  { const PN = { command: 'Command', movement: 'Movement', shooting: 'Shooting', charge: 'Charge', fight: 'Fight' }; const tn = $('#b-turn'); if (tn) tn.textContent = G.stage === 'battle' ? `${G.active === 'player' ? 'Your turn' : "AI's turn"} · ${PN[G.phase] || ''} phase` : ''; }
+  { const PN = { command: 'Command', movement: 'Movement', shooting: 'Shooting', charge: 'Charge', fight: 'Fight' }; const tn = $('#b-turn'); if (tn) tn.textContent = G.stage === 'battle' ? `${G.hot ? hotName(G.active) + "'s turn" : G.active === 'player' ? 'Your turn' : "AI's turn"} · ${PN[G.phase] || ''} phase` : ''; }
   $('#b-vp-p').textContent = vpTotal('player'); $('#b-vp-a').textContent = vpTotal('ai');
+  { const nm = (el, t) => { const sp = el.parentNode; if (sp && sp.firstChild && sp.firstChild.nodeType === 3 && sp.firstChild.nodeValue !== t + ' ') sp.firstChild.nodeValue = t + ' '; }; nm($('#b-vp-p'), G.hot ? hotName('player') : 'You'); nm($('#b-vp-a'), G.hot ? hotName('ai') : 'AI'); }
   { const mb = $('#b-missions'); if (mb) { const html = missionBar(); if (mb._h !== html) { mb._h = html; mb.innerHTML = html; } mb.hidden = !html; } }
   $('#b-cp-p').textContent = G.cp.player + ' CP' + asHud('player'); $('#b-cp-a').textContent = G.cp.ai + ' CP' + asHud('ai');
   $('#b-banner').innerHTML = G.stage === 'over' ? `<div class="banner"><h3>Game over</h3>${G.result}</div>` : '';
@@ -15782,6 +15851,7 @@ function refreshArmyUI() {
     $('#b-army-a').innerHTML = buildOptions(findBuild(av) && !CP_BUILDS.some(b => b.id === av) ? av : defaultBuildId(1));
   }
   for (const id of ['#b-disp-p', '#b-disp-a']) { const l = $(id) && $(id).closest('label'); if (l) l.hidden = cpMenu; }
+  { const hl = $('#b-hot-l'); if (hl) hl.hidden = !cpMenu; }
   { const gt = $('#b-gtype'); if (gt) gt.value = cpMenu ? 'cp' : 'standard'; }
   const un = $('#a-unhide'); if (un && un.addEventListener) un.addEventListener('click', async () => { hiddenSamples = []; await saveHidden(); refreshArmyUI(); });
   fillDispSelects();
@@ -17582,7 +17652,7 @@ function gfxStatsText(Rn) {
 }
 function kick() { if (BF3D.raf || !BF3D.on) return; BF3D.raf = requestAnimationFrame(() => { BF3D.raf = 0; if (!BF3D.on || !BF3D.map || !BF3D.dirty) return; BF3D.dirty = false; place(); try { BF3D.R.fades = bfFades(); } catch (e) { BF3D.R.fades = []; } try { BF3D.pulseOn = gfxPulse(BF3D.R); } catch (e) { BF3D.pulseOn = false; } BF3D.R.draw(BF3D.cam, BF3D.map.th.env); try { gfxSample(BF3D.R, performance.now()); gfxStatsEl(); } catch (e) { } try { overlay(); } catch (e) { console.error(e); } try { if (BF3D.pulseOn) { BF3D.dirty = true; kick(); } } catch (e) { } }); }
   /* ---- dice trays and rolling: the game decides every result, the table only shows it ---- */
-  const TRAY = { get player() { return { x: BW / 2, z: BH + 7, w: 26, d: 9 }; }, get ai() { return { x: BW / 2, z: -7, w: 26, d: 9 }; } };
+  const TRAY = { get player() { return { x: BW / 2, z: BF3D.trayFlip ? -7 : BH + 7, w: 26, d: 9 }; }, get ai() { return { x: BW / 2, z: BF3D.trayFlip ? BH + 7 : -7, w: 26, d: 9 }; } };
   const FELT = [.03, .1, .05], WOOD = [.14, .08, .04];
   function buildTrays() {
     freeMesh(BF3D.trays); BF3D.trays = null; if (!BF3D.R || !BF3D.map) return; const mb = new BFX.MB();
