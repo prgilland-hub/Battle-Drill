@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.25-1255';
+  const VERSION = '2026.11.25-1303';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -11883,7 +11883,7 @@ function mmEnsure() {
   if (!G.mm || G.mm.uid !== u.id || G.mm.mode !== m) {
     const origin = new Map(), pos = new Map(), rot = new Map(), rot0 = new Map(), un = !u.placed;
     for (const md of u.mods) { const ax = un ? md.dx : u.x + md.dx, ay = un ? md.dy : u.y + md.dy; origin.set(md.id, { x: ax, y: ay }); pos.set(md.id, { x: ax, y: ay }); rot.set(md.id, md.rot || 0); rot0.set(md.id, md.rot || 0); }
-    G.mm = { uid: u.id, mode: m, origin, pos, rot, rot0, sel: new Set(), drag: null, moved: false, box: null, fresh: un };
+    G.mm = { uid: u.id, mode: m, origin, pos, rot, rot0, sel: new Set(), drag: null, moved: false, box: null, fresh: un, grab: un ? 'unit' : 'model' };
   }
   return G.mm;
 }
@@ -12233,6 +12233,7 @@ function beginChargePlace(u, t, roll, heroic) {
   G.mode = { type: 'chargePlace', kind: 'charge', roll, allow: lim, target: t.id, targets: [t.id], skies: !!(sp && sp.skies), heroic: !!heroic, prev: heroic ? null : G.mode };
   G.sel = u; G.pend = null; G.mm = null; mmEnsure(); mmChargeAuto(); render();
 }
+function mmToggleGrab() { const S = mmEnsure(); if (!S) return; S.grab = S.grab === 'unit' ? 'model' : 'unit'; if (S.grab === 'unit') mmSelectAll(); else S.sel = new Set(); }
 function mmSelectAll() { const S = mmEnsure(); if (!S) return; S.sel = new Set(mmUnit().mods.map(m => m.id)); }
 function mmReset() { const S = mmEnsure(); if (!S) return; for (const [id, o] of S.origin) { S.pos.set(id, { x: o.x, y: o.y }); S.rot.set(id, S.rot0.get(id)); } S.moved = false; S.sel = new Set(); G.pend = null; if (!mmUnit().placed) S.fresh = true; }
 /* turn the selected models (or the whole unit) about their middle */
@@ -12299,13 +12300,14 @@ function mmPrompt() {
   let h = (m.allow >= 999) ? `<b>${escH(u.name)}</b>: ${kindName}. ` : `<b>${escH(u.name)}</b>: ${kindName}${tg ? ' into ' + escH(tg.name) : ''}${m.kind === 'consolidate' && m.sub === 'objective' && m.obj ? ' onto ' + escH(m.obj.name) : ''}${m.kind === 'consolidate' && m.sub === 'engaging' && tg ? ' toward ' + escH(tg.name) : ''}, each model can move up to ${m.allow}". `;
   if (S.fresh) return h + (m.kind === 'deploy' ? 'Tap or drag on the map inside your deployment zone to put the unit down; the models are dropped on legal spots, then drag any model to adjust it. Use Turn left and Turn right (or [ and ]) to rotate ovals and hulls.' : 'Tap or drag on the map to put the unit down; the models are dropped on legal spots, then drag any model to adjust it.');
   if ((m.kind === 'pilein' || m.kind === 'consolidate') && S.locked && S.locked.size) h += `${S.locked.size} model${S.locked.size === 1 ? ' is' : 's are'} in base contact and cannot move. `;
-  if (!S.moved) h += 'Drag the whole unit to where it should end up, and the models are dropped on the nearest legal spots. To move one model, drag it; to move several, drag a box around them. On a touch screen, press and hold a model to take the whole unit.';
+  if (!S.moved) h += (S.grab === 'unit' ? '<b>Grabbing the whole unit:</b> drag any model and every model comes with it, dropped on the nearest legal spots. ' : '<b>Grabbing one model:</b> drag a model to move just that one; Shift-click or drag a box to pick several. Double-click, or press and hold on a touch screen, takes the whole unit. ') + 'Press G, or use the Grabbing button, to switch.';
   else if (!viol.length) h += (m.kind === 'pilein' || m.kind === 'consolidate') ? 'Every model is in a legal spot. Adjust any model you like, then confirm.' : m.kind === 'charge' ? 'The unit is wrapped around its target and every rule is met. Adjust any model you like, then confirm the charge.' : 'Every model is in a legal spot. Adjust any model you like, then confirm.';
   else h += `<span class="warn">${viol.length} problem${viol.length === 1 ? '' : 's'}:</span><ul class="mm-viol">${viol.slice(0, 6).map(v => `<li>${escH(v.t)}</li>`).join('')}${viol.length > 6 ? `<li>…and ${viol.length - 6} more.</li>` : ''}</ul>`;
   return h;
 }
 function mmButtons() {
   const a = mmButtons0(), S = G.mm; if (!S || S.fresh) return a;
+  const gb = btn(S.grab === 'unit' ? 'Grabbing: whole unit' : 'Grabbing: one model', () => { mmToggleGrab(); drawSight(); render(); }, false, false, 'Switch what a drag picks up (key G). Whole unit: pressing on any model moves them all. One model: pressing on a model moves just that one; Shift-click adds more models, drag a box to pick several, double-click takes the whole unit.'); a.unshift(gb);
   let ids = new Set(); try { for (const v of mmCheck()) for (const i of (v.ids || [])) ids.add(i); } catch (e) { }
   if (ids.size) a.splice(1, 0, btn(`Fix ${ids.size === 1 ? 'the flagged model' : 'the ' + ids.size + ' flagged models'}`, () => { mmSolve(new Set(ids)); mmPend(); render(); }, false, false, 'Moves only the flagged models to the nearest legal spot: back inside reach, off terrain edges and other bases, out of enemy engagement range and into coherency. Models that are fine stay where you put them.'));
   return a;
@@ -12322,6 +12324,7 @@ function mmButtons0() {
 /* pointer handling: runs before the older single-circle placement */
 (function initMoveSession() {
   const b = $('#board'); let lastTap = 0;
+  const mmNearUnit = (S, u, pt) => { if (Math.hypot(pt.x - u.x, pt.y - u.y) <= u.r + .6) return true; for (const md of u.mods) { const p = S.pos.get(md.id); if (Math.hypot(p.x - pt.x, p.y - pt.y) <= md.r + 1.6) return true; } return false; };
   const hitModel = (S, u, pt, pad) => { for (let i = u.mods.length - 1; i >= 0; i--) { const md = u.mods[i]; if (ptGap(shAt(md, S.pos.get(md.id), S.rot.get(md.id)), pt.x, pt.y) <= pad) return md; } return null; };
   b.addEventListener('pointerdown', e => {
     if (!mmOn() || (e.button !== undefined && e.button > 0 && e.pointerType === 'mouse')) return;
@@ -12331,15 +12334,17 @@ function mmButtons0() {
     const base = () => { const m = new Map(); for (const id of S.sel) m.set(id, { ...S.pos.get(id) }); return m; };
     if (S.fresh) {
       for (const md2 of u.mods) S.pos.set(md2.id, { x: pt.x + md2.dx, y: pt.y + md2.dy });
-      S.fresh = false; S.moved = true; S.sel = new Set(u.mods.map(x => x.id));
+      S.fresh = false; S.moved = true; S.sel = new Set(u.mods.map(x => x.id)); S.grab = 'model';
       S.drag = { id: e.pointerId, kind: 'move', start: pt, base: base(), lead: u.mods[0].id, px: e.clientX, py: e.clientY, touch, placedNow: true };
+    } else if (S.grab === 'unit' && (md || mmNearUnit(S, u, pt))) {
+      /* Whole-unit grab: pressing on any model, or in the gaps between them, takes every model */
+      mmSelectAll(); S.drag = { id: e.pointerId, kind: 'move', start: pt, base: base(), lead: (md || u.mods[0]).id, px: e.clientX, py: e.clientY, touch };
     } else if (md) {
-      if (!S.sel.has(md.id)) S.sel = new Set([md.id]);
+      if (e.shiftKey || e.ctrlKey || e.metaKey) { if (S.sel.has(md.id) && S.sel.size > 1) S.sel.delete(md.id); else S.sel.add(md.id); }
+      else if (!S.sel.has(md.id) || S.sel.size === u.mods.length) S.sel = new Set([md.id]);
       S.drag = { id: e.pointerId, kind: 'move', start: pt, base: base(), lead: md.id, px: e.clientX, py: e.clientY, touch, longed: false };
       if (touch) S.drag.timer = setTimeout(() => { if (S.drag && S.drag.kind === 'move' && !S.drag.movedPx) { mmSelectAll(); S.drag.base = base(); S.drag.longed = true; try { navigator.vibrate && navigator.vibrate(30); } catch (x) { } drawSight(); renderSide(); } }, 450);
       const now = Date.now(); if (!touch && now - lastTap < 350) { mmSelectAll(); S.drag.base = base(); } lastTap = now;
-    } else if (Math.hypot(pt.x - u.x, pt.y - u.y) <= u.r + .6) {
-      mmSelectAll(); S.drag = { id: e.pointerId, kind: 'move', start: pt, base: base(), lead: u.mods[0].id, px: e.clientX, py: e.clientY, touch };
     } else {
       S.drag = { id: e.pointerId, kind: 'box', start: pt, px: e.clientX, py: e.clientY, shift: e.shiftKey || e.ctrlKey || e.metaKey };
       S.box = { x0: pt.x, y0: pt.y, x1: pt.x, y1: pt.y };
@@ -12372,6 +12377,8 @@ function mmButtons0() {
       if (b && Math.hypot(b.x1 - b.x0, b.y1 - b.y0) > .6) {
         const x0 = Math.min(b.x0, b.x1), x1 = Math.max(b.x0, b.x1), y0 = Math.min(b.y0, b.y1), y1 = Math.max(b.y0, b.y1), hit = u.mods.filter(md => { const p = S.pos.get(md.id); return p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1; }).map(md => md.id);
         S.sel = d.shift ? new Set([...S.sel, ...hit]) : new Set(hit);
+      } else if (b && S.grab !== 'unit') {  // a click on empty ground with one-model grabbing: just clear the selection
+        if (!d.shift) S.sel = new Set();
       } else if (b) {                       // a click on empty ground: move the whole unit there
         const c = mmCentre(), dx = b.x0 - c.x, dy = b.y0 - c.y, lim = G.mode.allow;
         mmSelectAll(); for (const md of u.mods) { const p = S.pos.get(md.id), o = S.origin.get(md.id); p.x += dx; p.y += dy; const dd = Math.hypot(p.x - o.x, p.y - o.y); if (dd > lim) { p.x = o.x + (p.x - o.x) * lim / dd; p.y = o.y + (p.y - o.y) * lim / dd; } }
@@ -12388,6 +12395,7 @@ function mmButtons0() {
     if (e.key === 'Enter') { e.preventDefault(); e.stopImmediatePropagation(); const v = S.moved ? mmCheck() : [{}]; if (S.moved && !v.length) mmCommit(); else if (S.moved) flash(v[0].t); }
     else if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); mmReset(); render(); }
     else if (e.key === '[' || e.key === ']') { e.preventDefault(); e.stopImmediatePropagation(); mmRotate((e.key === '[' ? -1 : 1) * (e.shiftKey ? 5 : 15)); drawSight(); renderSide(); }
+    else if ((e.key === 'g' || e.key === 'G') && !e.ctrlKey && !e.metaKey) { e.preventDefault(); e.stopImmediatePropagation(); mmToggleGrab(); render(); }
     else if (e.key === 'a' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); mmSelectAll(); drawSight(); renderSide(); }
     else if (e.key.startsWith('Arrow') && S.sel.size) {
       e.preventDefault(); e.stopImmediatePropagation(); const st = e.shiftKey ? .1 : .5, dx = e.key === 'ArrowRight' ? st : e.key === 'ArrowLeft' ? -st : 0, dy = e.key === 'ArrowDown' ? st : e.key === 'ArrowUp' ? -st : 0, u = mmUnit();
