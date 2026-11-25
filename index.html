@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.25-1545';
+  const VERSION = '2026.11.25-1600';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -2194,14 +2194,14 @@ html[data-look="cog"] .muted{color:var(--muted)}
     <div class="panel setup-panel" id="b-setup">
       <div id="lib-status-b" class="lib-status warn" hidden></div>
       <h2 style="margin:0 0 4px">New game</h2>
-      <p class="muted" style="margin:0 0 10px;font-size:.92rem">Pick your army and the AI's, choose how you want to roll dice, then start. A step-by-step walkthrough of the battle setup follows.</p>
+      <p class="muted" id="b-intro" style="margin:0 0 10px;font-size:.92rem">Pick your army and the AI's, choose how you want to roll dice, then start. A step-by-step walkthrough of the battle setup follows.</p>
       <div class="setup">
         <div id="b-warn"></div>
         <div id="b-legal"></div>
         <label>Game type<select id="b-gtype"><option value="standard">Standard battle (your own armies)</option><option value="cp">Combat Patrol (pre-set patrols, 44" by 30" board)</option></select></label>
-        <label id="b-hot-l" hidden style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="b-hot"> <span>Two players, one device. The second army below is Player 2's, not the AI's.</span></label>
+        <div id="b-hot-l" hidden><div class="muted" style="font-size:.85rem;margin-bottom:4px">Who plays the second patrol?</div><div class="seg" id="b-opp" style="margin-bottom:6px"><button type="button" data-opp="ai" class="on">The AI</button><button type="button" data-opp="hot">Another player, on this device</button></div><input type="checkbox" id="b-hot" hidden><div class="muted" id="b-opp-note" style="font-size:.88rem;margin-bottom:8px"></div></div>
         <label id="b-army-p-l">Your army (Imperial Forces)<select id="b-army-p"></select></label>
-        <label>AI army (Hostile Cogitator)<select id="b-army-a"></select></label>
+        <label id="b-army-a-l">AI army (Hostile Cogitator)<select id="b-army-a"></select></label>
         <label>Your Force Disposition<select id="b-disp-p"><option value="auto">From my army's detachment</option><option value="take and hold">Take and Hold</option><option value="purge the foe">Purge the Foe</option><option value="disruption">Disruption</option><option value="reconnaissance">Reconnaissance</option><option value="priority assets">Priority Assets</option></select></label>
         <label>AI Force Disposition<select id="b-disp-a"><option value="auto">From the AI army's detachment</option><option value="take and hold">Take and Hold</option><option value="purge the foe">Purge the Foe</option><option value="disruption">Disruption</option><option value="reconnaissance">Reconnaissance</option><option value="priority assets">Priority Assets</option></select></label>
         <label>Battlefield layout<select id="b-deploy"><option value="random">Random (A, B or C)</option><option value="A">Layout A</option><option value="B">Layout B</option><option value="C">Layout C</option></select></label>
@@ -12806,6 +12806,7 @@ function linkNames(html) {
 }
 $('#b-new').addEventListener('click', async () => { setupOpen = false; battleStarted = true; await beginGame(); const nx = $('#b-map'); if (nx && nx.getBoundingClientRect && nx.scrollIntoView) { const r = nx.getBoundingClientRect(); if (r.top < 0 || r.top > window.innerHeight * 0.6) nx.scrollIntoView({ block: 'start' }); } });
 $('#b-gtype').addEventListener('change', () => { cpMenu = $('#b-gtype').value === 'cp'; refreshArmyUI(); });
+$$('#b-opp button').forEach(b => b.addEventListener('click', () => { $('#b-hot').checked = b.dataset.opp === 'hot'; oppRefresh(); }));
 $('#b-army-p').addEventListener('change', () => { renderBattleLegal(); renderArmyLines(); fillDispSelects(); }); $('#b-army-a').addEventListener('change', () => { renderBattleLegal(); renderArmyLines(); fillDispSelects(); });
 $('#b-guide').addEventListener('click', () => $('#b-guide').classList.toggle('open'));
 { const tr = $('#dice-tray'), mpp = $('#b-map'); if (tr && mpp) { const ph = $('#b-fs'); mpp.appendChild(tr); }
@@ -15815,6 +15816,16 @@ function renderArmyLines() {
   const html = line('You', pb) + line('AI', ab);
   if (box._html !== html) { box._html = html; box.innerHTML = html; }
 }
+function oppRefresh() {
+  const hot = !!(cpMenu && $('#b-hot') && $('#b-hot').checked);
+  $$('#b-opp button').forEach(b => b.classList.toggle('on', (b.dataset.opp === 'hot') === hot));
+  const setLbl = (l, t) => { if (l && l.firstChild && l.firstChild.nodeType === 3) l.firstChild.nodeValue = t; };
+  setLbl($('#b-army-p-l'), hot ? "Player 1's patrol" : cpMenu ? 'Your patrol' : 'Your army (Imperial Forces)');
+  setLbl($('#b-army-a-l'), hot ? "Player 2's patrol" : cpMenu ? 'AI patrol' : 'AI army (Hostile Cogitator)');
+  const n = $('#b-opp-note'); if (n) n.textContent = hot ? 'Two people share this screen and take turns. A cover screen hides the board whenever the device is passed, so battle formations stay secret. Player 2 takes the second patrol below (Random picks one for them). No AI plays.' : 'The AI plays the second patrol, deploys it, makes every decision for it and takes its turns.';
+  const it = $('#b-intro'); if (it) it.textContent = hot ? 'Pick a patrol for each player, choose how you want to roll dice, then start. Player 1 sets up first; the app tells you when to pass the device.' : "Pick your army and the AI's, choose how you want to roll dice, then start. A step-by-step walkthrough of the battle setup follows.";
+  const nw = $('#b-new .sub'); if (nw) nw.textContent = hot ? 'Start a two-player game on this device' : 'Start a new game with these armies';
+}
 function refreshArmyUI() {
   $('#a-store').textContent = storeNote() + (Store.recovered ? ` Recovered ${plural(Store.recovered, 'army')} saved in this browser.`.replace('armys', 'armies') : '');
   const warn = Store.mode === 'memory' ? '<div class="warnbox"><b>Armies won\'t be kept in this view.</b> Open the published page (the artifact link) to save them for good, or use Export all armies before you close this.</div>' : '';
@@ -15850,8 +15861,8 @@ function refreshArmyUI() {
     $('#b-army-p').innerHTML = buildOptions(findBuild(pv) && !CP_BUILDS.some(b => b.id === pv) ? pv : defaultBuildId(0));
     $('#b-army-a').innerHTML = buildOptions(findBuild(av) && !CP_BUILDS.some(b => b.id === av) ? av : defaultBuildId(1));
   }
-  for (const id of ['#b-disp-p', '#b-disp-a']) { const l = $(id) && $(id).closest('label'); if (l) l.hidden = cpMenu; }
-  { const hl = $('#b-hot-l'); if (hl) hl.hidden = !cpMenu; }
+  for (const id of ['#b-disp-p', '#b-disp-a']) { const l = $(id) && $(id).closest('label'); if (l) { l.hidden = cpMenu; l.style.display = cpMenu ? 'none' : ''; } }
+  { const hl = $('#b-hot-l'); if (hl) hl.hidden = !cpMenu; if (!cpMenu && $('#b-hot')) $('#b-hot').checked = false; oppRefresh(); }
   { const gt = $('#b-gtype'); if (gt) gt.value = cpMenu ? 'cp' : 'standard'; }
   const un = $('#a-unhide'); if (un && un.addEventListener) un.addEventListener('click', async () => { hiddenSamples = []; await saveHidden(); refreshArmyUI(); });
   fillDispSelects();
