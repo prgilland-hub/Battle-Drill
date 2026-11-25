@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.25-1133';
+  const VERSION = '2026.11.25-1216';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -3276,7 +3276,7 @@ const other = s => s === 'player' ? 'ai' : 'player';
 const cdist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 const edge = (a, b) => { const de = cdist(a, b) - a.r - b.r; return (de > 40 || !MODELS.on || !isUnitObj(a) || !isUnitObj(b)) ? de : modelEdge(a, b, de); };
 const isAircraft = u => has(u, 'aircraft');
-const forcedReserve = u => isAircraft(u) || hasFx(u, 'starts-reserve');
+const forcedReserve = u => isAircraft(u) || hasFx(u, 'starts-reserve') || !!u.cpRes;
 /* Aircraft only engage, and are only engaged by, units that can Fly */
 const engagedWith = u => aliveSide(other(u.side)).filter(e => edge(u, e) <= ENG + 1e-6 && (!isAircraft(e) || canFly(u)) && (!isAircraft(u) || canFly(e)));
 const isEngaged = u => engagedWith(u).length > 0;
@@ -3324,7 +3324,9 @@ function wallSweep(t, r, x1, y1, x2, y2) {
 }
 const wallCross = (t, x1, y1, x2, y2) => { let c = 0; for (const w of t.wseg) if (segSegDist(x1, y1, x2, y2, w.a[0], w.a[1], w.b[0], w.b[1]) === 0) c += w.h > 2 ? 2 * w.h : 0; return c; };
 /* walls are solid (13.11): no base may end overlapping one */
+let WALLS_OFF = false;
 function wallHit(x, y, r) {
+  if (WALLS_OFF) return false;
   for (const t of TERRAIN) { if (!t.wseg || x < t.x - r - 1 || x > t.x + t.w + r + 1 || y < t.y - r - 1 || y > t.y + t.h + r + 1) continue; for (const w of t.wseg) if (segCircleDist(w.a[0], w.a[1], w.b[0], w.b[1], x, y) < r + .15) return true; }
   return false;
 }
@@ -6511,7 +6513,7 @@ function newGame() {
     orkEnhSetup(u);
     asEnhSetup(u);
     for (const LD of leadersOf(u)) for (const a of u.abilities) for (const f of (a.fx || [])) { const m = /^leader-fnp (\d)/.exec(f); if (m) LD.fnp = LD.fnp && LD.fnp < +m[1] ? LD.fnp : +m[1]; }
-    if (fxAll(u).some(x => x.t[0] === 'starts-reserve') || has(u, 'aircraft')) u.reserve = true;
+    if (fxAll(u).some(x => x.t[0] === 'starts-reserve') || has(u, 'aircraft') || u.cpRes) u.reserve = true;
     u.faction = side === 'player' ? pb.faction : ab.faction; u.scheme = (side === 'player' ? pb : ab).scheme || null;
     if (u.abilities.some(a => /^lord of the death guard/i.test(a.name))) for (const [mn, mt] of MORT_ABILITIES) if (!u.abilities.some(a => a.name.toLowerCase().startsWith(mn.toLowerCase()))) u.abilities.push({ name: mn, text: mt, fx: [] });
     u.warlord = u.kw.includes('warlord') || u.abilities.some(a => /^warlord$/i.test(a.name)) || leadersOf(u).some(LD => (LD.kw || []).includes('warlord') || (LD.abilities || []).some(a => /^warlord$/i.test(a.name)));
@@ -6673,6 +6675,11 @@ async function confirmFormations() {
 }
 const toDeploy = s => G.units.filter(u => u.alive && u.side === s && !u.placed && !u.reserve && !u.embarkedIn);
 function placeOk(u, x, y) {
+  /* Combat Patrol zones are small and hold a ruin: models can be set up in the ruin's footprint, so walls do not block deployment */
+  const wo = WALLS_OFF; WALLS_OFF = !!(G && G.cpMode);
+  try { return placeOk0(u, x, y); } finally { WALLS_OFF = wo; }
+}
+function placeOk0(u, x, y) {
   if (!posOk(u, x, y, false)) return false;
   if (infil(u)) {
     return zoneDist(zoneOf(other(u.side)), x, y) - u.r > 8 && !nearEnemy(u, x, y, 8);
@@ -7227,11 +7234,12 @@ function dgNear(u, x, y) {
   return null;
 }
 function arriveOk(u, x, y) {
-  if (!posOk(u, x, y, false)) return false;
+  { const wo = WALLS_OFF; WALLS_OFF = !!u.cpRes; let ok; try { ok = posOk(u, x, y, false); } finally { WALLS_OFF = wo; } if (!ok) return false; }
   if (aliveSide(other(u.side)).some(e => e.placed && !e.reserve && hasFx(e, 'jammer-12') && Math.hypot(e.x - x, e.y - y) - e.r - u.r <= 12)) return false;
   const dn = dgNear(u, x, y);
   if (dn === true) return false;
   if (dn === null && nearEnemy(u, x, y, hasFx(u, 'ts-aether') ? 6 : 8)) return false;
+  if (u.cpRes) return zoneHas(zoneOf(u.side), x, y, u.r);
   if (dstrike(u) || hasFx(u, 'starts-reserve') || (u.dsPhase && u.dsPhase === G.phaseNo)) return true;
   const edgeGap = Math.min(x - u.r, BW - x - u.r, y - u.r, BH - y - u.r);
   const nearEdge = x + u.r <= 6 || x - u.r >= BW - 6 || y + u.r <= 6 || y - u.r >= BH - 6 || (u.r * 2 > 6 && edgeGap <= 0.6);
@@ -7239,7 +7247,7 @@ function arriveOk(u, x, y) {
   if (effRound(u) === 2 && zoneDist(zoneOf(other(u.side)), x, y) < u.r) return false;
   return true;
 }
-function arriveWhy(u) { return dstrike(u) || hasFx(u, 'starts-reserve') ? 'Deep Strike: anywhere more than 8" from every enemy.' : `Strategic reserves: wholly within 6" of a board edge, more than 8" from enemies${G.round === 2 ? ', and not in the enemy deployment zone in round 2' : ''}.`; }
+function arriveWhy(u) { if (u.cpRes) return `Combat Patrol reserves: wholly within your deployment zone, more than 8" from enemies, from battle round ${u.cpRes}.`; return dstrike(u) || hasFx(u, 'starts-reserve') ? 'Deep Strike: anywhere more than 8" from every enemy.' : `Strategic reserves: wholly within 6" of a board edge, more than 8" from enemies${G.round === 2 ? ', and not in the enemy deployment zone in round 2' : ''}.`; }
 function tryArrive(x, y) {
   const u = G.sel;
   if (!arriveOk(u, x, y)) { flash(`Can't set up there. ${arriveWhy(u)}`); return false; }
@@ -10096,7 +10104,7 @@ const unitEnh = (u, re) => enhHolder(u, re);
 const inTerrain = u => TERRAIN.some(t => inRect(u, t) || distPointRect(u.x, u.y, t) <= u.r * 0.5);
 const entrenched = u => isSM(u) && smDet(u.side, 'Ceramite Sentinels') && inTerrain(u) && !u.arrived && (u.movedDist || 0) <= 3;
 const smEarly = u => !!(G && dgLordPox(u)) || !!(G && hasFx(u, 'bestial-raiders')) || !!(G && isSM(u) && ((smDet(u.side, 'Fulguris Task Force') && isSpeeder(u) && G.round === 1) || enhHolder(u, /hunter.s instincts/i) || (has(u, 'transport') && aliveSide(u.side).concat(G.units.filter(x => x.side === u.side && x.alive)).some(b => enhHolder(b, /armoured commander/i)))));
-const canArriveNow = u => G.round >= 2 || hasFx(u, 'ts-fate') || hasFx(u, 'starts-reserve') || smEarly(u);
+const canArriveNow = u => (u.cpRes ? G.round >= u.cpRes : G.round >= 2) || hasFx(u, 'ts-fate') || hasFx(u, 'starts-reserve') || smEarly(u);
 const effRound = u => dgLordPox(u) ? Math.max(3, G.round) : hasFx(u, 'bestial-raiders') ? G.round + 1 : G.round + (smEarly(u) && G.round === 1 ? 1 : 0);
 const DISCIPLINES = { biomancy: ['Biomancy', '+2" Move.'], divination: ['Divination', 'Attacks can re-roll Hit rolls of 1 and Wound rolls of 1.'], pyromancy: ['Pyromancy', 'Ranged attacks that target an enemy unit within 12" have +1 AP.'], telekinesis: ['Telekinesis', 'Ranged attacks that target this unit have -1 Strength.'], telepathy: ['Telepathy', 'Attacks can ignore modifiers to BS, WS and Hit rolls.'] };
 const disc = u => (smDet(u.side, 'Librarius Conclave') && has(u, 'psyker') && G.discipline && G.discipline[u.side]) || '';
@@ -12951,12 +12959,20 @@ async function saveHidden() {
 const cpW = (name, range, A, bs, S, AP, D, o) => Object.assign({ name, A: String(A), skill: bs, S, AP: Math.abs(AP), D: String(D) }, range ? { range } : {}, o || {});
 const cpU = (o) => Object.assign({ abilities: [], inv: 0, fnp: 0, role: '', size: '', kw: [], scouts: 0, ranged: [], melee: [], Ld: 6 }, o);
 const cpCentreUnit = side => aliveSide(side).some(u => u.placed && !u.reserve && u.x >= 0 && !u.shocked && !tcfg(u) && Math.hypot(u.x - BW / 2, u.y - BH / 2) - u.r <= 3);
+const cp2 = (text, fn, lo) => [K('cmd', lo || 2, 4, `End of your Command phase, round ${lo || 2}+ (end of your turn in round 5): ${text}`, fn), K('eot', 5, 5, `End of your turn, round 5: ${text}`, fn)];
+const cpHomes = c => [c.myHome, c.oppHome].filter(o => o && c.held.includes(o)).length;
 Object.assign(PRIMARIES, {
-  'Honour the Chapter': { c: [K('cmd', 2, 9, 'End of your Command phase, round 2+ (end of your turn in round 5): 5 VP if you control one or more objectives and at least as many as your opponent, and 10 VP if you control two or more objectives other than your home objective.', c => (c.held.length >= 1 && c.held.length >= c.oppHeld.length ? 5 : 0) + (c.nonHome.length >= 2 ? 10 : 0))] },
-  'Inexorable Conquest': { c: [K('cmd', 2, 9, 'End of your Command phase, round 2+ (end of your turn in round 5): 10 VP if you control your opponent\'s home objective, and 5 VP if one of your units (not battle-shocked, not a Transport) is within 3" of the centre of the battlefield.', c => (c.oppHome && c.held.includes(c.oppHome) ? 10 : 0) + (cpCentreUnit(c.side) ? 5 : 0))] }
+  'Strike From On High': { c: [...cp2('5 VP for each expansion objective you control.', c => c.expansion.length * 5), ...cp2('10 VP if a friendly unit that is not battle-shocked is within 3" of the centre of the battlefield.', c => cpCentreUnit(c.side) ? 10 : 0, 3)] },
+  'Seize Their Strongholds': { c: cp2('5 VP if you control more objectives than your opponent, 5 VP if you control your home objective, and 5 VP if you control one or more objectives other than your home objective.', c => (c.held.length > c.oppHeld.length ? 5 : 0) + (c.myHome && c.held.includes(c.myHome) ? 5 : 0) + (c.nonHome.length ? 5 : 0)) },
+  'Encircle and Destroy': { c: [K('cmd', 2, 3, 'End of your Command phase, rounds 2-3: 5 VP for each expansion objective you control.', c => c.expansion.length * 5), K('cmd', 4, 4, 'End of your Command phase, round 4: 10 VP for each home objective you control.', c => cpHomes(c) * 10), K('eot', 5, 5, 'End of your turn, round 5: 10 VP for each home objective you control.', c => cpHomes(c) * 10)] },
+  'Uphold Your Vows': { c: [K('eot', 1, 9, 'End of your turn: 5 VP for each enemy CHARACTER destroyed this turn. (The Hallowed Ground blessing action is not simulated, so blessed objectives are not scored.)', c => c.kills.filter(u => (u.kw || []).includes('character')).length * 5), K('end', 1, 9, 'End of the battle: 5 VP if every enemy CHARACTER has been destroyed.', c => { const e = aliveSide(other(c.side)).filter(u => (u.kw || []).includes('character') || (u.leader && u.leader.alive !== false)); return e.length === 0 ? 5 : 0; })] },
+  'On Holy Ground': { c: cp2('5 VP if a friendly unit that is not battle-shocked is within range of your home objective, then 5 VP each if you control one or more, two or more, and three or more objectives.', c => (c.myHome && aliveSide(c.side).some(u => u.placed && !u.reserve && !u.shocked && u.x >= 0 && objIn(u, c.myHome)) ? 5 : 0) + (c.held.length >= 1 ? 5 : 0) + (c.held.length >= 2 ? 5 : 0) + (c.held.length >= 3 ? 5 : 0)) },
+  'Defenders of the Golden Throne': { c: cp2('10 VP if a friendly unit that is not battle-shocked is within 3" of the centre of the battlefield, and 5 VP if you control at least as many objectives as your opponent.', c => (cpCentreUnit(c.side) ? 10 : 0) + (c.held.length >= c.oppHeld.length ? 5 : 0)) },
+  'Honour the Chapter': { c: cp2('5 VP if you control one or more objectives and at least as many as your opponent, and 10 VP if you control two or more objectives other than your home objective.', c => (c.held.length >= 1 && c.held.length >= c.oppHeld.length ? 5 : 0) + (c.nonHome.length >= 2 ? 10 : 0)) },
+  'Inexorable Conquest': { c: cp2('10 VP if you control your opponent\'s home objective, and 5 VP if one of your units (not battle-shocked, not a Transport) is within 3" of the centre of the battlefield.', c => (c.oppHome && c.held.includes(c.oppHome) ? 10 : 0) + (cpCentreUnit(c.side) ? 5 : 0)) }
 });
 const CP_PATROLS = [
-  { id: 'cp-assault-force', faction: 'Space Marines', name: 'Assault Force', box: 'Space Marines Combat Patrol', primary: 'Honour the Chapter', rules: ['combat doctrines'],
+  { id: 'cp-assault-force', scheme: 'Ultramarines', faction: 'Space Marines', name: 'Assault Force', box: 'Space Marines Combat Patrol', primary: 'Honour the Chapter', rules: ['combat doctrines'],
     det: { name: 'Assault Force', rule: 'Indomitable Resolve', ruleText: 'Friendly ASSAULT FORCE units have +1 OC (already added to the profiles below). Army-wide Combat Doctrines: in your Command phase pick Assault Doctrine (can declare a charge after Advancing), Devastator Doctrine (can shoot after Advancing) or Tactical Doctrine (can shoot and declare a charge after Falling Back); each can be picked once per battle.',
       strats: [
         { name: 'Relentless Aggression', cp: '1', type: 'Assault Force Stratagem', when: 'Fight phase, when a friendly ASSAULT FORCE unit is selected to make a consolidation move', text: 'That unit can move up to 6" when it consolidates.' },
@@ -13008,14 +13024,146 @@ const CP_PATROLS = [
         melee: [cpW('Power fist', 0, 3, 3, 8, -2, 2, { lethal: true, count: 1 }), cpW('Plague knives', 0, 3, 3, 4, 0, 1, { lethal: true, count: 6 })],
         abilities: [{ name: 'Infused with the Blessings of Nurgle', text: 'In your Shooting phase, each time this unit is selected to shoot, after this unit has shot, select one enemy unit hit by one or more of those attacks. Until the start of your next turn, that unit is Afflicted.', fx: [] }] })
     ] }
+  ,
+  { id: 'cp-sanguinary-spearhead', scheme: 'Blood Angels', faction: 'Space Marines', name: 'Sanguinary Spearhead', box: 'Blood Angels Combat Patrol', primary: 'Strike From On High', rules: [],
+    det: { name: 'Sanguinary Spearhead', rule: 'Rapid Manoeuvres', ruleText: 'Friendly SANGUINARY SPEARHEAD units can re-roll Advance rolls. Army rule: Oath of Moment.',
+      strats: [
+        { name: 'Angelic Terror', cp: '1', type: 'Sanguinary Spearhead Stratagem', when: 'Your Command phase', text: 'Select a friendly Sanguinary Guard unit and one enemy unit within 3" of it. That enemy unit must take a Battle-shock roll with -1.' },
+        { name: 'Dauntless Bravery', cp: '1', type: 'Sanguinary Spearhead Stratagem', when: 'Your opponent\'s Shooting or Fight phase, when an enemy unit targets a friendly unit within 3" of the centre of the battlefield', text: 'Until the end of the phase, attacks with a Strength greater than that unit\'s Toughness have -1 to Wound.' },
+        { name: 'Show No Mercy', cp: '2', type: 'Sanguinary Spearhead Stratagem', when: 'Your opponent\'s Movement phase, when an enemy unit engaged with a friendly unit is selected to fall back', text: 'That unit must use Desperate Escape, with -1 to the Hazard rolls if it is battle-shocked.' }] },
+    enh: [{ name: 'Masterful Fighter', who: 'Captain Raldeo', text: 'The bearer\'s melee attacks have +2 Strength and +1 AP.' }, { name: 'Overwhelming Charge', who: 'Assault Intercessor Squad', text: 'When the bearer\'s unit is selected to make a pile-in move, it can move up to D3+3".' }],
+    units: [
+      cpU({ name: 'Assault Intercessor Squad', ds: 'Assault Intercessor Squad', models: 10, M: 6, T: 4, Sv: 3, W: 2, OC: 2, kw: ['infantry', 'battleline', 'imperium', 'tacticus', 'explosives', 'sanguinary spearhead', 'adeptus astartes', 'blood angels'],
+        ranged: [cpW('Plasma pistol - Standard', 12, 1, 3, 7, -2, 1, { xkw: ['close-quarters'], count: 1 }), cpW('Plasma pistol - Supercharge', 12, 1, 3, 8, -3, 2, { xkw: ['close-quarters', 'hazardous'], count: 1 }), cpW('Heavy bolt pistol', 18, 1, 3, 4, -1, 1, { xkw: ['close-quarters'], count: 9 })],
+        melee: [cpW('Chainsword', 0, 4, 3, 4, -1, 1, { count: 10 })],
+        abilities: [{ name: 'Targeted Intercession', text: 'Each time this unit is selected to fight, choose one: re-roll Wound rolls of 1, or re-roll all Wound rolls against a target within range of an objective marker.', fx: [] }],
+        leader: { name: 'Captain Raldeo', ds: 'Captain', M: 6, T: 4, Sv: 3, inv: 4, W: 5, Ld: 6, OC: 1, fnp: 0, scouts: 0, kw: ['infantry', 'character', 'captain', 'imperium', 'tacticus', 'explosives', 'sanguinary spearhead', 'adeptus astartes', 'blood angels', 'warlord'], abilities: [{ name: 'Targeted Intercession', text: 'Each time this unit is selected to fight, choose one: re-roll Wound rolls of 1, or re-roll all Wound rolls against a target within range of an objective marker.', fx: [] }] },
+        leaderWeapons: { ranged: [cpW('Inferno pistol', 6, 1, 2, 8, -4, 'D3', { melta: 2, xkw: ['close-quarters'], leader: true })], melee: [cpW('Master-crafted chainsword', 0, 7, 2, 4, -1, 2, { leader: true })] } }),
+      cpU({ name: 'Sanguinary Spearhead Sanguinary Guard (1)', ds: 'Sanguinary Guard', models: 3, M: 12, T: 4, Sv: 2, inv: 4, W: 3, OC: 1, kw: ['infantry', 'fly', 'jump pack', 'imperium', 'tacticus', 'explosives', 'sanguinary spearhead', 'adeptus astartes', 'blood angels'],
+        ranged: [cpW('Angelus boltgun', 12, 2, 3, 4, 0, 1, { xkw: ['close-quarters'], count: 3 })], melee: [cpW('Encarmine blade', 0, 4, 2, 6, -3, 2, { count: 1 }), cpW('Encarmine spear', 0, 4, 2, 6, -2, 2, { lance: true, count: 2 })],
+        abilities: [{ name: 'Born To Fight', text: 'While this unit is engaged, it has +2 OC.', fx: [] }] }),
+      cpU({ name: 'Sanguinary Spearhead Sanguinary Guard (2)', ds: 'Sanguinary Guard', models: 3, M: 12, T: 4, Sv: 2, inv: 4, W: 3, OC: 1, kw: ['infantry', 'fly', 'jump pack', 'imperium', 'tacticus', 'explosives', 'sanguinary spearhead', 'adeptus astartes', 'blood angels'],
+        ranged: [cpW('Angelus boltgun', 12, 2, 3, 4, 0, 1, { xkw: ['close-quarters'], count: 3 })], melee: [cpW('Encarmine blade', 0, 4, 2, 6, -3, 2, { count: 1 }), cpW('Encarmine spear', 0, 4, 2, 6, -2, 2, { lance: true, count: 2 })],
+        abilities: [{ name: 'Born To Fight', text: 'While this unit is engaged, it has +2 OC.', fx: [] }] })
+    ] },
+  { id: 'cp-vengeful-brethren', scheme: 'Dark Angels', faction: 'Space Marines', name: 'The Vengeful Brethren', box: 'Dark Angels Combat Patrol', primary: 'Seize Their Strongholds', rules: [],
+    det: { name: 'The Vengeful Brethren', rule: 'Honoured Knights', ruleText: 'When an enemy unit ends a charge move, friendly VENGEFUL BRETHREN units engaged with it enter a defence stance until the end of the turn: attacks that target such a unit with a Strength greater than its Toughness have -1 to Wound. Army rules: the Deathwing, the Ravenwing, the Unforgiven.',
+      strats: [
+        { name: 'For the Lion', cp: '1', type: 'The Vengeful Brethren Stratagem', when: 'Your Command phase', text: 'Select a friendly VENGEFUL BRETHREN unit. It has +1 OC until the end of the turn.' },
+        { name: 'Mission Focus', cp: '1', type: 'The Vengeful Brethren Stratagem', when: 'Your Shooting or Fight phase, when a friendly VENGEFUL BRETHREN unit within range of an objective marker is selected to attack', text: 'Until the end of the phase, that unit\'s attacks have +1 to Hit.' },
+        { name: 'Determined to the Last', cp: '1', type: 'The Vengeful Brethren Stratagem', when: 'Fight phase, when an enemy unit targets a friendly Bladeguard Veteran Squad', text: 'Each time a model in that unit is destroyed, if that unit has not fought this phase, roll one D6: on a 2+, do not remove it; it can fight, then is removed.' }] },
+    enh: [{ name: 'Dutiful Defenders', who: 'Bladeguard Veteran Squad', text: 'Once per battle round, if you target the bearer\'s unit with Heroic Intervention, that use costs 1 CP less.' }, { name: 'Supreme Combatant', who: 'Master Zacharial', text: 'Each time the bearer is selected to attack, its attacks gain [LETHAL HITS] or [SUSTAINED HITS 1] (choose one).' }],
+    units: [
+      cpU({ name: 'Master Zacharial', ds: 'Captain in Gravis Armour', models: 1, M: 5, T: 6, Sv: 3, inv: 4, W: 6, OC: 1, kw: ['infantry', 'character', 'captain', 'gravis', 'imperium', 'vengeful brethren', 'adeptus astartes', 'dark angels', 'warlord'],
+        ranged: [cpW('Boltstorm gauntlet', 12, 3, 2, 4, -1, 1, { xkw: ['close-quarters'] })], melee: [cpW('Power fist', 0, 5, 2, 8, -2, 2), cpW('Relic chainsword', 0, 3, 2, 4, -1, 2, { xkw: ['extra attacks'] })],
+        abilities: [{ name: 'Gravis Protection', text: 'Attacks that target this unit have -1 Damage.', fx: [] }] }),
+      cpU({ name: 'Vengeful Brethren Bladeguard Veteran Squad', ds: 'Bladeguard Veteran Squad', models: 3, M: 6, T: 4, Sv: 3, inv: 4, W: 3, OC: 1, kw: ['infantry', 'imperium', 'tacticus', 'explosives', 'vengeful brethren', 'adeptus astartes', 'dark angels'],
+        ranged: [cpW('Heavy bolt pistol', 18, 1, 3, 4, -1, 1, { xkw: ['close-quarters'], count: 3 })], melee: [cpW('Master-crafted power weapon', 0, 4, 3, 5, -2, 2, { count: 3 })],
+        abilities: [{ name: 'Bladeguard', text: 'Once per turn, when this unit is selected to fight or is targeted by an attack, choose one: its melee attacks have +1 to Hit, or attacks that target it have -1 to Hit.', fx: [] }] }),
+      cpU({ name: 'Vengeful Brethren Hellblaster Squad', ds: 'Hellblaster Squad', models: 5, M: 6, T: 4, Sv: 3, W: 2, OC: 1, kw: ['infantry', 'imperium', 'tacticus', 'explosives', 'vengeful brethren', 'adeptus astartes', 'dark angels'],
+        ranged: [cpW('Bolt pistol', 12, 1, 3, 4, 0, 1, { xkw: ['close-quarters'], count: 5 }), cpW('Plasma incinerator - Standard', 24, 2, 3, 7, -2, 1, { assault: true, heavy: true, count: 5 }), cpW('Plasma incinerator - Supercharge', 24, 2, 3, 8, -3, 2, { assault: true, heavy: true, xkw: ['hazardous'], count: 5 })],
+        melee: [cpW('Knives and fists', 0, 3, 3, 4, 0, 1, { count: 5 })],
+        abilities: [{ name: 'Punishing Volley', text: 'In your Shooting phase, after this unit has shot, select one enemy unit hit by those attacks. That unit must take a Battle-shock roll.', fx: [] }] }),
+      cpU({ name: 'Vengeful Brethren Intercessor Squad', ds: 'Intercessor Squad', models: 10, M: 6, T: 4, Sv: 3, W: 2, OC: 2, kw: ['infantry', 'battleline', 'imperium', 'tacticus', 'explosives', 'vengeful brethren', 'adeptus astartes', 'dark angels'],
+        ranged: [cpW('Bolt rifle', 24, 2, 3, 4, -1, 1, { assault: true, heavy: true, count: 10 }), cpW('Bolt pistol', 12, 1, 3, 4, 0, 1, { xkw: ['close-quarters'], count: 10 })], melee: [cpW('Knives and fists', 0, 3, 3, 4, 0, 1, { count: 10 })],
+        abilities: [{ name: 'Objective Secured', text: 'At the end of your Command phase, if this unit controls an objective marker, that objective stays under your control until your opponent controls it at the end of a phase.', fx: [] }] })
+    ] },
+  { id: 'cp-askars-wolfpack', scheme: 'Space Wolves', faction: 'Space Marines', name: "Askar's Wolfpack", box: 'Space Wolves Combat Patrol', primary: 'Encircle and Destroy', rules: [],
+    det: { name: "Askar's Wolfpack", rule: 'Hidden Hunters', ruleText: 'Friendly ASKAR\'S WOLFPACK units have -3" detection range. Army rules: Curse of the Wulfen, Sagas, Sons of Russ.',
+      strats: [
+        { name: 'Born Hunters', cp: '1', type: "Askar's Wolfpack Stratagem", when: 'Your opponent\'s Movement phase, after an enemy unit that was engaged with a friendly Wolfpack unit (not Terminators) ends a fall-back move, if that unit is now unengaged', text: 'That friendly unit can make a Normal move of up to D3+1".' },
+        { name: 'Bestial Dominance', cp: '1', type: "Askar's Wolfpack Stratagem", when: 'Your Shooting or Fight phase, after an enemy unit is destroyed by a friendly Wulfen unit', text: 'That Wulfen unit has +1 OC until the end of the battle.' },
+        { name: 'Bring It Down', cp: '1', type: "Askar's Wolfpack Stratagem", when: 'Fight phase, when a friendly Wolfpack unit is selected to fight', text: 'Until the end of the phase, that unit\'s melee weapons have [ANTI-MONSTER 4+] and [ANTI-VEHICLE 4+].' }] },
+    enh: [{ name: 'Aggressive Response', who: 'Wolf Guard Terminators', text: 'Once per turn, in your opponent\'s Shooting phase, after an enemy unit has shot, if the bearer\'s unit was hit it can make a surge move of up to D3+1".' }, { name: 'Lone Hunter', who: 'Fyrri Askar', text: 'The bearer has Lone Operative 9", Stealth and +1 Toughness.' }],
+    units: [
+      cpU({ name: "Askar's Wolfpack Blood Claws", ds: 'Blood Claws', models: 10, M: 7, T: 4, Sv: 3, W: 2, OC: 2, kw: ['infantry', 'battleline', 'imperium', 'tacticus', 'explosives', "askar's wolfpack", 'adeptus astartes', 'space wolves'],
+        ranged: [cpW('Plasma pistol - Standard', 12, 1, 3, 7, -2, 1, { xkw: ['close-quarters'], count: 1 }), cpW('Plasma pistol - Supercharge', 12, 1, 3, 8, -3, 2, { xkw: ['close-quarters', 'hazardous'], count: 1 }), cpW('Bolt pistol', 12, 1, 3, 4, 0, 1, { xkw: ['close-quarters'], count: 9 })],
+        melee: [cpW('Power weapon', 0, 4, 3, 5, -2, 1, { count: 1 }), cpW('Chainsword', 0, 4, 3, 4, -1, 1, { count: 9 })],
+        abilities: [{ name: 'Berserk Charge', text: 'An Advance move does not stop this unit from declaring a charge.', fx: [] }],
+        leader: { name: 'Fyrri Askar', ds: 'Wolf Guard Battle Leader', M: 7, T: 4, Sv: 3, inv: 4, W: 6, Ld: 6, OC: 1, fnp: 0, scouts: 0, kw: ['infantry', 'character', 'battle leader', 'wolf guard', 'imperium', 'tacticus', "askar's wolfpack", 'adeptus astartes', 'space wolves', 'warlord'], abilities: [{ name: 'Heroic Last Stand', text: 'In the Fight phase, when this model would be destroyed, if its unit has not fought this phase, roll one D6: on a 2+, it stays on the battlefield until its unit has fought.', fx: [] }] },
+        leaderWeapons: { ranged: [], melee: [cpW('Master-crafted power weapon', 0, 7, 2, 5, -2, 2, { leader: true })] } }),
+      cpU({ name: "Askar's Wolfpack Wolf Guard Terminators", ds: 'Wolf Guard Terminators', models: 5, M: 6, T: 5, Sv: 2, inv: 4, W: 3, OC: 1, kw: ['infantry', 'terminator', 'wolf guard', 'imperium', "askar's wolfpack", 'adeptus astartes', 'space wolves'],
+        ranged: [cpW('Assault cannon', 24, 6, 2, 6, 0, 1, { dev: true, count: 1 }), cpW('Storm bolter', 24, 2, 2, 4, 0, 1, { rapid: 2, count: 3 })],
+        melee: [cpW('Relic greataxe', 0, 3, 3, 7, -2, 3, { dev: true, count: 1 }), cpW('Power fist', 0, 3, 3, 8, -2, 2, { count: 1 }), cpW('Master-crafted power weapon', 0, 4, 3, 5, -2, 2, { count: 3 })],
+        abilities: [{ name: 'Rugged Resilience', text: 'Attacks that target this unit with a Strength greater than its Toughness have -1 to Wound.', fx: [] }] }),
+      cpU({ name: "Askar's Wolfpack Wulfen", ds: 'Wulfen', models: 5, M: 9, T: 6, Sv: 4, W: 2, Ld: 7, OC: 0, kw: ['infantry', 'imperium', "askar's wolfpack", 'adeptus astartes', 'space wolves'],
+        ranged: [cpW('Stormfrag auto-launcher', 12, 'D3', 4, 4, 0, 1, { assault: true, blast: true, count: 2 })], melee: [cpW('Feral claws', 0, 3, 3, 5, -2, 2, { sustained: 1, count: 5 })],
+        abilities: [{ name: 'Death Totem', text: 'Melee attacks made by this model can re-roll Hit rolls of 1.', fx: [] }, { name: 'Savage Frenzy', text: 'When an enemy non-MONSTER/VEHICLE unit engaged with this unit is selected to fall back, it must use Desperate Escape (-1 to Hazard rolls if it is battle-shocked).', fx: [] }] })
+    ] },
+  { id: 'cp-vow-sworn-of-vedrenn', scheme: 'Black Templars', faction: 'Black Templars', name: 'Vow-Sworn of Vedrenn', box: 'Black Templars Combat Patrol', primary: 'Uphold Your Vows', rules: [],
+    det: { name: 'Vow-Sworn of Vedrenn', rule: 'Close-range Destruction', ruleText: 'Attacks made by friendly VOW-SWORN OF VEDRENN units that target a unit within 12" can ignore any or all modifiers to BS, WS and Hit rolls. Combat Patrol: the Emperor\'s Champion starts in Strategic Reserves, cannot arrive before battle round 2, and sets up wholly within your deployment zone.',
+      strats: [
+        { name: 'Come to Their Aid', cp: '1', type: 'Vow-Sworn Stratagem', when: 'Your Charge phase, after a friendly VOW-SWORN unit makes a Charge roll', text: 'Add 2 to that Charge roll; its charge must target enemy units engaged with friendly VOW-SWORN units.' },
+        { name: 'Heavy Strikes', cp: '1', type: 'Vow-Sworn Stratagem', when: 'Fight phase, when a friendly Sword Brethren or Bladeguard unit is selected to fight', text: 'Until the end of the phase, its melee attacks against MONSTER and VEHICLE units have +1 Damage.' },
+        { name: 'Blessed Aura', cp: '1', type: 'Vow-Sworn Stratagem', when: 'Your Command phase, when a friendly VOW-SWORN unit passes a Battle-shock roll', text: 'Until the start of your next turn, melee attacks that target that unit have -1 to Hit.' }] },
+    enh: [{ name: 'Divine Protection', who: 'Sword Brethren Squad', text: 'Once per battle, when an enemy unit targets the bearer\'s unit, it gains a 4+ invulnerable save until the end of the phase.' }, { name: 'Divine Endurance', who: "Emperor's Champion Vedrenn", text: 'At the start of your Movement phase, pick a friendly VOW-SWORN unit within 12": if it advances or falls back this turn it automatically passes any Hazard rolls for Desperate Escape.' }],
+    units: [
+      cpU({ name: "Emperor's Champion Vedrenn", ds: "Emperor's Champion", cpRes: 2, models: 1, M: 8, T: 4, Sv: 2, inv: 4, W: 5, OC: 1, kw: ['infantry', 'character', "emperor's champion", 'imperium', 'tacticus', 'explosives', 'vow-sworn of vedrenn', 'adeptus astartes', 'black templars', 'warlord'],
+        ranged: [cpW('Bolt pistol', 12, 1, 2, 4, 0, 1, { xkw: ['close-quarters'] })], melee: [cpW('Black Sword - Sweep', 0, 10, 2, 6, -2, 1), cpW('Black Sword - Strike', 0, 6, 2, 8, -3, 3, { xkw: ['anti-character 5+', 'precision'] })],
+        abilities: [{ name: 'Deft Riposte', text: 'Melee attacks that target this unit have [HAZARDOUS].', fx: [] }] }),
+      cpU({ name: 'Vow-Sworn Bladeguard Veteran Squad', ds: 'Bladeguard Veteran Squad', models: 3, M: 6, T: 4, Sv: 3, inv: 4, W: 3, OC: 1, kw: ['infantry', 'imperium', 'tacticus', 'explosives', 'bladeguard', 'vow-sworn of vedrenn', 'adeptus astartes', 'black templars'],
+        ranged: [cpW('Neo-volkite pistol', 12, 1, 3, 5, 0, 2, { dev: true, xkw: ['close-quarters'], count: 1 }), cpW('Heavy bolt pistol', 18, 1, 3, 4, -1, 1, { xkw: ['close-quarters'], count: 2 })],
+        melee: [cpW('Master-crafted power weapon', 0, 4, 3, 5, -2, 2, { count: 3 })],
+        abilities: [{ name: 'Bladeguard', text: 'Once per turn, when this unit is selected to fight or is targeted by an attack, choose one: re-roll melee Hit rolls of 1, or re-roll saving throws of 1.', fx: [] }] }),
+      cpU({ name: 'Vow-Sworn Crusader Squad', ds: 'Crusader Squad', models: 10, M: 6, T: 4, Sv: 3, W: 2, OC: 2, kw: ['infantry', 'battleline', 'imperium', 'tacticus', 'explosives', 'vow-sworn of vedrenn', 'adeptus astartes', 'black templars'],
+        ranged: [cpW('Pyreblaster', 12, 'D6', 6, 5, 0, 1, { torrent: true, ignoresCover: true, count: 1 }), cpW('Bolt pistol', 12, 1, 3, 4, 0, 1, { xkw: ['close-quarters'], count: 5 }), cpW('Heavy bolt pistol', 18, 1, 3, 4, -1, 1, { xkw: ['close-quarters'], count: 3 }), cpW('Bolt rifle', 24, 2, 3, 4, -1, 1, { assault: true, heavy: true, count: 2 }), cpW('Neophyte firearm', 18, 2, 3, 4, 0, 1, { assault: true, count: 2 })],
+        melee: [cpW('Knives and fists', 0, 3, 3, 4, 0, 1, { count: 5 }), cpW('Master-crafted power weapon', 0, 3, 2, 5, -2, 2, { lethal: true, count: 1 }), cpW('Chainsword', 0, 4, 3, 4, -1, 1, { sustained: 1, count: 4 })],
+        abilities: [{ name: 'Righteous Zeal', text: 'Once per turn, in your opponent\'s Shooting phase, if an enemy shooting attack destroyed a model in this unit and this unit is unengaged, it can make a surge move of up to D6+2".', fx: [] }] }),
+      cpU({ name: 'Vow-Sworn Sword Brethren Squad', ds: 'Sword Brethren Squad', models: 5, M: 6, T: 4, Sv: 3, W: 3, OC: 1, kw: ['infantry', 'imperium', 'tacticus', 'explosives', 'vow-sworn of vedrenn', 'adeptus astartes', 'black templars'],
+        ranged: [cpW('Combi-weapon', 24, 1, 3, 4, 0, 1, { dev: true, rapid: 1, xkw: ['anti-infantry 4+'], count: 1 }), cpW('Heavy bolt pistol', 18, 1, 3, 4, -1, 1, { xkw: ['close-quarters'], count: 1 }), cpW('Plasma pistol - Standard', 12, 1, 3, 7, -2, 1, { xkw: ['close-quarters'], count: 1 }), cpW('Plasma pistol - Supercharge', 12, 1, 3, 8, -3, 2, { xkw: ['close-quarters', 'hazardous'], count: 1 }), cpW('Pyre pistol', 12, 'D6', 6, 4, 0, 1, { torrent: true, ignoresCover: true, xkw: ['close-quarters'], count: 1 })],
+        melee: [cpW('Master-crafted power weapon', 0, 3, 2, 5, -2, 2, { lethal: true, count: 3 }), cpW('Chainsword', 0, 6, 2, 4, -1, 1, { sustained: 1, count: 1 }), cpW('Twin lightning claws', 0, 5, 2, 5, -2, 1, { twin: true, count: 1 })],
+        abilities: [{ name: 'Exploit Their Cowardice', text: 'When an enemy unit engaged with this unit finishes a fall-back move, if this unit is then unengaged, it can make a Normal move.', fx: [] }] })
+    ] },
+  { id: 'cp-sanctuary-guardians', scheme: 'Our Martyred Lady', faction: 'Adepta Sororitas', name: 'Sanctuary Guardians', box: 'Adepta Sororitas Combat Patrol', primary: 'On Holy Ground', rules: [],
+    det: { name: 'Sanctuary Guardians', rule: 'Blessed Believers', ruleText: 'Melee attacks that target friendly SANCTUARY GUARDIANS units have -1 to Hit. Combat Patrol: in your Command phase you can discard 1 Miracle dice to gain 1 CP. Army rule: Acts of Faith.',
+      strats: [
+        { name: 'Take Cover', cp: '1', type: 'Sanctuary Guardians Stratagem', when: 'Your opponent\'s Shooting or Fight phase, when an enemy unit targets a friendly SANCTUARY GUARDIANS unit (not Arco-flagellants) in a terrain area', text: 'Until the end of the phase, that unit has +1 to its saving throws.' },
+        { name: 'Fervent Devotion', cp: '1', type: 'Sanctuary Guardians Stratagem', when: 'Your Movement phase, when a friendly SANCTUARY GUARDIANS unit is selected to Advance or Fall Back', text: 'That move does not stop it from shooting or declaring a charge this turn.' },
+        { name: 'Fires of Damnation', cp: '1', type: 'Sanctuary Guardians Stratagem', when: 'Your Shooting or Fight phase, when a friendly SANCTUARY GUARDIANS unit is selected to attack', text: 'Until the end of the phase, its [TORRENT] weapons have 6 Attacks, and its attacks have +1 AP.' }] },
+    enh: [{ name: 'Righteous Fervour', who: 'Sanctuary Canoness Adalya', text: 'The bearer\'s melee attacks have +1 Damage, and its unit\'s melee attacks have +1 to Wound.' }, { name: 'Divine Miracle', who: 'Battle Sisters Squad', text: 'Once per battle, at the start of any phase, the bearer\'s unit heals D3+2 wounds.' }],
+    units: [
+      cpU({ name: 'Sanctuary Guardians Battle Sisters Squad', ds: 'Battle Sisters Squad', models: 10, M: 6, T: 3, Sv: 3, inv: 6, W: 1, Ld: 7, OC: 2, kw: ['infantry', 'battleline', 'imperium', 'explosives', 'sanctuary guardians', 'adepta sororitas'],
+        ranged: [cpW('Bolt pistol', 12, 1, 3, 4, 0, 1, { xkw: ['pistol'], count: 10 }), cpW('Combi-weapon', 24, 1, 4, 4, 0, 1, { dev: true, rapid: 1, xkw: ['anti-infantry 4+'], count: 1 }), cpW('Boltgun', 24, 1, 3, 4, 0, 1, { rapid: 1, count: 7 }), cpW('Ministorum flamer', 12, 'D6', 6, 5, 0, 1, { torrent: true, ignoresCover: true, count: 1 }), cpW('Ministorum heavy flamer', 12, 'D6', 6, 6, -1, 1, { torrent: true, ignoresCover: true, count: 1 })],
+        melee: [cpW('Power weapon', 0, 2, 4, 4, -2, 1, { count: 1 }), cpW('Stocks and fists', 0, 1, 4, 3, 0, 1, { count: 10 })],
+        abilities: [{ name: 'Defenders of the Faith', text: 'At the end of your Command phase, an objective marker this unit controls stays under your control until your opponent controls it at the end of a phase.', fx: [] }, { name: 'Cherub', text: 'Once per battle, when this unit performs an Act of Faith, you can gain 1 Miracle dice.', fx: [] }, { name: 'Simulacrum Imperialis', text: 'At the end of your Command phase, for each objective marker you control with this unit in range, roll one D6: on a 4+, gain 1 Miracle dice with that value.', fx: [] }],
+        leader: { name: 'Sanctuary Canoness Adalya', ds: 'Canoness', M: 6, T: 3, Sv: 3, inv: 4, W: 4, Ld: 7, OC: 1, fnp: 0, scouts: 0, kw: ['infantry', 'character', 'canoness', 'imperium', 'explosives', 'sanctuary guardians', 'adepta sororitas', 'warlord'], abilities: [{ name: 'Null Rod', text: 'This model has Feel No Pain 4+ against mortal wounds and Psychic attacks.', fx: [] }, { name: 'Divine Guidance', text: 'Once per turn, when a friendly SANCTUARY GUARDIANS unit is selected to attack, its attacks can re-roll Hit rolls.', fx: [] }] },
+        leaderWeapons: { ranged: [cpW('Condemnor boltgun', 24, 1, 2, 4, 0, 1, { dev: true, rapid: 1, xkw: ['anti-psyker 2+', 'precision'], leader: true })], melee: [cpW('Hallowed chainsword', 0, 5, 2, 3, -1, 1, { leader: true })] } }),
+      cpU({ name: 'Sanctuary Guardians Arco-Flagellants', ds: 'Arco-flagellants', models: 10, M: 7, T: 3, Sv: 3, inv: 6, W: 2, Ld: 8, OC: 1, kw: ['infantry', 'penitent', 'imperium', 'sanctuary guardians', 'adepta sororitas'],
+        melee: [cpW('Arco-flails', 0, 4, 4, 5, 0, 1, { sustained: 1, count: 10 })],
+        abilities: [{ name: 'Extremis Trigger Word', text: 'When this unit is selected to fight, you can use this: its arco-flails have 6 Attacks and its melee attacks have [HAZARDOUS] until the end of the phase.', fx: [] }] }),
+      cpU({ name: 'Sanctuary Guardians Celestian Sacresants', ds: 'Celestian Sacresants', models: 5, M: 6, T: 3, Sv: 3, inv: 4, W: 1, Ld: 7, OC: 1, kw: ['infantry', 'imperium', 'explosives', 'sanctuary guardians', 'adepta sororitas'],
+        ranged: [cpW('Bolt pistol', 12, 1, 3, 4, 0, 1, { xkw: ['close-quarters'], count: 5 })], melee: [cpW('Hallowed mace', 0, 3, 3, 4, -1, 2, { lethal: true, count: 5 })],
+        abilities: [{ name: 'Sworn Protectors', text: 'While this unit contains an ADEPTA SORORITAS CHARACTER, attacks that target it have -1 to Wound.', fx: [] }] })
+    ] },
+  { id: 'cp-tristraens-gilded-blades', scheme: 'Adeptus Custodes', faction: 'Adeptus Custodes', name: "Tristraen's Gilded Blades", box: 'Adeptus Custodes Combat Patrol', primary: 'Defenders of the Golden Throne', rules: [],
+    det: { name: "Tristraen's Gilded Blades", rule: 'Fearless and Unrelenting', ruleText: 'Once per turn, one friendly TRISTRAEN\'S GILDED BLADES unit can re-roll a Battle-shock roll. Combat Patrol: the Custodian Wardens start in Strategic Reserves and are set up from battle round 2; the Allarus Custodians start in Strategic Reserves and are set up from battle round 3. Both are set up wholly within your deployment zone. Army rule: Martial Ka\'tah (Dacatarai: Sustained Hits 1; Rendax: Lethal Hits).',
+      strats: [
+        { name: 'Gilded Spear', cp: '1', type: "Gilded Blades Stratagem", when: 'Fight phase, when a friendly GILDED BLADES unit is selected to make a consolidation move', text: 'That consolidation move can be up to D3+3".' },
+        { name: 'Inevitable Wrath', cp: '1', type: "Gilded Blades Stratagem", when: 'Your opponent\'s Shooting phase, after an enemy unit has shot', text: 'Select a friendly unengaged BLADE CHAMPION unit that lost a wound from those attacks. It can make a surge move of up to D6+1".' },
+        { name: 'Never Outmatched', cp: '1', type: "Gilded Blades Stratagem", when: 'Fight phase, when a friendly GILDED BLADES unit below its Starting Strength is selected to fight', text: 'Until the end of the phase, its melee attacks have +1 Attack.' }] },
+    enh: [{ name: 'Comrades in Wrath', who: 'Allarus Custodians', text: 'The bearer\'s unit has +1 to Charge rolls.' }, { name: 'Shattering Charge', who: 'Tristraen of the Gilded Blades', text: 'When the bearer\'s unit ends a charge move, select one enemy unit engaged with it: that unit must take a Battle-shock roll with -1.' }],
+    units: [
+      cpU({ name: 'Tristraen of the Gilded Blades', ds: 'Blade Champion', models: 1, M: 6, T: 6, Sv: 2, inv: 4, W: 6, OC: 2, kw: ['infantry', 'character', 'blade champion', "tristraen's gilded blades", 'imperium', 'adeptus custodes', 'warlord'],
+        melee: [cpW('Vaultswords - Victus', 0, 5, 2, 6, -3, 3, { dev: true }), cpW('Vaultswords - Behemor', 0, 6, 2, 7, -2, 2, { xkw: ['precision'] }), cpW('Vaultswords - Hurricanis', 0, 9, 2, 5, -1, 1, { sustained: 1 })],
+        abilities: [{ name: 'Rapid Strike', text: 'This unit can re-roll Advance rolls.', fx: [] }] }),
+      cpU({ name: 'Gilded Blades Allarus Custodians', ds: 'Allarus Custodians', cpRes: 3, models: 2, M: 5, T: 7, Sv: 2, inv: 4, W: 4, OC: 2, kw: ['infantry', 'terminator', "tristraen's gilded blades", 'imperium', 'adeptus custodes'],
+        ranged: [cpW('Balistus grenade launcher', 18, 'D6', 2, 5, -1, 1, { blast: true, count: 2 }), cpW('Guardian spear', 24, 2, 2, 4, -1, 2, { assault: true, count: 2 })], melee: [cpW('Guardian spear', 0, 5, 2, 7, -2, 2, { count: 2 })],
+        abilities: [{ name: 'Slayers of Tyrants', text: 'Attacks that target CHARACTER, MONSTER or VEHICLE units can re-roll Wound rolls.', fx: [] }, { name: 'From Golden Light', text: 'Once per battle, at the end of your opponent\'s turn, if this unit is unengaged, you can place it into Strategic Reserves.', fx: [] }] }),
+      cpU({ name: 'Gilded Blades Custodian Guard', ds: 'Custodian Guard', models: 3, M: 6, T: 6, Sv: 2, inv: 4, W: 4, OC: 2, kw: ['infantry', 'battleline', "tristraen's gilded blades", 'imperium', 'adeptus custodes'],
+        ranged: [cpW('Sentinel blade', 12, 2, 2, 4, -1, 2, { assault: true, xkw: ['close-quarters'], count: 3 })], melee: [cpW('Sentinel blade', 0, 5, 2, 6, -2, 1, { count: 3 })],
+        abilities: [{ name: 'Praesidium Shield', text: 'Each model has +1 Wounds (included in its profile).', fx: [] }, { name: 'Sentinel Storm', text: 'Once per battle, after this unit has shot in your Shooting phase, it can shoot again.', fx: [] }, { name: 'Stand Vigil', text: 'Melee attacks made by this unit can re-roll Wound rolls of 1, or all Wound rolls against a target within range of an objective marker.', fx: [] }] }),
+      cpU({ name: 'Gilded Blades Custodian Wardens', ds: 'Custodian Wardens', cpRes: 2, models: 3, M: 6, T: 6, Sv: 2, inv: 4, W: 3, OC: 2, kw: ['infantry', "tristraen's gilded blades", 'imperium', 'adeptus custodes'],
+        ranged: [cpW('Castellan axe', 24, 1, 2, 4, -1, 2, { assault: true, count: 1 }), cpW('Guardian spear', 24, 2, 2, 4, -1, 2, { assault: true, count: 2 })], melee: [cpW('Castellan axe', 0, 4, 2, 9, -1, 3, { count: 1 }), cpW('Guardian spear', 0, 5, 2, 7, -2, 2, { count: 2 })],
+        abilities: [{ name: 'Divine Protection', text: 'This unit has Feel No Pain 4+ against mortal wounds.', fx: [] }] })
+    ] }
 ];
 /* the datasheet name behind each patrol unit: the 3D model library (yours and the built-in figures) matches on it, so "Maggot Lords Plague Marines" has to read as "Plague Marines" */
 const CP_DS = { 'Septimol Fulg, Maggot Lords Tallyman': 'Tallyman', 'Sholgor the Putrid': 'Lord of Virulence', 'Chaos Rhino': 'Rhino' };
-const cpDs = (n, patrol) => { let d = String(n || '').replace(new RegExp('^' + String(patrol || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s+', 'i'), ''); return CP_DS[n] || CP_DS[d] || d; };
+const cpDs = (n, patrol) => { let d = String(n || '').replace(new RegExp('^' + String(patrol || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s+', 'i'), ''); d = d.replace(/\s*\(\d\)$/, ''); return CP_DS[n] || CP_DS[d] || d; };
 /* turn each patrol into an army the battle screen can pick (read-only, never saved to the user's armies) */
 const CP_BUILDS = CP_PATROLS.map(p => {
-  const units = p.units.map(u => { const c = JSON.parse(JSON.stringify(u)); c.ds = cpDs(c.name, p.name); if (c.leader) { c.leader.ds = cpDs(c.leader.name, p.name); const lw = c.leaderWeapons || { ranged: [], melee: [] }; c.ranged = c.ranged.concat(lw.ranged); c.melee = c.melee.concat(lw.melee); delete c.leaderWeapons; c.leader.scouts = c.leader.scouts || 0; } return c; });
-  return { id: p.id, faction: p.faction, name: `${p.name}`, cp: true, builtin: true, units, limit: 500, rules: (p.rules || []).slice(), primary: p.primary, enhancements: p.enh,
+  const units = p.units.map(u => { const c = JSON.parse(JSON.stringify(u)); c.ds = c.ds || cpDs(c.name, p.name); if (c.leader) { c.leader.ds = c.leader.ds || cpDs(c.leader.name, p.name); const lw = c.leaderWeapons || { ranged: [], melee: [] }; c.ranged = c.ranged.concat(lw.ranged); c.melee = c.melee.concat(lw.melee); delete c.leaderWeapons; c.leader.scouts = c.leader.scouts || 0; } return c; });
+  return { id: p.id, scheme: p.scheme, faction: p.faction, name: `${p.name}`, cp: true, builtin: true, units, limit: 500, rules: (p.rules || []).slice(), primary: p.primary, enhancements: p.enh,
     detachment: { name: p.det.name, rule: p.det.rule, ruleText: p.det.ruleText, strats: p.det.strats, dispositions: ['combat patrol'], effects: [], dp: 1 } };
 });
 let cpMenu = false;
@@ -14667,7 +14815,7 @@ const NID_POSES = { nid_term: 3, nid_horm: 2, nid_gen: 2 };
 const SM_FACS = new Set(['Space Marines', 'Salamanders', 'Black Templars']);
 /* Space Marine datasheets: the same figures for every chapter, painted by the army's colour scheme */
 const MINI_BY_NAME_SM = [
-  [/vulkan/i, 'sm_vulkan'], [/captain.*jump pack/i, 'sm_captain_jp'], [/chaplain.*jump pack/i, 'sm_chaplain_jp'], [/librarian.*jump pack/i, 'sm_librarian_jp'],
+  [/vulkan/i, 'sm_vulkan'], [/sanguinary guard/i, 'sm_jump'], [/wulfen/i, 'sm_term'], [/battle leader/i, 'sm_captain'], [/blood claws?|grey hunters?/i, 'sm_assault'], [/captain.*jump pack/i, 'sm_captain_jp'], [/chaplain.*jump pack/i, 'sm_chaplain_jp'], [/librarian.*jump pack/i, 'sm_librarian_jp'],
   [/bike|biker|outrider/i, 'sm_bike'], [/invader atv|attack bike/i, 'sm_atv'],
   [/terminator|agatone/i, 'sm_term'], [/chaplain|grimaldus|execrator|kastiel/i, 'sm_chaplain'], [/librarian|librarius/i, 'sm_librarian'], [/apothecary/i, 'sm_apoth'], [/techmarine/i, 'sm_tech'], [/ancient/i, 'sm_ancient'], [/champion/i, 'sm_champion'], [/lieutenant|judiciar/i, 'sm_lieut'], [/captain|ferren|imperial space marine/i, 'sm_captain'],
   [/heavy intercessor/i, 'sm_heavy'], [/assault intercessors? with jump|assault squad with jump|vanguard veteran squad with jump|suppressor/i, 'sm_jump'], [/assault intercessor/i, 'sm_assault'], [/assault squad|vanguard veteran/i, 'sm_assault'], [/intercessor|command squad|company heroes/i, 'sm_int'], [/hellblaster|infernus/i, 'sm_hell'],
@@ -15189,6 +15337,9 @@ const MINI_BY_NAME_SOR = [
   [/seraphim/i, 'sor_ser'], [/zephyrim/i, 'sor_zeph'], [/repentia/i, 'sor_rep'], [/arco|flagellant/i, 'sor_arco'], [/novitiate/i, 'sor_nov'], [/dominion/i, 'sor_dom'], [/retributor/i, 'sor_ret'], [/celestian|sanctifier|insidiant/i, 'sor_cel'], [/battle sisters/i, 'sor_sister'], [/sister/i, 'sor_sister']
 ];
 XN_SCHEMES['Adepta Sororitas'] = SOR_SCHEMES; XN_LISTS['Adepta Sororitas'] = MINI_BY_NAME_SOR; Object.assign(XN_POSES, SOR_POSES);
+/* Adeptus Custodes: no sculpted figures of their own yet, so the heavy terminator figure stands in, painted gold */
+XN_SCHEMES['Adeptus Custodes'] = { 'Adeptus Custodes': smScheme('Adeptus Custodes', { plate: [214, 170, 60], plate2: [160, 120, 40], trim: [236, 206, 110], bronze: [220, 180, 70], cloth: [150, 24, 24], lens: [216, 52, 42], face: [214, 170, 140], accent: [150, 24, 24], wear: { plate: [240, 214, 110], plate2: [200, 164, 70] } }) };
+XN_LISTS['Adeptus Custodes'] = [[/blade champion|shield-captain|captain-general/i, 'sm_captain'], [/./, 'sm_term']];
 
 Object.assign(MINI_ARCH, XN_ARCH);
 Object.assign(MINI_KW, { 'necrons': 'Necrons', 'orks': 'Orks', 'adepta sororitas': 'Adepta Sororitas' });
