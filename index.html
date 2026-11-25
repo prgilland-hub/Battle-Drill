@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.24-2331';
+  const VERSION = '2026.11.25-1133';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -3128,7 +3128,7 @@ function confirmRoll(title, vals, note, unit, target) {
 let BW = 60, BH = 44;
 const ENG = 2, OBJ_R = 3, DZ = 12;
 /* the board is 60x44 for a normal battle and 44x30 for Combat Patrol */
-function setBoardSize(w, h) { BW = w; BH = h; try { if (typeof BFX !== 'undefined' && BFX.setSize) BFX.setSize(w, h); } catch (e) { } try { const r = document.documentElement.style; r.setProperty('--bw', w); r.setProperty('--bh', h); const b = document.getElementById('board'); if (b) b.setAttribute('aria-label', `Battlefield, ${w} by ${h} inches`); } catch (e) { } }
+function setBoardSize(w, h) { BW = w; BH = h; try { if (typeof BF !== 'undefined' && BF.setSize) BF.setSize(w, h); } catch (e) { } try { const r = document.documentElement.style; r.setProperty('--bw', w); r.setProperty('--bh', h); const b = document.getElementById('board'); if (b) b.setAttribute('aria-label', `Battlefield, ${w} by ${h} inches`); } catch (e) { } }
 const DEPLOYMENTS = {
   dawn: { name: 'Dawn of War', desc: 'long-edge strips, 12" deep',
     zones: { player: { kind: 'rect', x: 0, y: BH - 12, w: BW, h: 12 }, ai: { kind: 'rect', x: 0, y: 0, w: BW, h: 12 } },
@@ -13009,9 +13009,12 @@ const CP_PATROLS = [
         abilities: [{ name: 'Infused with the Blessings of Nurgle', text: 'In your Shooting phase, each time this unit is selected to shoot, after this unit has shot, select one enemy unit hit by one or more of those attacks. Until the start of your next turn, that unit is Afflicted.', fx: [] }] })
     ] }
 ];
+/* the datasheet name behind each patrol unit: the 3D model library (yours and the built-in figures) matches on it, so "Maggot Lords Plague Marines" has to read as "Plague Marines" */
+const CP_DS = { 'Septimol Fulg, Maggot Lords Tallyman': 'Tallyman', 'Sholgor the Putrid': 'Lord of Virulence', 'Chaos Rhino': 'Rhino' };
+const cpDs = (n, patrol) => { let d = String(n || '').replace(new RegExp('^' + String(patrol || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s+', 'i'), ''); return CP_DS[n] || CP_DS[d] || d; };
 /* turn each patrol into an army the battle screen can pick (read-only, never saved to the user's armies) */
 const CP_BUILDS = CP_PATROLS.map(p => {
-  const units = p.units.map(u => { const c = JSON.parse(JSON.stringify(u)); if (c.leader) { const lw = c.leaderWeapons || { ranged: [], melee: [] }; c.ranged = c.ranged.concat(lw.ranged); c.melee = c.melee.concat(lw.melee); delete c.leaderWeapons; c.leader.scouts = c.leader.scouts || 0; } return c; });
+  const units = p.units.map(u => { const c = JSON.parse(JSON.stringify(u)); c.ds = cpDs(c.name, p.name); if (c.leader) { c.leader.ds = cpDs(c.leader.name, p.name); const lw = c.leaderWeapons || { ranged: [], melee: [] }; c.ranged = c.ranged.concat(lw.ranged); c.melee = c.melee.concat(lw.melee); delete c.leaderWeapons; c.leader.scouts = c.leader.scouts || 0; } return c; });
   return { id: p.id, faction: p.faction, name: `${p.name}`, cp: true, builtin: true, units, limit: 500, rules: (p.rules || []).slice(), primary: p.primary, enhancements: p.enh,
     detachment: { name: p.det.name, rule: p.det.rule, ruleText: p.det.ruleText, strats: p.det.strats, dispositions: ['combat patrol'], effects: [], dp: 1 } };
 });
@@ -16234,7 +16237,7 @@ class Renderer {
   draw(cam, env) {
     const gl = this.gl; this.resize(); const W = this.cv.width, H = this.cv.height;
     const eye = cam.eye(), V = m4.look(eye, cam.target, [0, 1, 0]), P = m4.persp(cam.fov, W / H, .5, 400), VP = m4.mul(P, V); this.projP5 = P[5];
-    const sd = v3.norm(env.sun), c = [30, 0, 22], le = v3.add(c, v3.mul(sd, 80)), LV = m4.look(le, c, [0, 1, 0]), LP = m4.ortho(-46, 46, -46, 46, 10, 170), LVP = m4.mul(LP, LV);
+    const sd = v3.norm(env.sun), c = [BW / 2, 0, BH / 2], le = v3.add(c, v3.mul(sd, 80)), LV = m4.look(le, c, [0, 1, 0]), LP = m4.ortho(-46, 46, -46, 46, 10, 170), LVP = m4.mul(LP, LV);
     gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL);
     /* the sun never moves and meshes never change once uploaded, so the shadow map only has to be redrawn when the set of visible solid meshes (or the sun, or the map size) changes. Camera moves, which is most frames, reuse it. */
     let shDraw = false; if (this.q.shadowOn) { let sg = this.q.shadow + '|' + sd[0].toFixed(3) + sd[1].toFixed(3) + sd[2].toFixed(3); for (const m of this.meshes) if (m.kind === 'solid' && !m.hidden) sg += ',' + m.uid; if (sg !== this._shSig) { this._shSig = sg; shDraw = true; } }
@@ -16266,7 +16269,7 @@ class Cam {
   constructor() { this.target = [BW / 2, 0, BH / 2]; this.yaw = .0; this.pitch = .78; this.dist = 78; this.fov = .72; }
   eye() { const cp = Math.cos(this.pitch); return [this.target[0] + Math.sin(this.yaw) * cp * this.dist, this.target[1] + Math.sin(this.pitch) * this.dist, this.target[2] + Math.cos(this.yaw) * cp * this.dist]; }
   orbit(dx, dy) { this.yaw -= dx * .006; this.pitch = clamp(this.pitch + dy * .006, .06, 1.52); }
-  pan(dx, dy) { const k = this.dist * .0016, cy = Math.cos(this.yaw), sy = Math.sin(this.yaw); this.target[0] = clamp(this.target[0] - (cy * dx + sy * dy * Math.sin(this.pitch)) * k, -6, 66); this.target[2] = clamp(this.target[2] + (sy * dx - cy * dy * Math.sin(this.pitch)) * k, -6, 50); }
+  pan(dx, dy) { const k = this.dist * .0016, cy = Math.cos(this.yaw), sy = Math.sin(this.yaw); this.target[0] = clamp(this.target[0] - (cy * dx + sy * dy * Math.sin(this.pitch)) * k, -6, BW + 6); this.target[2] = clamp(this.target[2] + (sy * dx - cy * dy * Math.sin(this.pitch)) * k, -6, BH + 6); }
   zoom(f) { this.dist = clamp(this.dist * f, 8, 150); }
 }
 
@@ -16520,7 +16523,7 @@ function surround(solid, decal, rng, H, key, th) {
   for (const [x, z, w, d] of [[BW / 2, -.6, BW + 2.4, 1.2], [BW / 2, BH + .6, BW + 2.4, 1.2], [-.6, BH / 2, 1.2, BH], [BW + .6, BH / 2, 1.2, BH]]) box(solid, x, .15, z, w, .5, d, 0, skirt, [.9, 0], 0, rng);
   for (let i = 0; i < 70; i++) {
     const x = -30 + rng() * (BW + 60), z = -24 + rng() * (BH + 48), o = out(x, z); if (o < 3.5 || o > 30) continue;
-    if ((Math.abs(x - 30) < 17.5 && (Math.abs(z + 7) < 7 || Math.abs(z - BH - 7) < 7))) continue;
+    if ((Math.abs(x - BW / 2) < 17.5 && (Math.abs(z + 7) < 7 || Math.abs(z - BH - 7) < 7))) continue;
     const k = rng();
     if (key === 'jungle') { if (k < .55) jungleTree(solid, x, z, 5 + rng() * 3.5, rng); else fern(solid, x, H(x, z), z, rng); }
     else if (key === 'marsh') { if (k < .4) deadTree(solid, x, z, 3.8 + rng() * 2.4, rng); else rubbleAt(solid, rng, H, x, z, rock, 1.4 + rng()); }
@@ -16627,7 +16630,7 @@ function forgeSkyline(mb, rng, H) {
     if (kind === 0) { const h = 14 + rng() * 18, r = 1 + rng() * 1.2; tube(mb, [x, y, z], [x, y + h, z], r, r * .7, 12, dark, [.6, 0]); tube(mb, [x, y + h, z], [x, y + h + .4, z], r * .72, r * .72, 12, [1, .42, .08], [.2, .9], true); if (rng() < .6) tube(mb, [x, y + h * .55, z], [x, y + h * .55 + .25, z], r * .86, r * .86, 12, [1, .6, .1], [.2, .85], true); }
     else if (kind === 1) { const h = 9 + rng() * 8, w = 5 + rng() * 5, ang = rng() < .5 ? 0 : 1.5708; for (const sg of [-1, 1]) { const px = x + Math.cos(ang) * w * .5 * sg, pz = z + Math.sin(ang) * w * .5 * sg; tube(mb, [px, y, pz], [px, y + h, pz], .5, .4, 6, dark, [.6, 0]); } box(mb, x, y + h, z, ang ? .8 : w + 1, .7, ang ? w + 1 : .8, 0, dark, [.6, 0], 0, rng); box(mb, x, y + h * .6, z, ang ? .5 : w, .35, ang ? w : .5, 0, dark, [.6, 0], 0, rng); if (rng() < .5) box(mb, x, y + h + .6, z, .35, .35, .35, 0, [.1, .85, 1], [.2, .9], 0, rng); }
     else { const L = 12 + rng() * 14, ang = rng() * 3.14, dx = Math.cos(ang) * L / 2, dz = Math.sin(ang) * L / 2, hh = 1.4 + rng() * 2.2; tube(mb, [x - dx, y + hh, z - dz], [x + dx, y + hh, z + dz], .6, .6, 8, dark, [.6, 0]); for (const sg of [-1, 0, 1]) tube(mb, [x + dx * sg * .9, y, z + dz * sg * .9], [x + dx * sg * .9, y + hh, z + dz * sg * .9], .25, .25, 5, dark, [.6, 0]); } });
-  for (const zz of [-2.6, BH + 2.6]) { let x = -2; while (x < BW + 2) { const L = 5 + rng() * 7; if (rng() < .75 && (x + L < 10 || x > 50)) { const y = H(x, zz); tube(mb, [x, y + .32, zz], [x + L, y + .32, zz], .3, .3, 8, RUSTC, [.6, 0]); tube(mb, [x + L * .5, y, zz], [x + L * .5, y + .32, zz], .08, .08, 5, FORGEC, [.6, 0]); } x += L + 1 + rng() * 5; } }
+  for (const zz of [-2.6, BH + 2.6]) { let x = -2; while (x < BW + 2) { const L = 5 + rng() * 7; if (rng() < .75 && (x + L < 10 || x > BW - 10)) { const y = H(x, zz); tube(mb, [x, y + .32, zz], [x + L, y + .32, zz], .3, .3, 8, RUSTC, [.6, 0]); tube(mb, [x + L * .5, y, zz], [x + L * .5, y + .32, zz], .08, .08, 5, FORGEC, [.6, 0]); } x += L + 1 + rng() * 5; } }
 }
 function scatterForge(mb, rng, ok, H) {
   forgeSkyline(mb, rng, H);
@@ -16904,8 +16907,8 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
     const cv = document.createElement('canvas'); cv.id = 'b-3d'; cv.setAttribute('aria-label', '3D battlefield, drag to look around'); cv.hidden = true;
     holder.appendChild(cv);
     try { BF3D.R = new BFX.Renderer(cv); } catch (e) { BF3D.fail = String(e.message || e); cv.remove(); return false; }
-    BF3D.fit = top => { const cv = BF3D.R && BF3D.R.cv, asp = cv && cv.clientHeight > 50 ? cv.clientWidth / cv.clientHeight : 1.6; return Math.max(BW * 1.1 / (.753 * asp), (top ? 60 : 51) * BW / 60); };
-    const R = BF3D.R, cam = BF3D.cam = new BFX.Cam(); cam.dist = BF3D.fit(); cam.pitch = .95; cam.target = [BW / 2, 0, BH / 2 + 2];
+    BF3D.fit = top => { const cv = BF3D.R && BF3D.R.cv, asp = cv && cv.clientHeight > 50 ? cv.clientWidth / cv.clientHeight : 1.6; return BF3D.lastFit = Math.max(BW * 1.1 / (.753 * asp), (top ? 60 : 51) * BH / 44); };
+    const R = BF3D.R, cam = BF3D.cam = new BFX.Cam(); cam.dist = BF3D.fit(); cam.pitch = .95; cam.target = [BW / 2, 0, BH / 2 + 2]; try { if (typeof ResizeObserver !== 'undefined') new ResizeObserver(() => { if (BF3D.cam === cam && BF3D.lastFit && Math.abs(cam.dist - BF3D.lastFit) < .01) { cam.dist = BF3D.fit(); BF3D.dirty = true; kick(); } }).observe(R.cv); } catch (e) { } { const d0 = cam.dist; for (const ms of [250, 800]) setTimeout(() => { if (BF3D.cam === cam && cam.dist === d0 && BF3D.on) { cam.dist = BF3D.fit(); BF3D.dirty = true; kick(); } }, ms); }
     if (/Mobi|Android|iPad|iPhone/.test(navigator.userAgent) || (navigator.hardwareConcurrency || 8) <= 4) { R.q.shadow = 1024; R.q.dpr = 1; R.makeShadow(); }
     { const R2 = BF3D.R, weak = /Mobi|Android|iPad|iPhone/.test(navigator.userAgent) || (navigator.hardwareConcurrency || 8) <= 4; let sv = 'auto'; try { sv = localStorage.getItem('bd.q') || 'auto'; } catch (e) { }
       R2.q.auto = sv === 'auto'; let lv = sv === 'low' ? 0 : sv === 'high' ? 2 : sv === 'std' ? 1 : (weak ? 0 : 1); if (sv === 'auto') { try { const k = localStorage.getItem('bd.lv'); if (k !== null && !weak) lv = Math.max(0, Math.min(2, +k || 0)); } catch (e) { } }
@@ -17156,6 +17159,7 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
     const sig = BW + 'x' + BH + '|' + TERRAIN.length + ':' + TERRAIN.map(t => (t.x | 0) + ',' + (t.y | 0) + ',' + (t.w | 0) + (t.cat || '')).join(';') + '|' + OBJ.map(o => (o.x | 0) + ',' + (o.y | 0)).join(';') + '|' + BF3D.theme + '|' + (G.decor || []).length;
     const R = BF3D.R;
     if (force || sig !== BF3D.tsig) {
+      { const sz = BW + 'x' + BH; if (BF3D.cam && BF3D.lastSz && BF3D.lastSz !== sz) { const cm = BF3D.cam; cm.yaw = 0; cm.pitch = .95; cm.dist = BF3D.fit(); cm.target = [BW / 2, 0, BH / 2 + 2]; for (const ms of [300, 900]) setTimeout(() => { if (BF3D.cam === cm && BF3D.lastSz === sz) { cm.dist = BF3D.fit(); BF3D.dirty = true; kick(); } }, ms); } BF3D.lastSz = sz; }
       BF3D.tsig = sig; R.clear(); BF3D.dyn = null;
       try { BF3D.map = BFX.buildMap(specNow()); } catch (e) { console.error(e); BF3D.map = null; return; }
       BF3D.mapMesh = R.upload(BF3D.map.solid, 'solid'); BF3D.mapMesh.fade = true; R.upload(BF3D.map.decal, 'decal'); BF3D.zm = R.upload(BF3D.map.zdec, 'decal'); BF3D.om = R.upload(BF3D.map.odec, 'decal'); applyOpts(); BF3D.trays = null; BF3D.diceMesh = null; buildTrays(); if (DICE.list.length) { clearDice(); }
@@ -17406,7 +17410,7 @@ function gfxStatsText(Rn) {
 }
 function kick() { if (BF3D.raf || !BF3D.on) return; BF3D.raf = requestAnimationFrame(() => { BF3D.raf = 0; if (!BF3D.on || !BF3D.map || !BF3D.dirty) return; BF3D.dirty = false; place(); try { BF3D.R.fades = bfFades(); } catch (e) { BF3D.R.fades = []; } try { BF3D.pulseOn = gfxPulse(BF3D.R); } catch (e) { BF3D.pulseOn = false; } BF3D.R.draw(BF3D.cam, BF3D.map.th.env); try { gfxSample(BF3D.R, performance.now()); gfxStatsEl(); } catch (e) { } try { overlay(); } catch (e) { console.error(e); } try { if (BF3D.pulseOn) { BF3D.dirty = true; kick(); } } catch (e) { } }); }
   /* ---- dice trays and rolling: the game decides every result, the table only shows it ---- */
-  const TRAY = { player: { x: 30, z: BH + 7, w: 26, d: 9 }, ai: { x: 30, z: -7, w: 26, d: 9 } };
+  const TRAY = { get player() { return { x: BW / 2, z: BH + 7, w: 26, d: 9 }; }, get ai() { return { x: BW / 2, z: -7, w: 26, d: 9 }; } };
   const FELT = [.03, .1, .05], WOOD = [.14, .08, .04];
   function buildTrays() {
     freeMesh(BF3D.trays); BF3D.trays = null; if (!BF3D.R || !BF3D.map) return; const mb = new BFX.MB();
