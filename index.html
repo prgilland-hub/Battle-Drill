@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.25-1612';
+  const VERSION = '2026.11.25-1620';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -12394,6 +12394,29 @@ function mmCommit() {
   return true;
 }
 /* drawing: the proposed positions, with flags */
+/* live distances while a model (or the whole unit) is held: to the nearest models of its own unit (coherency), the nearest friendly unit and the nearest enemy, edge to edge */
+function mmMeasure() {
+  const S = G && G.mm, u = S && mmUnit(); if (!S || !u || S.fresh) return [];
+  const held = S.drag && S.drag.kind === 'move';
+  const ids = held ? [...S.sel] : (S.sel.size === 1 ? [...S.sel] : []); if (!ids.length) return [];
+  const moving = new Set(ids), whole = ids.length > 1;
+  const mine = ids.map(id => u.mods.find(m => m.id === id)).filter(Boolean).map(md => ({ md, sh: mmShapeOf(S, md) })); if (!mine.length) return [];
+  const cands = [];
+  for (const md of u.mods) if (!moving.has(md.id)) cands.push({ sh: mmShapeOf(S, md), kind: 'own' });
+  for (const o of alive()) { if (o === u || !o.placed || o.reserve) continue; const kind = o.side !== u.side ? 'foe' : 'friend'; const om = (isUnitObj(o) && modelsOf(o)) || []; if (om.length) for (const n of om) cands.push({ sh: shAbs(o, n), kind, name: o.name }); else cands.push({ sh: shCirc(o.x, o.y, o.r), kind, name: o.name }); }
+  const rad = sh => sh.rho || sh.r || 0, pick = (kind, n) => {
+    const rows = []; for (const m of mine) for (const c of cands) if (c.kind === kind) rows.push({ m, c, d: gapS(m.sh, c.sh) });
+    rows.sort((a, b) => a.d - b.d); const seen = new Set(), out = [];
+    for (const r of rows) { const key = kind === 'own' ? r.c : r.c.name; if (seen.has(key)) continue; seen.add(key); out.push(r); if (out.length >= n) break; } return out;
+  };
+  const res = [];
+  for (const [kind, n] of whole ? [['foe', 2], ['friend', 1]] : [['own', 2], ['friend', 1], ['foe', 2]]) for (const r of pick(kind, n)) {
+    if (r.d > 14) continue;
+    const a = r.m.sh, b = r.c.sh, dx = b.x - a.x, dy = b.y - a.y, L = Math.hypot(dx, dy) || 1, ux = dx / L, uy = dy / L;
+    res.push({ x1: a.x + ux * rad(a), y1: a.y + uy * rad(a), x2: b.x - ux * rad(b), y2: b.y - uy * rad(b), d: Math.max(0, r.d), kind, name: r.c.name || '', bad: kind === 'foe' && r.d <= ENG + 1e-6, warn: kind === 'own' && r.d > 2 + 1e-6 });
+  }
+  return res;
+}
 function mmHtml() {
   const S = mmEnsure(), u = mmUnit(); if (!S || !u) return '';
   if (S.fresh) return '';
@@ -12406,7 +12429,11 @@ function mmHtml() {
   const pos = new Map(); for (const [id, p] of S.pos) pos.set(id, p);
   out.push(modelsGroupSvg(u, pos, 1, S.rot));
   for (const md of u.mods) { const sh = mmShapeOf(S, md), o = S.origin.get(md.id); if (bad.has(md.id) || (S.drag && S.drag.kind === 'move' && Math.hypot(sh.x - o.x, sh.y - o.y) > allow + .01)) out.push(shapeEl(sh, 'mbad', '', .18)); if (S.sel.has(md.id)) out.push(shapeEl(sh, 'msel', '', .12)); }
-  if (S.drag && S.drag.kind === 'move' && S.sel.size) { const id = S.drag.lead, p = S.pos.get(id), o = S.origin.get(id), d = Math.hypot(p.x - o.x, p.y - o.y), txt = `${d.toFixed(1)}" / ${allow}"`; out.push(`<rect class="sl-bg" x="${(p.x - txt.length * .3 - .5).toFixed(2)}" y="${(p.y - 2.6).toFixed(2)}" width="${(txt.length * .6 + 1).toFixed(2)}" height="1.3" rx=".35"/><text class="sl-t ${d <= allow + .01 ? 'ok' : 'no'}" x="${p.x.toFixed(2)}" y="${(p.y - 1.65).toFixed(2)}" font-size=".95">${txt}</text>`); }
+  if (allow < 999 && S.drag && S.drag.kind === 'move' && S.sel.size) { const id = S.drag.lead, p = S.pos.get(id), o = S.origin.get(id), d = Math.hypot(p.x - o.x, p.y - o.y), txt = `${d.toFixed(1)}" / ${allow}"`; out.push(`<rect class="sl-bg" x="${(p.x - txt.length * .3 - .5).toFixed(2)}" y="${(p.y - 2.6).toFixed(2)}" width="${(txt.length * .6 + 1).toFixed(2)}" height="1.3" rx=".35"/><text class="sl-t ${d <= allow + .01 ? 'ok' : 'no'}" x="${p.x.toFixed(2)}" y="${(p.y - 1.65).toFixed(2)}" font-size=".95">${txt}</text>`); }
+  for (const m of mmMeasure()) {
+    const col = m.bad ? '#ff5a4d' : m.warn ? '#e8c25a' : m.kind === 'own' ? '#58e07a' : m.kind === 'foe' ? '#f4a49a' : '#bcd4f2', txt = m.d.toFixed(1) + '"' + (m.kind === 'foe' && m.name ? ' ' + m.name.slice(0, 16) : ''), mx = (m.x1 + m.x2) / 2, my = (m.y1 + m.y2) / 2;
+    out.push(`<line x1="${m.x1.toFixed(2)}" y1="${m.y1.toFixed(2)}" x2="${m.x2.toFixed(2)}" y2="${m.y2.toFixed(2)}" stroke="${col}" stroke-width=".16" stroke-dasharray=".4 .25" pointer-events="none"/><rect class="sl-bg" x="${(mx - txt.length * .27 - .4).toFixed(2)}" y="${(my - .62).toFixed(2)}" width="${(txt.length * .54 + .8).toFixed(2)}" height="1.2" rx=".3" pointer-events="none"/><text x="${mx.toFixed(2)}" y="${(my + .3).toFixed(2)}" font-size=".85" text-anchor="middle" fill="${col}" font-weight="700" pointer-events="none">${escH(txt)}</text>`);
+  }
   if (S.box) { const b = S.box, x = Math.min(b.x0, b.x1), y = Math.min(b.y0, b.y1); out.push(`<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${Math.abs(b.x1 - b.x0).toFixed(2)}" height="${Math.abs(b.y1 - b.y0).toFixed(2)}" fill="rgba(180,150,40,.18)" stroke="var(--brass)" stroke-width=".18" stroke-dasharray=".5 .3"/>`); }
   return out.join('');
 }
@@ -17541,7 +17568,10 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
             if (!far || d > far.d) far = { d, p, o, over }; if (S.drag && S.drag.lead === md.id) lead = { d, p, o, over };
           }
           if (allow < 999) { if (S.sel.size && S.sel.size <= 2) for (const id of S.sel) { const o = S.origin.get(id); if (o) ring(o.x, o.y, allow, OC.brass, 1.6, [6, 5], .8); } else { let ox = 0, oy = 0, n = 0, rr = 0; for (const o of S.origin.values()) { ox += o.x; oy += o.y; n++; } if (n) { ox /= n; oy /= n; for (const o of S.origin.values()) rr = Math.max(rr, Math.hypot(o.x - ox, o.y - oy)); ring(ox, oy, allow + rr + .4, OC.brass, 1.6, [6, 5], .8); } } }
-          const m = lead || far; if (m) labels.push([P(m.p.x, m.p.y, 2.6), `${m.d.toFixed(1)}"${allow < 999 ? ' / ' + allow + '"' : ''}`, m.over ? OC.bad : OC.good, true]);
+          const m = lead || far; if (m && allow < 999) labels.push([P(m.p.x, m.p.y, 2.6), `${m.d.toFixed(1)}"${allow < 999 ? ' / ' + allow + '"' : ''}`, m.over ? OC.bad : OC.good, true]);
+        }
+        if (S && u && !S.fresh) {
+          for (const q of mmMeasure()) { const col = q.bad ? OC.bad : q.warn ? OC.brass : q.kind === 'own' ? OC.good : q.kind === 'foe' ? '#f4a49a' : '#bcd4f2'; path([P(q.x1, q.y1, .35), P(q.x2, q.y2, .35)]); stroke(col, 2, [5, 4], .95); labels.push([P((q.x1 + q.x2) / 2, (q.y1 + q.y2) / 2, 1.4), q.d.toFixed(1) + '"' + (q.kind === 'foe' && q.name ? ' ' + q.name.slice(0, 16) : ''), col, true]); }
         }
       } else if (G.pend && typeof placeCtx === 'function') {
         /* single-token placement: the path from where the unit is to where it will land */
