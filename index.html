@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.25-1639';
+  const VERSION = '2026.11.25-1644';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -8129,7 +8129,7 @@ $('#board').addEventListener('pointerdown', e => {
   const pt = toSvg(e), grab = G.pend && Math.hypot(pt.x - G.pend.x, pt.y - G.pend.y) <= c.unit.r + 0.8;
   const off = grab ? { x: G.pend.x - pt.x, y: G.pend.y - pt.y } : { x: 0, y: 0 };
   placeDrag = { id: e.pointerId, off };
-  try { e.currentTarget.setPointerCapture(e.pointerId); } catch (err) { }
+  if (!e._bf) { try { e.currentTarget.setPointerCapture(e.pointerId); } catch (err) { } }
   $('#board').classList.add('dragging');
   setPending(pt.x + off.x, pt.y + off.y, c); drawSight(); renderSide();
   e.preventDefault();
@@ -12473,7 +12473,7 @@ function mmButtons0() {
     if (!mmOn() || (e.button !== undefined && e.button > 0 && e.pointerType === 'mouse')) return;
     const S = mmEnsure(), u = mmUnit(); if (!S) return;
     const pt = toSvg(e), touch = e.pointerType !== 'mouse', md = S.fresh ? null : hitModel(S, u, pt, touch ? .7 : .35);
-    e.stopImmediatePropagation(); e.preventDefault(); try { b.setPointerCapture(e.pointerId); } catch (x) { }
+    e.stopImmediatePropagation(); e.preventDefault(); if (!e._bf) { try { b.setPointerCapture(e.pointerId); } catch (x) { } }
     const base = () => { const m = new Map(); for (const id of S.sel) m.set(id, { ...S.pos.get(id) }); return m; };
     if (S.fresh) {
       for (const md2 of u.mods) S.pos.set(md2.id, { x: pt.x + md2.dx, y: pt.y + md2.dy });
@@ -17834,7 +17834,7 @@ function kick() { if (BF3D.raf || !BF3D.on) return; BF3D.raf = requestAnimationF
     if (BF3D.on) { try { const els = only ? only.filter(d => d && d.dataset && d.dataset.v !== undefined) : (container ? [...container.querySelectorAll('.die[data-v]')] : []); if (els.length) { const wait = throwDice(els.map(e => ({ v: +e.dataset.v, c: e.className }))); if (wait) return Promise.all([p, new Promise(r => setTimeout(r, wait))]).then(() => { }); } } catch (e) { console.error(e); } }
     return p;
   };
-  const _ts = toSvg; toSvg = function (e) { return (e && e._bf) ? e._bf : _ts.apply(this, arguments); };
+  const _ts = toSvg; toSvg = function (e) { if (e && e._bf) { BF3D._lastPt = e._bf; return e._bf; } if (BF3D.on && e && e.clientX !== undefined && BF3D.boardPt) { const q = BF3D.boardPt(e); if (q) { BF3D._lastPt = q; return q; } if (BF3D._lastPt) return BF3D._lastPt; } return _ts.apply(this, arguments); };
   const _ds = drawSight; drawSight = function () { const r = _ds.apply(this, arguments); if (BF3D.on && G && G.mm) sync(); if (BF3D.on && !BF3D.gq) BF3D.gq = requestAnimationFrame(() => { BF3D.gq = 0; buildGhost(); BF3D.dirty = true; kick(); }); return r; };
   document.addEventListener('keydown', e => { if (BF3D.on && e.key === 'Escape' && BF3D.sel.size) { BF3D.sel.clear(); sync(); } });
   const _rb = renderBoard; renderBoard = function () { const r = _rb.apply(this, arguments); if (BF3D.on) { $b().style.visibility = 'hidden'; sync(); } return r; };
