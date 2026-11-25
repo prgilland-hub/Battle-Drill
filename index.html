@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.25-1600';
+  const VERSION = '2026.11.25-1604';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -674,6 +674,12 @@ window.BDModels = BDModels; window.MODELIMP = MODELIMP;
   --field:#28312d; --ruin:#46514b; --ruin-edge:#65726a; --dz-you:rgba(111,159,230,.12); --dz-them:rgba(224,104,91,.12);
   color-scheme:dark;
 }
+/* two players on one device: Player 1 is always blue and Player 2 always red, so after a hand-over the colours swap back */
+:root.hot-on{--dz-you:rgba(45,98,173,.24);--dz-them:rgba(171,58,46,.24)}
+:root.hot-on:not([data-theme="light"]){--dz-you:rgba(111,159,230,.24);--dz-them:rgba(224,104,91,.24)}
+:root.hot-flip{--you:#ab3a2e;--them:#2d62ad;--dz-you:rgba(171,58,46,.24);--dz-them:rgba(45,98,173,.24)}
+:root.hot-flip:not([data-theme="light"]){--you:#e0685b;--them:#6f9fe6;--dz-you:rgba(224,104,91,.24);--dz-them:rgba(111,159,230,.24)}
+.hot-flip .mb.player{fill:rgba(214,84,72,.34)}.hot-flip .mb.ai{fill:rgba(76,128,214,.34)}
 :root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 *,*::before,*::after{box-sizing:inherit}
@@ -1136,7 +1142,9 @@ button[data-tip],label[data-tip] input,label[data-tip] select{cursor:pointer}
 .endrow{margin-top:8px;display:flex;flex-wrap:wrap;align-items:center;gap:8px}
 .endrow:empty{display:none}
 .endrow .btn{padding:5px 12px;font-size:.88rem}
-.next .prompt{font-size:1.05rem;font-weight:600;min-height:0}
+.next .prompt{font-size:1.05rem;font-weight:600;min-height:0;max-height:min(42vh,22rem);overflow-y:auto;overscroll-behavior:contain}
+.next .actions{max-height:min(38vh,17rem);overflow-y:auto;overscroll-behavior:contain}
+.next .guide{max-height:min(24vh,12rem);overflow-y:auto;overscroll-behavior:contain}
 .b-armies .al{padding:4px 0;border-bottom:1px solid var(--line)}
 .b-armies .al .who{font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-right:6px}
 .b-armies small{display:block;color:var(--muted)}
@@ -5873,7 +5881,7 @@ function expDmg(u, ws, t, shooting, cover, rangeCheck, snap) {
 }
 
 function log(html, cls) {
-  if (G.hot && typeof html === 'string') { const me = hotName('player'), op = hotName('ai'); html = html.replace(/\bthe AI's\b/gi, op + "'s").replace(/\bthe AI\b/gi, op).replace(/\bAI\b/g, op).replace(/\bYour\b/g, me + "'s").replace(/\byour\b/g, me + "'s").replace(/\bYou\b/g, me).replace(/\byou\b/g, me); }
+  if (G.hot && typeof html === 'string') { const me = hotName('player'), op = hotName('ai'); html = html.replace(/\bthe AI's (?=<b>)/gi, '').replace(/\bthe AI's\b/gi, op + "'s").replace(/\bthe AI\b/gi, op).replace(/\bAI\b/g, op).replace(/\bYour\b/g, me + "'s").replace(/\byour\b/g, me + "'s").replace(/\bYou\b/g, me).replace(/\byou\b/g, me); }
   G.log.unshift({ html, cls: cls || 'sys' });
   if (G.school) schLog(html);
   if (G.log.length > 250) G.log.pop();
@@ -6652,7 +6660,11 @@ function hotSwapState() {
   hotView();
 }
 /* seat the camera on the side of the board the person at the screen deploys on */
+const hotBlue = side => !G || !G.hot ? side === 'player' : (side === 'player') !== G.hot.flip;
+const hotColour = side => hotBlue(side) ? 'Blue' : 'Red';
+function hotTheme() { const r = document.documentElement; r.classList.toggle('hot-on', !!(G && G.hot)); r.classList.toggle('hot-flip', !!(G && G.hot && G.hot.flip)); }
 function hotView() {
+  hotTheme();
   let top = false;
   try { if (G && G.roles) { const z = zoneOf('player'), ys = (z.pts || []).map(p => p[1]); top = ys.length && ys.reduce((a, b) => a + b, 0) / ys.length < BH / 2; } } catch (e) { }
   if (typeof BF3D !== 'undefined' && BF3D) { BF3D.trayFlip = !!top; if (BF3D.cam) { BF3D.cam.yaw = top ? Math.PI : 0; BF3D.dirty = true; if (typeof kick === 'function') kick(); } BF3D.hotSeen = true; }
@@ -6671,7 +6683,8 @@ async function hotPass(why) {
   if (!G || !G.hot) return;
   const nxt = hotName('ai'), bits = { turn: `Battle round ${G.round}. The board is hidden until you press the button.`, setup: 'The board is hidden until you press the button, so nobody sees the other player\'s choices.' };
   G.busy = true; render();
-  await hotOverlay(escH(nxt), why === 'turn' ? bits.turn : bits.setup, `I am ${escH(nxt)}: show the board`);
+  const colr = hotColour('ai'), cc = colr === 'Blue' ? '#6f9fe6' : '#e0685b';
+  await hotOverlay(escH(nxt), `<span style="display:inline-block;padding:3px 14px;border-radius:4px;background:${cc};color:#0b0f0a;font-weight:700;letter-spacing:.12em;margin-bottom:10px">YOU PLAY ${colr.toUpperCase()}</span><br>` + (why === 'turn' ? bits.turn : bits.setup), `I am ${escH(nxt)}: show the board`);
   hotSwapState(); G.busy = false; render();
 }
 function rollOffRoles() {
@@ -8371,7 +8384,7 @@ function renderBoard() {
     if (o.poly) s.push(`<polygon class="obj-ring ${c || ''}" points="${o.poly.map(p => p[0] + ',' + p[1]).join(' ')}" fill="none" stroke-linejoin="round"/><circle class="obj-dot" cx="${o.x}" cy="${o.y}" r=".8"/>`);
     else s.push(`<circle class="obj-ring ${c || ''}" cx="${o.x}" cy="${o.y}" r="${OBJ_R}"/><circle class="obj-dot" cx="${o.x}" cy="${o.y}" r=".8"/>`);
   }
-  for (const m of (G.mk || [])) s.push(`<path d="M${m.x} ${m.y - .8}L${m.x + .8} ${m.y}L${m.x} ${m.y + .8}L${m.x - .8} ${m.y}Z" fill="${m.side === 'player' ? '#6aa7ff' : '#ff7a6a'}" stroke="#fff" stroke-width=".12"><title>${m.side === 'player' ? 'Your' : 'AI'} operation marker (${m.kind})</title></path>`);
+  for (const m of (G.mk || [])) s.push(`<path d="M${m.x} ${m.y - .8}L${m.x + .8} ${m.y}L${m.x} ${m.y + .8}L${m.x - .8} ${m.y}Z" fill="${hotBlue(m.side) ? '#6aa7ff' : '#ff7a6a'}" stroke="#fff" stroke-width=".12"><title>${m.side === 'player' ? 'Your' : 'AI'} operation marker (${m.kind})</title></path>`);
   const sel = G.sel && G.sel.placed ? G.sel : null;
   for (const sd of ['player', 'ai']) if (dgFaction(sd) && G.stage === 'battle') for (const d of dgSources(sd)) s.push(`<circle class="cont-ring ${sd}" cx="${d.x}" cy="${d.y}" r="${(d.r + contRange(d)).toFixed(2)}"/>`);
   if (tyrArmy('player')) for (const u of aliveSide('player')) if (isSynapse(u)) s.push(`<circle class="syn-ring" cx="${u.x}" cy="${u.y}" r="${u.r + 6}"/>`);
@@ -8505,11 +8518,11 @@ function renderSide() {
   let prompt = '';
   const u = G.sel;
   const pre = G.stage === 'pre';
-  refreshTheme();
+  refreshTheme(); hotTheme();
   $('#b-round').textContent = G.stage === 'over' ? 'Game over' : pre ? 'Before the battle' : `Round ${G.round} of 5`;
   { const PN = { command: 'Command', movement: 'Movement', shooting: 'Shooting', charge: 'Charge', fight: 'Fight' }; const tn = $('#b-turn'); if (tn) tn.textContent = G.stage === 'battle' ? `${G.hot ? hotName(G.active) + "'s turn" : G.active === 'player' ? 'Your turn' : "AI's turn"} · ${PN[G.phase] || ''} phase` : ''; }
   $('#b-vp-p').textContent = vpTotal('player'); $('#b-vp-a').textContent = vpTotal('ai');
-  { const nm = (el, t) => { const sp = el.parentNode; if (sp && sp.firstChild && sp.firstChild.nodeType === 3 && sp.firstChild.nodeValue !== t + ' ') sp.firstChild.nodeValue = t + ' '; }; nm($('#b-vp-p'), G.hot ? hotName('player') : 'You'); nm($('#b-vp-a'), G.hot ? hotName('ai') : 'AI'); }
+  { const nm = (el, t) => { const sp = el.parentNode; if (sp && sp.firstChild && sp.firstChild.nodeType === 3 && sp.firstChild.nodeValue !== t + ' ') sp.firstChild.nodeValue = t + ' '; }; nm($('#b-vp-p'), G.hot ? hotName('player') + ' (' + hotColour('player').toLowerCase() + ')' : 'You'); nm($('#b-vp-a'), G.hot ? hotName('ai') + ' (' + hotColour('ai').toLowerCase() + ')' : 'AI'); }
   { const mb = $('#b-missions'); if (mb) { const html = missionBar(); if (mb._h !== html) { mb._h = html; mb.innerHTML = html; } mb.hidden = !html; } }
   $('#b-cp-p').textContent = G.cp.player + ' CP' + asHud('player'); $('#b-cp-a').textContent = G.cp.ai + ' CP' + asHud('ai');
   $('#b-banner').innerHTML = G.stage === 'over' ? `<div class="banner"><h3>Game over</h3>${G.result}</div>` : '';
@@ -8687,6 +8700,7 @@ function renderSide() {
     else if (pc && G.pend) { const chk = placeCheck(pc, G.pend.x, G.pend.y); prompt = `<b>${escH(pc.unit.name)}</b>: ${chk.ok ? 'this spot works.' : escH(chk.why)} Drag it to adjust, then confirm.`; acts.unshift(btn('Confirm placement', confirmPlacement, true, !chk.ok), btn('Clear', cancelPending)); }
     else if (pc) prompt += ' Tap or drag on the board to preview a spot, then confirm it.'; }
   if (G.stage === 'battle' && (dgFaction('player') || dgFaction('ai'))) { const af = alive().filter(x => afflicted(x)); if (af.length) prompt += ` <span class="affl-note">☣ Afflicted: ${af.slice(0, 4).map(x => x.name).join(', ')}${af.length > 4 ? ', and ' + (af.length - 4) + ' more' : ''} (${[...new Set(af.flatMap(plaguesOn))].map(plagueName).join(' + ')}).</span>`; }
+  if (G.hot) { const op = escH(hotName('ai')), fx = t => String(t).replace(/\b[Tt]he AI's (?=<b>)/g, '').replace(/\b[Tt]he AI's\b/g, op + "'s").replace(/\b[Tt]he AI\b/g, op).replace(/\bAI's\b/g, op + "'s").replace(/\bAI\b/g, op); prompt = fx(prompt); for (const a of acts) { a.label = fx(a.label); if (a.tip) a.tip = fx(a.tip); } }
   $('#b-prompt').innerHTML = linkNames(prompt);
   const box = $('#b-actions'); box.innerHTML = '';
   for (const a of acts) {
@@ -17533,7 +17547,7 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
     /* targets you can pick: a dashed ring and a marker above the unit */
     try {
       for (const t of ovTargets(sel)) {
-        const col = t.side === 'ai' ? OC.bad : OC.good; ring(t.x, t.y, t.r + .6, col, 3, [8, 5], 1, .15);
+        const col = !hotBlue(t.side) ? OC.bad : OC.good; ring(t.x, t.y, t.r + .6, col, 3, [8, 5], 1, .15);
         const a = P(t.x, t.y, 7.2), b = P(t.x, t.y, 5.2); if (a && b) { ctx.fillStyle = col; ctx.strokeStyle = '#0a0c0d'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(b[0], b[1]); ctx.lineTo(a[0] - 8, a[1]); ctx.lineTo(a[0] + 8, a[1]); ctx.closePath(); ctx.stroke(); ctx.fill(); }
       }
     } catch (e) { }
@@ -17545,7 +17559,7 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
         if (u.reserve || u.embarkedIn) continue;
         const big = (u.r || 1) > 3, a = P(u.x, u.y, big ? 5.4 : 3.6); if (!a) continue;
         const st = startModels(u), cur = st > 1 ? totalModels(u) : u.cur, tot = st > 1 ? st : (u.W || 1), fr = Math.max(0, Math.min(1, cur / tot));
-        const hc = fr > .5 ? '#58e07a' : fr > .25 ? '#e8c25a' : '#ff5a4d', sc = u.side === 'ai' ? '#ff5a4d' : '#4ea0ff', isSel = sel === u;
+        const hc = fr > .5 ? '#58e07a' : fr > .25 ? '#e8c25a' : '#ff5a4d', sc = !hotBlue(u.side) ? '#ff5a4d' : '#4ea0ff', isSel = sel === u;
         ctx.globalAlpha = isSel ? 1 : .88;
         let w;
         if (st > 1 && st <= 12) { const pw = 7, gp = 2; w = st * pw + (st - 1) * gp; const x0 = a[0] - w / 2; ctx.fillStyle = 'rgba(8,10,12,.72)'; ctx.fillRect(x0 - 3, a[1] - 5, w + 6, 10); for (let i = 0; i < st; i++) { ctx.fillStyle = i < cur ? hc : 'rgba(255,255,255,.16)'; ctx.fillRect(x0 + i * (pw + gp), a[1] - 3, pw, 6); } }
