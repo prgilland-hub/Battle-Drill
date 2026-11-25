@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.25-1604';
+  const VERSION = '2026.11.25-1612';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -6660,6 +6660,38 @@ function hotSwapState() {
   hotView();
 }
 /* seat the camera on the side of the board the person at the screen deploys on */
+/* Short in-universe lines for the cover screen. These are written for this app in each army's voice, not quoted from the books. */
+const HOT_QUOTES = {
+  'Ultramarines': ['Hold the line. The Codex has anticipated worse.', 'Every ledger of war ends the same way: with the enemy struck from it.', 'We do not retreat. We reposition, and then we advance.'],
+  'Space Marines': ['Armour is a prayer, discipline is a vow. Both hold today.', 'Duty is heavier than any bolter and carried farther.', 'The Emperor does not ask for victory. He asks for everything.'],
+  'Blood Angels': ['Let the crimson tide remember its name.', 'We carry the Sanguinor\'s light and the Red Thirst. Only one of them wins battles.', 'Fall with grace or rise with fury. Never fall in silence.'],
+  'Dark Angels': ['Some truths the Lion keeps. Some enemies he buries with them.', 'Silence is a weapon. So is patience. We bring both.', 'Penance is simple: finish the work.'],
+  'Space Wolves': ['The winter is coming and we are the cold.', 'Tell the saga true, brother, and leave out nothing worth boasting.', 'Wolves do not ask for the high ground. They bring it with them.'],
+  'Black Templars': ['No oath is too heavy. No foe too far. No rest before it is done.', 'The Crusade does not end. It merely changes address.', 'Faith is a blade you sharpen with every step forward.'],
+  'Adepta Sororitas': ['Burn bright, sister. The dark is only afraid of light.', 'Faith is the armour. The flame is merely punctuation.', 'We are the Emperor\'s answer to the question the heretic never finished asking.'],
+  'Adeptus Custodes': ['We were made to stand where no one else can. We stand.', 'A thousand years of vigil have taught us patience. Not mercy.', 'The Throne has no need of the many. It has us.'],
+  'Death Guard': ['Rot is only another word for patience.', 'Grandfather gives and gives. Be grateful, and share the gift.', 'Every wound you deal is a door opened for the Plague.'],
+  'Orks': ["Da more of 'em dere are, da more fun it gets!", "If it ain't broke, hit it wiv a bigger spanner.", "Waaagh! (Dat's da whole plan. It's a good plan.)"],
+  'Aeldari': ['We have seen this ending. Let us make it a better one.', 'A seer\'s doubt is a blade. A warrior\'s doubt is a grave.', 'Strike once, strike true, and be gone before the echo.'],
+  'T\'au Empire': ['For the Greater Good, every shot is arithmetic.', 'Unity of purpose is a force multiplier. Count us in.', 'The enemy has numbers. We have a plan.'],
+  'Thousand Sons': ['Sorcery is only knowledge refusing to apologise.', 'Fate is a pattern. Rubric is how we edit it.', 'All is dust, and we are the ones who hold the broom.'],
+  'World Eaters': ['Blood for the Blood God! Say it louder, so the sky can hear.', 'There is no strategy. There is only the next skull.', 'Pain is the only honest language in the galaxy.'],
+  'Tyranids': ['Hunger does not negotiate.', 'The swarm remembers what you cannot.', 'Every world is a meal. This one is still warm.'],
+  'Necrons': ['We were old when your sun was young.', 'Death is a technicality, easily resolved.', 'Our patience is measured in dynasties.'],
+  'Astra Militarum': ['Hold fast. Reinforcements are always one hour away.', 'Courage is stubbornness with a lasgun.', 'The Emperor protects, and a good trench helps.'],
+  'Chaos Space Marines': ['Ten thousand years of grudges, freshly sharpened.', 'The Long War has only ever had one rule: win this battle.', 'We choose the dark, and the dark chooses us back.'],
+  'Adeptus Mechanicus': ['The machine spirit approves of this deployment.', 'Data is prayer. Efficiency is its answer.', 'Flesh is weak. Calculations are eternal.'],
+  'Grey Knights': ['One watch, no rest, no witnesses.', 'The warp is cold. We bring the lantern.', 'Faith, discipline and a very large hammer.'],
+  'Genestealer Cults': ['Rise! The Star Children have waited long enough.', 'Every hand that digs is a hand that will strike.', 'The Patriarch has dreamed this battle.'],
+  'Drukhari': ['Pain is the finest vintage. Savour it.', 'We arrive uninvited and leave with everything.', 'Mercy is a mistake the living can still afford.'],
+  'Leagues of Votann': ['Every grudge goes in the Ledger. Today we settle one.', 'The Ancestors count the cost. We count the profit.', 'Dig in. Hold on. Get paid.']
+};
+function hotQuote(build) {
+  const key = HOT_QUOTES[build && build.scheme] ? build.scheme : HOT_QUOTES[build && build.faction] ? build.faction : null;
+  const list = key ? HOT_QUOTES[key] : ['Steady now. Take the board, take your time, take the objective.', 'The battle is decided by the player who thinks one turn further.'];
+  G.hotQi = G.hotQi || {}; const k = key || '_', i = (G.hotQi[k] = ((G.hotQi[k] === undefined ? Math.floor(Math.random() * list.length) : G.hotQi[k] + 1) % list.length));
+  return list[i];
+}
 const hotBlue = side => !G || !G.hot ? side === 'player' : (side === 'player') !== G.hot.flip;
 const hotColour = side => hotBlue(side) ? 'Blue' : 'Red';
 function hotTheme() { const r = document.documentElement; r.classList.toggle('hot-on', !!(G && G.hot)); r.classList.toggle('hot-flip', !!(G && G.hot && G.hot.flip)); }
@@ -6684,7 +6716,8 @@ async function hotPass(why) {
   const nxt = hotName('ai'), bits = { turn: `Battle round ${G.round}. The board is hidden until you press the button.`, setup: 'The board is hidden until you press the button, so nobody sees the other player\'s choices.' };
   G.busy = true; render();
   const colr = hotColour('ai'), cc = colr === 'Blue' ? '#6f9fe6' : '#e0685b';
-  await hotOverlay(escH(nxt), `<span style="display:inline-block;padding:3px 14px;border-radius:4px;background:${cc};color:#0b0f0a;font-weight:700;letter-spacing:.12em;margin-bottom:10px">YOU PLAY ${colr.toUpperCase()}</span><br>` + (why === 'turn' ? bits.turn : bits.setup), `I am ${escH(nxt)}: show the board`);
+  const qt = hotQuote(G.ab);
+  await hotOverlay(escH(nxt), `<span style="display:inline-block;padding:3px 14px;border-radius:4px;background:${cc};color:#0b0f0a;font-weight:700;letter-spacing:.12em;margin-bottom:10px">YOU PLAY ${colr.toUpperCase()}</span><br>` + (why === 'turn' ? bits.turn : bits.setup) + `<br><br><i style="color:#c9dbb8;display:inline-block;max-width:30em">“${escH(qt)}”</i>`, `I am ${escH(nxt)}: show the board`);
   hotSwapState(); G.busy = false; render();
 }
 function rollOffRoles() {
