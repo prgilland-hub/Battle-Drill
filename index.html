@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.26-0231';
+  const VERSION = '2026.11.26-0234';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -16852,14 +16852,29 @@ function panelRun(mb, a, b, o, rng) {
 }
 function wallRun(mb, a, b, o, rng) {
   if (o.panel) return panelRun(mb, a, b, o, rng);
-  const L = Math.hypot(b[0] - a[0], b[1] - a[1]), n = Math.max(2, Math.round(L / .55)), ux = (b[0] - a[0]) / L, uz = (b[1] - a[1]) / L, ry = Math.atan2(uz, ux), sd = rng() * 50, wins = [];
+  const L = Math.hypot(b[0] - a[0], b[1] - a[1]), ux = (b[0] - a[0]) / L, uz = (b[1] - a[1]) / L, ry = Math.atan2(uz, ux), sd = rng() * 50, wins = [], px = -uz, pz = ux;
   if (o.windows) for (let k = 0; k < o.windows; k++) { const c = (k + .5) / o.windows + (rng() - .5) * .12, wv = Math.min(.14, 1.7 / L); wins.push([c - wv, c + wv]); }
-  for (let i = 0; i < n; i++) {
-    const t = (i + .5) / n, cx = a[0] + ux * L * t, cz = a[1] + uz * L * t, w = L / n * 1.04; let hh = o.h * (.42 + .58 * vnoise(t * L * .45 + sd, sd)); if (rng() < .08) hh *= .6; hh = Math.max(hh, .5);
+  /* weathered masonry: blocks of uneven width laid in courses whose joints wander, a wall that settles and leans, bleached chipped tops, a sooty plinth, and fallen blocks at the foot */
+  let pos = 0;
+  while (pos < L - .05) {
+    const w = Math.min(L - pos, .32 + rng() * .62), t = (pos + w / 2) / L, cx = a[0] + ux * pos + ux * w / 2, cz = a[1] + uz * pos + uz * w / 2; pos += w;
+    let hh = o.h * (.36 + .64 * vnoise(t * L * .45 + sd, sd)); if (rng() < .1) hh *= .55; if (rng() < .05) hh *= 1.15; hh = Math.max(hh, .45);
     const win = wins.find(([x0, x1]) => t > x0 && t < x1); let top = hh; if (win) top = Math.min(hh, o.sill || 1);
-    let y = 0; const off = (rng() - .5) * .06, nx = -uz * off, nz = ux * off;
-    while (y < top - .02) { const ch = Math.min(top - y, .5 + rng() * .35); box(mb, cx + nx, y, cz + nz, w, ch, o.th * (1 + (rng() - .5) * .12), ry, vary(o.col, rng, o.var || .1), [o.grit == null ? .9 : o.grit, 0], .025, rng); y += ch; }
+    const drift = (vnoise(t * L * .22 + sd + 9, sd) - .5) * .2 + (rng() - .5) * .05, nx = px * drift, nz = pz * drift, tint = vary(o.col, rng, o.var || .1);
+    let y = 0, k = 0;
+    while (y < top - .02) {
+      const last = y + .85 > top, ch = Math.min(top - y, .42 + rng() * .4), fr = y / Math.max(top, 1), sh = (.8 + .28 * fr) * (k === 0 ? .82 : 1), th = o.th * (1 + (rng() - .5) * .18), sl = (rng() - .5) * .08;
+      box(mb, cx + nx + ux * sl, y, cz + nz + uz * sl, w * (.96 + rng() * .08), ch, th, ry + (rng() - .5) * .05, vary(shade(tint, sh), rng, .06), [o.grit == null ? .9 : o.grit, 0], .03, rng); y += ch; k++;
+    }
     if (win && o.lintel && hh > (o.sill || 1) + 1.9) { const y0 = (o.sill || 1) + 1.8; box(mb, cx, y0, cz, w, hh - y0, o.th, ry, vary(shade(o.col, .95), rng, .08), [.9, 0], .02, rng); }
+    /* chipped, broken crown: a loose capping stone askew, or a notch */
+    if (!win && top > 1.2) {
+      if (rng() < .22) box(mb, cx + nx + ux * (rng() - .5) * .1, top, cz + nz + uz * (rng() - .5) * .1, w * (.5 + rng() * .35), .1 + rng() * .14, o.th * (.7 + rng() * .25), ry + (rng() - .5) * .9, vary(shade(o.col, 1.12), rng, .08), [.9, 0], .03, rng);
+      if (rng() < .1) blob(mb, cx + nx, top, cz + nz, w * .5, .12, o.th * .5, shade(o.col, 1.15), [.9, 0], rng, .6);
+    }
+    /* sooty foot course, windblown debris and fallen stones either side */
+    box(mb, cx + nx, 0, cz + nz, w * 1.02, .16 + rng() * .1, o.th * 1.14, ry, shade(vary(o.col, rng, .06), .6), [.95, 0], .03, rng);
+    for (const sd2 of [-1, 1]) if (rng() < .3) { const dd = o.th / 2 + .2 + rng() * .45, fx = cx + px * sd2 * dd, fz = cz + pz * sd2 * dd, s0 = .14 + rng() * .2; box(mb, fx, 0, fz, s0 * (1 + rng() * .8), s0 * (.7 + rng() * .5), s0 * (.9 + rng() * .5), rng() * 6.28, vary(shade(o.col, .9), rng, .1), [.9, 0], .04, rng); if (rng() < .5) blob(mb, fx + (rng() - .5) * .3, .03, fz + (rng() - .5) * .3, .2 + rng() * .15, .06, .16, shade(o.col, .75), [.95, 0], rng, .5); }
     if (o.moss && !win && rng() < (o.damp ? .78 : .6)) blob(mb, cx, top - .05, cz, w * .78, .24 + rng() * .2, o.th * .9, o.moss, [.8594, 0], rng, .4);
     if (o.damp) { box(mb, cx + nx, 0, cz + nz, w * 1.01, .2 + rng() * .24, o.th * 1.08, ry, vary(o.damp, rng, .2), [.9, 0], .03, rng); if (rng() < .3) blob(mb, cx + nx, .1, cz + nz, w * .5, .3, o.th * 1.15, vary(o.damp, rng, .3), [.86, 0], rng, .5); }
     if (o.vines && !win && rng() < .14) { const sd2 = rng() < .5 ? 1 : -1, fx = cx - uz * sd2 * (o.th / 2 + .03), fz = cz + ux * sd2 * (o.th / 2 + .03), ln = Math.min(top - .2, .9 + rng() * 1.9); for (let q = 0; q < 2; q++) tube(mb, [fx + ux * (q - .5) * .25, top - .02, fz + uz * (q - .5) * .25], [fx + ux * (q - .5) * .3, top - ln * (.7 + q * .3), fz + uz * (q - .5) * .3], .035, .012, 3, [.1, .22, .07], [.4, 0], false); }
