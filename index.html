@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.26-0200';
+  const VERSION = '2026.11.26-0205';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -17754,11 +17754,11 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
     const ring = (x, y, r, col, w, dash, alpha, up) => { const pts = []; for (let i = 0; i <= 90; i++) { const a = i / 90 * 6.2832; pts.push(P(x + Math.cos(a) * r, y + Math.sin(a) * r, up === undefined ? .12 : up)); } path(pts); stroke(col, w, dash, alpha); };
     const pill = (p, text, col, big, alpha) => { if (!p) return; ctx.font = `700 ${big ? 13 : 11}px system-ui,sans-serif`; const tw = ctx.measureText(text).width + 10, th = big ? 21 : 17, x = p[0] - tw / 2, y = p[1] - th / 2; ctx.globalAlpha = alpha === undefined ? 1 : alpha; ctx.fillStyle = 'rgba(12,14,16,.86)'; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x, y, tw, th, 5) : ctx.rect(x, y, tw, th); ctx.fill(); ctx.strokeStyle = col; ctx.lineWidth = 1; ctx.stroke(); ctx.fillStyle = col; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(text, p[0], p[1] + .5); ctx.globalAlpha = 1; };
     /* a weathered metal plate with rivets and stamped letters, in the side's colour along the foot */
-    const plaque = (p, text, col) => { if (!p) return; ctx.font = '700 11px "Courier New",monospace'; const tw = ctx.measureText(text.toUpperCase()).width + 22, th = 20, x = p[0] - tw / 2, y = p[1] - th / 2;
+    const plaque = (p, text, col, alpha, small) => { if (!p) return; ctx.globalAlpha = alpha === undefined ? 1 : alpha; ctx.font = '700 ' + (small ? 10 : 11) + 'px "Courier New",monospace'; const tw = ctx.measureText(text.toUpperCase()).width + (small ? 16 : 22), th = small ? 17 : 20, x = p[0] - tw / 2, y = p[1] - th / 2;
       const g = ctx.createLinearGradient(0, y, 0, y + th); g.addColorStop(0, '#8c7a58'); g.addColorStop(.5, '#6e5f44'); g.addColorStop(1, '#4e4331'); ctx.fillStyle = g; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x, y, tw, th, 3) : ctx.rect(x, y, tw, th); ctx.fill();
       ctx.strokeStyle = 'rgba(30,24,16,.9)'; ctx.lineWidth = 1.4; ctx.stroke(); ctx.fillStyle = col; ctx.globalAlpha = .85; ctx.fillRect(x + 2, y + th - 3.5, tw - 4, 2); ctx.globalAlpha = 1;
       ctx.fillStyle = 'rgba(25,20,14,.8)'; for (const [rx, ry] of [[x + 4, y + 4], [x + tw - 4, y + 4], [x + 4, y + th - 7], [x + tw - 4, y + th - 7]]) { ctx.beginPath(); ctx.arc(rx, ry, 1.4, 0, 7); ctx.fill(); }
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = 'rgba(235,222,190,.35)'; ctx.fillText(text.toUpperCase(), p[0] + .6, p[1] - 1.4 + .8); ctx.fillStyle = '#231c12'; ctx.fillText(text.toUpperCase(), p[0], p[1] - 1.4); };
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = 'rgba(235,222,190,.35)'; ctx.fillText(text.toUpperCase(), p[0] + .6, p[1] - 1.4 + .8); ctx.fillStyle = '#231c12'; ctx.fillText(text.toUpperCase(), p[0], p[1] - 1.4); ctx.globalAlpha = 1; };
     const labels = [];
     const sel = G.sel && G.sel.placed ? G.sel : null;
     /* faction auras */
@@ -17868,7 +17868,7 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
     try {
       if (BF3D.opt.dice && BF3D.offLabels) for (const l of BF3D.offLabels) {
         const blue = typeof hotBlue === 'function' ? hotBlue(l.side) : l.side === 'player';
-        if (l.unit) pill(P(l.x, l.z, .2), (l.tag === 'in' ? '\u21b3 ' : '') + l.text, blue ? '#a9c9ff' : '#ffb0a6', false, l.tag === 'carrier' ? 1 : .95);
+        if (l.unit) plaque(P(l.x, l.z, .2), (l.tag === 'in' ? '\u21b3 ' : '') + l.text, blue ? '#7db4ff' : '#ff8478', l.tag === 'carrier' ? 1 : .95, true);
         else { const out = l.z > BH / 2 ? 1 : -1; plaque(P(l.x, l.z + out * (l.d / 2 + 1.3), .2), l.text, blue ? '#7db4ff' : '#ff8478'); }
       }
     } catch (e) { }
@@ -18000,14 +18000,19 @@ function kick() { if (BF3D.raf || !BF3D.on) return; BF3D.raf = requestAnimationF
       let c = [base[0] * k, base[1] * k, base[2] * k];
       const dust = sm(.55, 1.05, e) * (.25 + .75 * BFX.vnoise(x * 2.4 + sd, z * 2.4 + 9)) * .5 + (blot > .62 ? (blot - .62) * .7 : 0);
       c = BFX.mixc(c, [SANDC[0] * .9, SANDC[1] * .9, SANDC[2] * .9], Math.min(.55, dust));
-      if (o.mark) { const m = o.mark(x - cx, z - cz); if (m > 0) c = BFX.mixc(c, o.markCol || [.62, .55, .4], m * .17 * (.55 + .8 * BFX.vnoise(x * 11, z * 11))); }
+      if (o.mark) { const m = o.mark(x - cx, z - cz); if (m > 0) c = BFX.mixc(c, o.markCol || [.62, .55, .4], m * (o.markA || .17) * (.55 + .8 * BFX.vnoise(x * 11, z * 11))); }
       mb.quad([x - dx / 2, y, z - dz / 2], [x + dx / 2, y, z - dz / 2], [x + dx / 2, y, z + dz / 2], [x - dx / 2, y, z + dz / 2], c, [1, 0], [x, y - 1, z]);
     }
   }
   /* a wooden rail: dark sides, a grained top, a worn lighter edge and dust in the corners */
   function woodBar(mb, cx, cz, sx, sz, h, y0, seed) {
     const base = [WOOD[0] * 1.15, WOOD[1] * 1.1, WOOD[2] * 1.05];
-    BFX.box(mb, cx, y0, cz, sx, h, sz, 0, [base[0] * .8, base[1] * .8, base[2] * .8], [1, 0]);
+    { const ref = [cx, y0 + h / 2, cz], hx = sx / 2, hz = sz / 2, faces = [[[cx - hx, cz - hz], [cx + hx, cz - hz]], [[cx + hx, cz - hz], [cx + hx, cz + hz]], [[cx + hx, cz + hz], [cx - hx, cz + hz]], [[cx - hx, cz + hz], [cx - hx, cz - hz]]];
+      faces.forEach(([A, B], fi) => { const len = Math.hypot(B[0] - A[0], B[1] - A[1]), nu = Math.max(1, Math.round(len / .35)), nv = 4;
+        for (let a = 0; a < nu; a++) for (let b = 0; b < nv; b++) { const t0 = a / nu, t1 = (a + 1) / nu, v0 = y0 + h * b / nv, v1 = y0 + h * (b + 1) / nv, u = (t0 + t1) / 2 * len, v = (b + .5) / nv;
+          const k = (.55 + BFX.vnoise(u * 1.3 + seed + fi * 9, v * 5) * .35 + BFX.vnoise(u * 7 + seed, v * 1.5 + fi) * .12) * (.8 + .4 * v) * (BFX.vnoise(u * 2 + seed, v * 25 + fi) > .84 ? 1.3 : 1);
+          const c = BFX.mixc([base[0] * k, base[1] * k, base[2] * k], SANDC, v < .3 ? .22 * BFX.vnoise(u * 3 + seed, 4) : 0);
+          mb.quad([A[0] + (B[0] - A[0]) * t0, v0, A[1] + (B[1] - A[1]) * t0], [A[0] + (B[0] - A[0]) * t1, v0, A[1] + (B[1] - A[1]) * t1], [A[0] + (B[0] - A[0]) * t1, v1, A[1] + (B[1] - A[1]) * t1], [A[0] + (B[0] - A[0]) * t0, v1, A[1] + (B[1] - A[1]) * t0], c, [1, 0], ref); } }); }
     const along = sx >= sz, L = along ? sx : sz, W = along ? sz : sx, nl = Math.max(1, Math.round(L / .45)), nw = Math.max(2, Math.round(W / .14)), dl = L / nl, dw = W / nw, yt = y0 + h + .002;
     for (let a = 0; a < nl; a++) for (let b = 0; b < nw; b++) {
       const u = -L / 2 + (a + .5) * dl, v = -W / 2 + (b + .5) * dw, x = cx + (along ? u : v), z = cz + (along ? v : u);
@@ -18023,24 +18028,35 @@ function kick() { if (BF3D.raf || !BF3D.on) return; BF3D.raf = requestAnimationF
   /* the faded stamp in the middle of a rolling area: a ring, four ticks and two bars */
   const trayMark = d => (x, z) => { const r = Math.hypot(x, z), a = Math.atan2(z, x); let m = 0; if (Math.abs(r - d * .3) < .09) m = 1; if (Math.abs(r - d * .4) < .05) m = Math.max(m, .8); if (r > d * .3 && r < d * .46 && Math.abs(((a / (Math.PI / 2)) % 1 + 1) % 1 - .5) > .46) m = 1; if (Math.abs(z) < .07 && Math.abs(x) > d * .48 && Math.abs(x) < d * 1.5) m = 1; if (r < .5 && Math.abs(Math.abs(x) - Math.abs(z)) < .09) m = .9; return m; };
   function buildTrays() {
-    freeMesh(BF3D.trays); BF3D.trays = null; if (!BF3D.R || !BF3D.map) return; const mb = new BFX.MB(), rng = BFX.mulberry(7731);
+    freeMesh(BF3D.trays); BF3D.trays = null; freeMesh(BF3D.traySand); BF3D.traySand = null; if (!BF3D.R || !BF3D.map) return; const mb = new BFX.MB(), dec = new BFX.MB(), rng = BFX.mulberry(7731);
     const frame = (cx, cz, w, d, felt, o) => {
       const y0 = .02, x0 = cx - w / 2, z0 = cz - d / 2, sd = Math.abs(cx * 3 + cz * 7) % 50;
       BFX.box(mb, cx, y0 - .06, cz, w, .1, d, 0, BFX.shade(felt, .6), [1, 0]);
-      texFloor(mb, cx, cz, w, d, y0 + .045, felt, { seed: sd, mark: o && o.mark, markCol: o && o.markCol });
+      texFloor(mb, cx, cz, w, d, y0 + .045, felt, { seed: sd, mark: o && o.mark, markCol: o && o.markCol, markA: o && o.markA });
       for (const [ax, az, sx, sz] of [[cx, z0 - .3, w + 1.2, .6], [cx, z0 + d + .3, w + 1.2, .6], [x0 - .3, cz, .6, d], [x0 + w + .3, cz, .6, d]]) woodBar(mb, ax, az, sx, sz, .9, y0, sd + ax);
-      /* drifts of sand against the outside of the frame, so it stands in the dust rather than on it */
-      for (let i = 0, n = Math.round((w + d) * 1.1); i < n; i++) {
+      /* corner brackets with bolts, and a bolt every couple of inches along the long rails */
+      const IRON = [.2, .18, .16], BOLT = [.42, .36, .27], top = y0 + .92;
+      for (const [sx2, sz2] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+        const px = cx + sx2 * (w / 2 + .3), pz = cz + sz2 * (d / 2 + .3);
+        BFX.box(mb, px - sx2 * .28, top, pz, .9, .05, .3, 0, IRON, [.6, .7]); BFX.box(mb, px, top, pz - sz2 * .28, .3, .05, .9, 0, IRON, [.6, .7]);
+        for (const [bx, bz] of [[px - sx2 * .6, pz], [px, pz - sz2 * .6], [px, pz]]) BFX.tube(mb, [bx, top + .05, bz], [bx, top + .13, bz], .09, .07, 6, BOLT, [.5, .8], true);
+      }
+      for (const sgn of [-1, 1]) for (let bx = x0 + 2.4; bx < x0 + w - 1.2; bx += 2.4) BFX.tube(mb, [bx, top, cz + sgn * (d / 2 + .3)], [bx, top + .07, cz + sgn * (d / 2 + .3)], .07, .06, 6, BOLT, [.5, .8], true);
+      /* sand drifted against the outside of the frame, feathered out in soft layers so it melts into the floor */
+      for (let i = 0, n = Math.round((w + d) * .8); i < n; i++) {
         const side = Math.floor(rng() * 4), t = rng(); let px, pz;
-        if (side === 0) { px = x0 - .6 + t * (w + 1.2); pz = z0 - .75 - rng() * .5; } else if (side === 1) { px = x0 - .6 + t * (w + 1.2); pz = z0 + d + .75 + rng() * .5; } else if (side === 2) { px = x0 - .75 - rng() * .5; pz = z0 + t * d; } else { px = x0 + w + .75 + rng() * .5; pz = z0 + t * d; }
-        BFX.ground(mb, px, pz, .35 + rng() * .7, .25 + rng() * .45, 9, BFX.vary(SANDC, rng, .12), [1, 0], .03 + rng() * .02, null, rng, .5);
+        if (side === 0) { px = x0 - .6 + t * (w + 1.2); pz = z0 - .8 - rng() * .5; } else if (side === 1) { px = x0 - .6 + t * (w + 1.2); pz = z0 + d + .8 + rng() * .5; } else if (side === 2) { px = x0 - .8 - rng() * .5; pz = z0 + t * d; } else { px = x0 + w + .8 + rng() * .5; pz = z0 + t * d; }
+        const rx = .5 + rng() * .9, rz = .35 + rng() * .55, c = BFX.vary(SANDC, rng, .1);
+        for (let L = 0; L < 5; L++) { const f = 1 - L * .17; BFX.ground(dec, px, pz, rx * f * 1.5, rz * f * 1.5, 12, c, [.1, 0], .03 + L * .002, null, rng, .35); }
       }
     };
     for (const k of ['player', 'ai']) {
       const t = TRAY[k], m = matsOf(k), blue = (typeof hotBlue === 'function') ? hotBlue(k) : k === 'player', tint = blue ? [.05, .09, .2] : [.2, .06, .05];
-      frame(t.x, t.z, t.w, t.d, FELT, { mark: trayMark(t.d), markCol: [.6, .55, .38] }); frame(m.res.x, m.res.z, m.res.w, m.res.d, tint, { mark: (x, z) => (Math.abs(Math.hypot(x, z) - 1.4) < .07 || (Math.abs(x) < .06 && Math.abs(z) < 1.4)) ? 1 : 0 }); frame(m.trn.x, m.trn.z, m.trn.w, m.trn.d, tint, { mark: (x, z) => (Math.abs(Math.hypot(x, z) - 1.4) < .07 || (Math.abs(z) < .06 && Math.abs(x) < 1.4)) ? 1 : 0 });
+      frame(t.x, t.z, t.w, t.d, FELT, { mark: trayMark(t.d), markCol: [.6, .55, .38] }); const matMark = w => (x, z) => { let m = 0; for (const sx of [-1, 1]) { const dx = x - sx * (w / 2 - 1.7), r = Math.hypot(dx, z); if (Math.abs(r - 1.05) < .1 || (r < 1.05 && (Math.abs(dx) < .09 || Math.abs(z) < .09) && r > .35)) m = 1; } return m; };
+      frame(m.res.x, m.res.z, m.res.w, m.res.d, tint, { markA: .55, markCol: [.8, .74, .55], mark: matMark(m.res.w) }); frame(m.trn.x, m.trn.z, m.trn.w, m.trn.d, tint, { markA: .55, markCol: [.8, .74, .55], mark: matMark(m.trn.w) });
     }
     BF3D.trays = BF3D.R.upload(mb, 'solid'); BF3D.trays.hidden = !BF3D.opt.dice;
+    if (dec.I.length) { BF3D.traySand = BF3D.R.upload(dec, 'decal'); BF3D.traySand.on = !!BF3D.opt.dice; }
   }
   /* quaternions [x,y,z,w] */
   const qAx = (ax, a) => { const s = Math.sin(a / 2), l = Math.hypot(ax[0], ax[1], ax[2]) || 1; return [ax[0] / l * s, ax[1] / l * s, ax[2] / l * s, Math.cos(a / 2)]; };
@@ -18116,7 +18132,7 @@ function kick() { if (BF3D.raf || !BF3D.on) return; BF3D.raf = requestAnimationF
   try { const o = JSON.parse(localStorage.getItem(OPT_KEY) || 'null'); if (o) for (const k of Object.keys(BF3D.opt)) if (typeof o[k] === 'boolean') BF3D.opt[k] = o[k]; } catch (e) { }
   function applyOpts() {
     const o = BF3D.opt; if (BF3D.zm) BF3D.zm.on = o.zones; if (BF3D.om) BF3D.om.on = o.objs;
-    if (BF3D.trays) BF3D.trays.hidden = !o.dice; if (BF3D.diceMesh) BF3D.diceMesh.hidden = !o.dice;
+    if (BF3D.trays) BF3D.trays.hidden = !o.dice; if (BF3D.traySand) BF3D.traySand.on = !!o.dice; if (BF3D.diceMesh) BF3D.diceMesh.hidden = !o.dice;
     document.querySelectorAll('#b-3dbar [data-o]').forEach(b => b.setAttribute('aria-pressed', o[b.dataset.o]));
     BF3D.dirty = true; kick();
   }
