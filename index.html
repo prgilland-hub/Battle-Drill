@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.26-0234';
+  const VERSION = '2026.11.26-0238';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -24920,7 +24920,7 @@ function setReorder(on) {
 /* ============ MUSIC: gothic space horror, composed live with the Web Audio API (no audio files) ============ */
 const Mus = { ctx: null, bus: null, wet: null, master: null, on: false, tr: 0, theme: null, since: 0, mood: 'shuffle', cur: 'cathedral', vol: .5, timer: null, next: 0, bar: 0, left: 0, noise: null };
 try { Mus.vol = +(localStorage.getItem('battleDrill.musVol') || .5); Mus.mood = localStorage.getItem('battleDrill.musMood') || 'army'; if (!localStorage.getItem('battleDrill.musArmy1')) { localStorage.setItem('battleDrill.musArmy1', '1'); Mus.mood = 'army'; localStorage.setItem('battleDrill.musMood', 'army'); } } catch (e) { }
-const MOODS = { rot: 'The Rot Turns', warp: 'Warp-Touched Dirge', golden: 'The Golden Vigil', silver: 'Silver Vigil', regiment: 'March of the Regiments', waaagh: 'Da Big Racket', dance: 'Dance of Thorns', tomb: 'The Tomb Wakes', cadence: 'Greater Good Cadence', fenris: 'Howl of the Fenris', hymn: "Hymn of the Emperor's Sons", litany: 'Voices of the Faithful', main: 'Ashes and Dawn', cathedral: 'Cathedral of Dust', hive: 'Hive Fleet Rising', procession: 'Grim Procession', siege: 'Siege of Iron', forge: 'Forge Liturgy', void: 'The Silent Void' };
+const MOODS = { rot: 'The Rot Turns', warp: 'Warp-Touched Dirge', golden: 'The Golden Vigil', silver: 'Silver Vigil', regiment: 'March of the Regiments', waaagh: 'Da Big Racket', dance: 'Dance of Thorns', tomb: 'The Tomb Wakes', cadence: 'Greater Good Cadence', fenris: 'Howl of the Fenris', hymn: "Hymn of the Emperor's Sons", ultra: 'Honour and Duty', blood: 'Sanguine Requiem', dark: 'The Hollow Cloister', templar: "Crusader's Oath", salamander: 'Forge of Nocturne', litany: 'Voices of the Faithful', main: 'Ashes and Dawn', cathedral: 'Cathedral of Dust', hive: 'Hive Fleet Rising', procession: 'Grim Procession', siege: 'Siege of Iron', forge: 'Forge Liturgy', void: 'The Silent Void' };
 const mtof = n => 440 * Math.pow(2, (n + (Mus.tr || 0) - 69) / 12);
 const rnd = (a, b) => a + Math.random() * (b - a);
 function musInit() {
@@ -25273,7 +25273,74 @@ function barHymn(t, i) {
   if (k % 4 === 2) boom(t + 7, .22, 2);
   return L;
 }
-const BARS = { rot: barRot, warp: barWarp, golden: barGolden, silver: barSilver, regiment: barRegiment, waaagh: barWaaagh, dance: barDance, tomb: barTomb, cadence: barCadence, fenris: barFenris, hymn: barHymn, litany: barLitany, main: barMain, cathedral: barCathedral, hive: barHive, procession: barProcession, siege: barSiege, forge: barForge, void: barVoid };
+/* ---- Space Marine chapters: each has its own tempo, mode and instruments, so they no longer share the one hymn ---- */
+/* Ultramarines, Honour and Duty: a bright major-key march, brass fanfare over snare and timpani, noble and orderly */
+const ULT_R = [36, 41, 43, 36, 45, 41, 43, 36];
+const ULT_CH = [[60, 64, 67], [60, 65, 69], [59, 62, 67], [60, 64, 67], [60, 64, 69], [60, 65, 69], [59, 62, 67], [60, 64, 67]];
+const ULT_MEL = [[[0, 67, .9], [1, 72, .9], [2, 76, 1.9], [4, 74, .9], [5, 72, .9], [6, 67, 1.9]], [[0, 69, .9], [1, 72, .9], [2, 77, 1.9], [4, 76, .9], [5, 74, .9], [6, 72, 1.9]], [[0, 71, .9], [1, 74, .9], [2, 79, 1.9], [4, 77, .9], [5, 76, .9], [6, 74, 1.9]], [[0, 72, 1.9], [2, 76, .9], [3, 79, .9], [4, 84, 3.9]]];
+function barUltra(t, i) {
+  const b = 60 / 96, L = 8 * b, k = ((i % 8) + 8) % 8, r = ULT_R[k], ch = ULT_CH[k];
+  organ(t, r, L, .04); organ(t, r + 12, L, .022); organ(t, r + 7, L, .016);
+  for (let j = 0; j < 8; j++) { if (j % 2 === 0) boom(t + j * b, j % 4 === 0 ? .22 : .13, 1.2); else snare(t + j * b, .07, 2800); if (j % 2 === 1) snare(t + j * b + b * .5, .035, 3200); }
+  for (let j = 0; j < 8; j++) cello(t + j * b, r + (j % 4 === 2 ? 7 : 0) + 12, b * .9, .03, { attack: .06, release: .15 });
+  for (const [bt, n, d] of ULT_MEL[k % 4]) brass(t + bt * b, n, d * b, .05);
+  if (k % 2 === 0) ch.forEach((n, j) => choirNote(t + j * .3, n + 12, L - 1, { vowel: ['ah', 'oh', 'ah'][j], gain: .06, attack: 1.2, release: 1.4, pan: [-.4, 0, .4][j] }));
+  if (k === 3 || k === 7) { glock(t + 6 * b, 84, .04); glock(t + 7 * b, 91, .04); crash(t + 4 * b, .03); }
+  return L;
+}
+/* Blood Angels, Sanguine Requiem: a slow waltz of grief under a beating heart, high sighing voices and a lamenting cello */
+const BA_R = [38, 34, 31, 33, 38, 34, 31, 33];
+const BA_CH = [[62, 65, 69], [58, 62, 65], [55, 58, 62], [57, 61, 64], [62, 65, 69], [58, 62, 65], [55, 58, 62], [57, 61, 64]];
+const BA_MEL = [[[0, 74, 2], [2, 77, 1], [3, 76, 3]], [[0, 70, 2], [2, 74, 1], [3, 73, 3]], [[0, 67, 2], [2, 70, 1], [3, 69, 3]], [[0, 69, 2], [2, 73, 1], [3, 74, 3]]];
+function barBlood(t, i) {
+  const b = 1, L = 6, k = ((i % 8) + 8) % 8, r = BA_R[k], ch = BA_CH[k];
+  organ(t, r, L, .03); organ(t, r + 12, L, .02);
+  for (let j = 0; j < 2; j++) { drum(t + j * 3, .3, true); drum(t + j * 3 + .34, .17, true); }
+  ch.forEach((n, j) => choirNote(t + j * .5, n + 12, L - 1, { vowel: ['oh', 'ah', 'oo'][j], gain: .07, attack: 2, release: 2, pan: [-.5, 0, .5][j] }));
+  if (k % 2 === 1) choirNote(t + 1.5, ch[2] + 25, 3.5, { vowel: 'ah', gain: .035, attack: .8, release: 1.6, pan: .2 });
+  for (const [bt, n, d] of BA_MEL[k % 4]) cello(t + bt * b, n, d * b, .06, { attack: .3, release: .6, pan: .1 });
+  if (k % 4 === 0) gong(t, 38 + 12, .05, 5);
+  glass(t + 2, ch[1] + 24, 3.5, .018);
+  return L;
+}
+/* Dark Angels, The Hollow Cloister: a secret, a low monastic chant in open fifths on a Phrygian drone, a single toll, nothing else */
+const DA_CH = [[52, 59], [53, 60], [52, 59], [50, 57], [52, 59], [55, 62], [53, 60], [52, 59]];
+function barDark(t, i) {
+  const b = 60 / 48, L = 8 * b, k = ((i % 8) + 8) % 8, ch = DA_CH[k], nx = DA_CH[(k + 1) % 8];
+  organ(t, 28, L, .03); reed(t, 40, L, .014, { pan: -.4 }); if (k % 2) reed(t, 41, L, .01, { pan: .4 });
+  /* a plainchant: the line steps from one note to the next in open fifths, like a cloister procession */
+  [[0, ch[0]], [2.5, ch[1]], [5, nx[0]]].forEach(([q, n], j) => { choirNote(t + q * b, n, 3 * b, { vowel: 'oo', gain: .07, attack: 1, release: 1.4, pan: j % 2 ? .35 : -.35 }); choirNote(t + q * b + .15, n + 7, 3 * b, { vowel: 'oo', gain: .045, attack: 1.2, release: 1.4, pan: j % 2 ? -.35 : .35 }); });
+  gong(t, 40, .055, 6); if (k % 2) gong(t + 4 * b, 47, .03, 5);
+  for (let j = 0; j < 2; j++) drum(t + 2 * b + j * 4 * b, .1, true);
+  if (k % 4 === 1) cello(t + 3 * b, 41, 3.5, .04, { attack: 1, release: 1.4 });
+  glass(t + 1, 76 + (k % 2), 4, .012);
+  return L;
+}
+/* Black Templars, Crusader's Oath: relentless and fast, war drums, sword-on-shield clangs, a chanted vow and stabbing brass */
+const BT_R = [31, 31, 34, 29, 31, 31, 36, 34];
+function barTemplar(t, i) {
+  const b = 60 / 108, L = 8 * b, k = ((i % 8) + 8) % 8, r = BT_R[k];
+  organ(t, r, L, .042); organ(t, r + 12, L, .02); organ(t, r + 7, L, .02);
+  for (let j = 0; j < 8; j++) { drum(t + j * b, j % 2 === 0 ? .32 : .15, true); if (j % 2 === 1) { snare(t + j * b, .09, 2200); clang(t + j * b + b * .5, .028); } if (j % 4 === 3) { snare(t + j * b + b * .5, .05, 2600); snare(t + j * b + b * .75, .06, 2600); } }
+  for (let j = 0; j < 16; j++) pluck(t + j * b / 2, r + 12 + (j % 8 === 6 ? 3 : 0), j % 4 === 0 ? .04 : .022);
+  brass(t, r + 24, b * 1.6, .045); brass(t + 4 * b, r + (k % 2 ? 29 : 27), b * 1.6, .045); if (k % 4 === 3) brass(t + 6 * b, r + 31, b * 1.8, .05);
+  choirNote(t, r + 24, 4 * b, { vowel: 'oh', gain: .07, attack: .3, release: .5, pan: -.2 }); choirNote(t + 4 * b, r + 24, 4 * b, { vowel: 'ah', gain: .07, attack: .3, release: .5, pan: .2 });
+  return L;
+}
+/* Salamanders, Forge of Nocturne: a volcano's rumble and anvil strikes in a 3+3+2 pattern, warm low brass and cello, defiant and hopeful */
+const SAL_R = [40, 40, 43, 38, 40, 45, 43, 38];
+const SAL_MEL = [[[0, 55, 2], [2, 59, 1], [3, 62, 3]], [[0, 62, 2], [2, 59, 1], [3, 55, 3]], [[0, 59, 2], [2, 62, 1], [3, 67, 3]], [[0, 62, 1.5], [1.5, 59, 1.5], [3, 57, 3]]];
+function barSalamander(t, i) {
+  const b = 60 / 78, L = 8 * b, k = ((i % 8) + 8) % 8, r = SAL_R[k];
+  organ(t, r - 12 + 12, L, .045); organ(t, r + 7, L, .022); organ(t, r + 19, L, .014);
+  boom(t, .3, 3); if (k % 2) boom(t + 4 * b, .2, 2.4);
+  for (const q of [0, 1.5, 3, 4.5, 6, 7]) { clang(t + q * b, q === 0 || q === 3 || q === 6 ? .06 : .035); if (q === 0 || q === 4.5) drum(t + q * b, .12, true); }
+  for (const [bt, n, d] of SAL_MEL[k % 4]) { cello(t + bt * b * 2 / 2, n + 5, d * b, .055, { attack: .25, release: .5, pan: -.1 }); if (k % 2 === 0) brass(t + bt * b, n - 7, d * b, .03); }
+  choirNote(t + b, r + 12, L - 2, { vowel: 'oh', gain: .05, attack: 2, release: 2, pan: .3 });
+  if (k === 7) { glock(t + 5 * b, 79, .04); glock(t + 6 * b, 83, .04); glock(t + 7 * b, 86, .04); }
+  return L;
+}
+const BARS = { rot: barRot, warp: barWarp, golden: barGolden, silver: barSilver, regiment: barRegiment, waaagh: barWaaagh, dance: barDance, tomb: barTomb, cadence: barCadence, fenris: barFenris, hymn: barHymn, ultra: barUltra, blood: barBlood, dark: barDark, templar: barTemplar, salamander: barSalamander, litany: barLitany, main: barMain, cathedral: barCathedral, hive: barHive, procession: barProcession, siege: barSiege, forge: barForge, void: barVoid };
 /* each army has its own musical colour: a key, and the kinds of music it draws from. The score follows whose turn it is. */
 const ARMY_DEFAULT = { name: 'Gothic Vigil', tr: 0, pool: ['cathedral', 'hive', 'procession', 'siege', 'forge', 'void'], w: [1, 1, 1, 1, 1, 1] };
 const ARMY_THEMES = [
@@ -25290,6 +25357,11 @@ const ARMY_THEMES = [
   [/necron|amonhotekh/i, { name: 'The Tomb Wakes', tr: -4, pool: ['tomb'], w: [1] }],
   [/\bt.au\b|\btau\b|sudden dawn|farsight/i, { name: 'Greater Good Cadence', tr: 4, pool: ['cadence'], w: [1] }],
   [/space wolves|wolf|askar|fenris/i, { name: 'Howl of the Fenris', tr: 7, pool: ['fenris'], w: [1] }],
+  [/ultramarines|macragge|guilliman|ultramar|calgar/i, { name: 'Honour and Duty', tr: 1, pool: ['ultra'], w: [1] }],
+  [/blood angels|baal|sanguinary|dante|death company/i, { name: 'Sanguine Requiem', tr: 0, pool: ['blood'], w: [1] }],
+  [/dark angels|ravenwing|deathwing|inner circle|unforgiven/i, { name: 'The Hollow Cloister', tr: -4, pool: ['dark'], w: [1] }],
+  [/black templars|templar|crusade|helbrecht|sanctifiers|\bvow\b/i, { name: "Crusader's Oath", tr: 2, pool: ['templar'], w: [1] }],
+  [/salamanders|nocturne|vulkan|he.stan|firedrake/i, { name: 'Forge of Nocturne', tr: -1, pool: ['salamander'], w: [1] }],
   [/space marines|templar|angels|ultramarines|imperial|astartes|deathwatch|raven|salamander|fist|vedrenn|crowe|sanctifiers|assault force|inexorable|vow/i, { name: 'Hymn of the Emperor\'s Sons', tr: -3, pool: ['hymn'], w: [1] }]
 ];
 const MAIN_THEME = { name: 'Ashes and Dawn', tr: 0, pool: ['main'], w: [1] };
