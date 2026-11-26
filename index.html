@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.26-0057';
+  const VERSION = '2026.11.26-0102';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -6736,7 +6736,7 @@ function hotOverlay(title, sub, label) {
 /* hand the device to the other player: cover screen first, then swap so they are "you" */
 async function hotPass(why) {
   if (!G || !G.hot) return;
-  const nxt = hotName('ai'), bits = { turn: `Battle round ${G.round}. The board is hidden until you press the button.`, setup: 'The board is hidden until you press the button, so nobody sees the other player\'s choices.', react: `${escH(hotName('player'))} has finished. You can react now: ${escH(G.hotWhat || 'a stratagem')}. The board is hidden until you press the button.`, back: `Your reactions are done. ${escH(nxt)} carries on with the turn.` };
+  const nxt = hotName('ai'), bits = { turn: `Battle round ${G.round}. The board is hidden until you press the button.`, setup: 'The board is hidden until you press the button, so nobody sees the other player\'s choices.', react: `${escH(hotName('player'))} has finished. You can react now: ${escH(G.hotWhat || 'a stratagem')}. The board is hidden until you press the button.`, fight: G.hotWhat === 'Counter-offensive' ? `${escH(hotName('player'))} is about to fight again. You can use Counter-offensive (2 CP) to fight first. The board is hidden until you press the button.` : `Fight phase: it is your turn to choose which unit fights next. The board is hidden until you press the button.`, back: `Your reactions are done. ${escH(nxt)} carries on with the turn.` };
   G.busy = true; render();
   const colr = hotColour('ai'), cc = colr === 'Blue' ? '#6f9fe6' : '#e0685b';
   const qt = hotQuote(G.ab);
@@ -7648,13 +7648,17 @@ async function advanceFight() {
         if (G.stage !== 'battle' || G.gen !== gen) return;
         if (r === 'done') { F.turn = 'ai'; continue; }
       }
+      if (G.hot) { await hotPass('fight'); if (G.stage !== 'battle' || G.gen !== gen) return; continue; }
       render(); await sleep(500);
       if (G.stage !== 'battle' || G.gen !== gen) return;
       const pk = aiPickFight(fightPool('ai'));
       await resolveFight(pk.u, pk.t);
       F.turn = 'player'; continue;
     }
-    if (p === 'player' && await aiCounter()) { F.turn = 'player'; continue; }
+    if (G.hot && p === 'player') {
+      const candO = fightLeft().filter(u => u.side === 'ai');
+      if (candO.length && !fightPool('ai').length && canStrat('ai', 'counter', 2) && F.cAsk !== fightLeft().length) { F.cAsk = fightLeft().length; G.hotWhat = 'Counter-offensive'; await hotPass('fight'); if (G.stage !== 'battle' || G.gen !== gen) return; continue; }
+    } else if (p === 'player' && await aiCounter()) { F.turn = 'player'; continue; }
     F.awaiting = true; render(); return;
   }
 }
