@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.26-0224';
+  const VERSION = '2026.11.26-0231';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -16551,8 +16551,29 @@ class MB {
 }
 const shade = (c, k) => [c[0] * k, c[1] * k, c[2] * k], mixc = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
 const vary = (c, rng, amt) => { const k = 1 + (rng() - .5) * 2 * amt; return [c[0] * k, c[1] * k * (1 + (rng() - .5) * amt * .4), c[2] * k]; };
+/* a box whose edges and corners are chamfered, so every block catches a line of light instead of looking like a cube from a voxel game */
+function bevelBox(mb, cx, cy, cz, sx, sy, sz, ry, col, m, jit, rng, b) {
+  const cs = Math.cos(ry || 0), sn = Math.sin(ry || 0), C = [], j = jit ? () => (rng() - .5) * 2 * jit : () => 0;
+  for (let i = 0; i < 8; i++) { const lx = (i & 1 ? .5 : -.5) * sx, lz = (i & 2 ? .5 : -.5) * sz, top = i >> 2; C.push([cx + lx * cs - lz * sn + j(), cy + (top ? sy : 0) + (top ? j() : 0), cz + lx * sn + lz * cs + j()]); }
+  const nz = v => { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; }, sub = (a, c) => [a[0] - c[0], a[1] - c[1], a[2] - c[2]], add = (a, c, k) => [a[0] + c[0] * k, a[1] + c[1] * k, a[2] + c[2] * k];
+  /* for corner i: unit vectors along x (bit 0), z (bit 1) and y (bit 2) pointing into the box */
+  const ex = i => nz(sub(C[i ^ 1], C[i])), ez = i => nz(sub(C[i ^ 2], C[i])), ey = i => nz(sub(C[i ^ 4], C[i]));
+  /* only the horizontal edges are chamfered: the upright edges stay crisp, so courses of blocks do not show dark seams */
+  const F = i => [add(C[i], ey(i), b), add(C[i], ey(i), b), add(add(C[i], ex(i), b), ez(i), b)];   /* the points where the faces x, z and y begin at this corner */
+  const P = []; for (let i = 0; i < 8; i++) P.push(F(i));
+  const ref = [cx, cy + sy / 2, cz], hi = [Math.min(1, col[0] * 1.05), Math.min(1, col[1] * 1.05), Math.min(1, col[2] * 1.04)];
+  const face = (axis, bit) => { const idx = []; for (let i = 0; i < 8; i++) if (((i >> axis) & 1) === bit) idx.push(i); return idx; };
+  /* faces: axis 0 = x (bit 0), 1 = z (bit 1), 2 = y (bit 2); P[i][a] is the corner point on the face perpendicular to axis a */
+  for (const [a, bit] of [[0, 0], [0, 1], [1, 0], [1, 1], [2, 0], [2, 1]]) { const f = face(a, bit); const ord = f.slice(); /* order the four corners around the face */ const o2 = [ord[0], ord[1], ord[3], ord[2]]; mb.quad(P[o2[0]][a], P[o2[1]][a], P[o2[2]][a], P[o2[3]][a], col, m, ref); }
+  /* the chamfer strips along each of the twelve edges */
+  for (let i = 0; i < 8; i++) for (let a = 0; a < 3; a++) { if ((i >> a) & 1) continue; const k = i | (1 << a); for (let c = 0; c < 3; c++) { if (c === a) continue; for (let d = c + 1; d < 3; d++) { if (d === a) continue; /* the edge along axis a joins faces c and d */ mb.quad(P[i][c], P[k][c], P[k][d], P[i][d], hi, m, ref); } } }
+  /* the corner triangles */
+  for (let i = 0; i < 8; i++) mb.tri(P[i][0], P[i][1], P[i][2], hi, m, ref);
+}
 /* a box standing on y; ry turns it; jit wobbles the corners so nothing is perfectly square */
 function box(mb, cx, cy, cz, sx, sy, sz, ry, col, m, jit, rng) {
+  const md = Math.min(sx, sy, sz);
+  if (md >= .14 && !box.flat) return bevelBox(mb, cx, cy, cz, sx, sy, sz, ry, col, m, jit, rng, Math.max(.02, Math.min(.05, md * .08)));
   const cs = Math.cos(ry || 0), sn = Math.sin(ry || 0), K = [];
   for (let k = 0; k < 8; k++) {
     const lx = (k & 1 ^ (k >> 1 & 1) ? .5 : -.5) * sx, lz = (k >> 1 & 1 ? .5 : -.5) * sz, top = k >> 2;
@@ -16642,7 +16663,7 @@ void main(){
   float hz=exp(-max(vW.y,0.)*.6)*clamp((d-16.)*.011,0.,.4); col=mix(col,uFog,hz);
   col=mix(col,uFog,clamp(f,0.,1.));
   float ed=max(abs(vW.x-30.)/88.,abs(vW.z-22.)/80.); col=mix(col,uFog,smoothstep(.78,1.15,ed));
-  vec3 vd=normalize(uCam-vW); float rim=pow(1.-max(dot(n,vd),0.),3.)*(1.-abs(n.y))*smoothstep(.0,.7,vW.y+.3); col+=vec3(.05,.12,.26)*rim*(.35+.65*(1.-ndl)); if(uQ>1.5) col+=uAmbT*c*pow(1.-max(dot(n,vd),0.),4.)*.5*(.4+.6*n.y);
+  vec3 vd=normalize(uCam-vW); float rim=pow(1.-max(dot(n,vd),0.),3.)*(1.-abs(n.y))*smoothstep(.0,.7,vW.y+.3); col+=vec3(.04,.06,.1)*rim*(.35+.65*(1.-ndl)); if(uQ>1.5) col+=uAmbT*c*pow(1.-max(dot(n,vd),0.),4.)*.5*(.4+.6*n.y);
   col=max(col-.03,0.)*1.14;
   col=clamp((col*(2.51*col+.03))/(col*(2.43*col+.59)+.14),0.,1.); col=pow(col,vec3(1./2.2));
   col=mix(col,col*col*(3.-2.*col),.46);
