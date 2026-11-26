@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.26-0155';
+  const VERSION = '2026.11.26-0200';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -17386,7 +17386,7 @@ function buildMap(spec) {
   return { solid, decal, zdec, odec, th: Object.assign({}, th, { env: Object.assign({}, th.env, { lights }) }), H, ok, rects };
 }
 
-return { setSize(w, h) { BW = w; BH = h; }, ENV_KEYS, Renderer, Cam, MB, buildMap, THEMES, layoutTerrain, OBJS, CLEAR, mulberry, box, tube, blob, ground, profileRun, shade, vary, v3, m4, lerp, clamp, get BW() { return BW; }, get BH() { return BH; }, inPoly, crate, container, deadTree, rubble, pillar, JB, CRATE, STONE, MOSSY };
+return { setSize(w, h) { BW = w; BH = h; }, ENV_KEYS, Renderer, Cam, MB, buildMap, THEMES, layoutTerrain, OBJS, CLEAR, mulberry, vnoise, mixc, box, tube, blob, ground, profileRun, shade, vary, v3, m4, lerp, clamp, get BW() { return BW; }, get BH() { return BH; }, inPoly, crate, container, deadTree, rubble, pillar, JB, CRATE, STONE, MOSSY };
 })();
 
 /* ===== 3D board view: look-only; draws the game's real terrain, zones, objectives and models ===== */
@@ -17753,6 +17753,12 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
     const stroke = (col, w, dash, alpha) => { ctx.setLineDash([]); ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.globalAlpha = (alpha === undefined ? 1 : alpha) * .55; ctx.strokeStyle = '#0a0c0d'; ctx.lineWidth = w + 2.2; ctx.stroke(); ctx.setLineDash(dash || []); ctx.globalAlpha = alpha === undefined ? 1 : alpha; ctx.strokeStyle = col; ctx.lineWidth = w; ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1; };
     const ring = (x, y, r, col, w, dash, alpha, up) => { const pts = []; for (let i = 0; i <= 90; i++) { const a = i / 90 * 6.2832; pts.push(P(x + Math.cos(a) * r, y + Math.sin(a) * r, up === undefined ? .12 : up)); } path(pts); stroke(col, w, dash, alpha); };
     const pill = (p, text, col, big, alpha) => { if (!p) return; ctx.font = `700 ${big ? 13 : 11}px system-ui,sans-serif`; const tw = ctx.measureText(text).width + 10, th = big ? 21 : 17, x = p[0] - tw / 2, y = p[1] - th / 2; ctx.globalAlpha = alpha === undefined ? 1 : alpha; ctx.fillStyle = 'rgba(12,14,16,.86)'; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x, y, tw, th, 5) : ctx.rect(x, y, tw, th); ctx.fill(); ctx.strokeStyle = col; ctx.lineWidth = 1; ctx.stroke(); ctx.fillStyle = col; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(text, p[0], p[1] + .5); ctx.globalAlpha = 1; };
+    /* a weathered metal plate with rivets and stamped letters, in the side's colour along the foot */
+    const plaque = (p, text, col) => { if (!p) return; ctx.font = '700 11px "Courier New",monospace'; const tw = ctx.measureText(text.toUpperCase()).width + 22, th = 20, x = p[0] - tw / 2, y = p[1] - th / 2;
+      const g = ctx.createLinearGradient(0, y, 0, y + th); g.addColorStop(0, '#8c7a58'); g.addColorStop(.5, '#6e5f44'); g.addColorStop(1, '#4e4331'); ctx.fillStyle = g; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x, y, tw, th, 3) : ctx.rect(x, y, tw, th); ctx.fill();
+      ctx.strokeStyle = 'rgba(30,24,16,.9)'; ctx.lineWidth = 1.4; ctx.stroke(); ctx.fillStyle = col; ctx.globalAlpha = .85; ctx.fillRect(x + 2, y + th - 3.5, tw - 4, 2); ctx.globalAlpha = 1;
+      ctx.fillStyle = 'rgba(25,20,14,.8)'; for (const [rx, ry] of [[x + 4, y + 4], [x + tw - 4, y + 4], [x + 4, y + th - 7], [x + tw - 4, y + th - 7]]) { ctx.beginPath(); ctx.arc(rx, ry, 1.4, 0, 7); ctx.fill(); }
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = 'rgba(235,222,190,.35)'; ctx.fillText(text.toUpperCase(), p[0] + .6, p[1] - 1.4 + .8); ctx.fillStyle = '#231c12'; ctx.fillText(text.toUpperCase(), p[0], p[1] - 1.4); };
     const labels = [];
     const sel = G.sel && G.sel.placed ? G.sel : null;
     /* faction auras */
@@ -17863,7 +17869,7 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
       if (BF3D.opt.dice && BF3D.offLabels) for (const l of BF3D.offLabels) {
         const blue = typeof hotBlue === 'function' ? hotBlue(l.side) : l.side === 'player';
         if (l.unit) pill(P(l.x, l.z, .2), (l.tag === 'in' ? '\u21b3 ' : '') + l.text, blue ? '#a9c9ff' : '#ffb0a6', false, l.tag === 'carrier' ? 1 : .95);
-        else { const out = l.z > BH / 2 ? 1 : -1; pill(P(l.x, l.z + out * (l.d / 2 + 1.3), .2), l.text, blue ? '#7db4ff' : '#ff8478', false, 1); }
+        else { const out = l.z > BH / 2 ? 1 : -1; plaque(P(l.x, l.z + out * (l.d / 2 + 1.3), .2), l.text, blue ? '#7db4ff' : '#ff8478'); }
       }
     } catch (e) { }
     for (const l of labels) pill(l[0], l[1], l[2], l[3], l[4]);
@@ -17981,12 +17987,58 @@ function kick() { if (BF3D.raf || !BF3D.on) return; BF3D.raf = requestAnimationF
     return { slots: out, od, m };
   }
   BF3D.offTable = offTable; BF3D.offSlots = offSlots;
+  /* the trays are dressed to match the weathered table: worn felt, scratched wood, a faded stencil and drifted sand, all painted into vertex colours */
+  const SANDC = [.5, .41, .29], sm = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  function texFloor(mb, cx, cz, w, d, y, base, o) {
+    o = o || {}; const cs = .2, nx = Math.max(1, Math.round(w / cs)), nz = Math.max(1, Math.round(d / cs)), dx = w / nx, dz = d / nz, sd = o.seed || 0;
+    for (let a = 0; a < nx; a++) for (let b = 0; b < nz; b++) {
+      const x = cx - w / 2 + (a + .5) * dx, z = cz - d / 2 + (b + .5) * dz, ex = Math.abs(x - cx) / (w / 2), ez = Math.abs(z - cz) / (d / 2), e = Math.min(1.2, Math.sqrt(ex * ex + ez * ez) / 1.2);
+      const wall = Math.min(w / 2 - Math.abs(x - cx), d / 2 - Math.abs(z - cz));                     /* distance to the nearest inside wall */
+      const fine = BFX.vnoise(x * 9 + sd, z * 9), blot = BFX.vnoise(x * 1.1 + sd * 3, z * 1.1), weave = ((Math.floor(x / .1) + Math.floor(z / .1)) & 1) * .035;
+      let k = (.92 + (fine - .5) * .22 + (blot - .5) * .3 + weave) * (1.1 - .3 * Math.pow(e, 1.6));      /* worn lighter in the middle, darker at the edges */
+      k *= .55 + .45 * sm(0, .9, wall);                                                              /* deep shadow where the floor meets the wall */
+      let c = [base[0] * k, base[1] * k, base[2] * k];
+      const dust = sm(.55, 1.05, e) * (.25 + .75 * BFX.vnoise(x * 2.4 + sd, z * 2.4 + 9)) * .5 + (blot > .62 ? (blot - .62) * .7 : 0);
+      c = BFX.mixc(c, [SANDC[0] * .9, SANDC[1] * .9, SANDC[2] * .9], Math.min(.55, dust));
+      if (o.mark) { const m = o.mark(x - cx, z - cz); if (m > 0) c = BFX.mixc(c, o.markCol || [.62, .55, .4], m * .17 * (.55 + .8 * BFX.vnoise(x * 11, z * 11))); }
+      mb.quad([x - dx / 2, y, z - dz / 2], [x + dx / 2, y, z - dz / 2], [x + dx / 2, y, z + dz / 2], [x - dx / 2, y, z + dz / 2], c, [1, 0], [x, y - 1, z]);
+    }
+  }
+  /* a wooden rail: dark sides, a grained top, a worn lighter edge and dust in the corners */
+  function woodBar(mb, cx, cz, sx, sz, h, y0, seed) {
+    const base = [WOOD[0] * 1.15, WOOD[1] * 1.1, WOOD[2] * 1.05];
+    BFX.box(mb, cx, y0, cz, sx, h, sz, 0, [base[0] * .8, base[1] * .8, base[2] * .8], [1, 0]);
+    const along = sx >= sz, L = along ? sx : sz, W = along ? sz : sx, nl = Math.max(1, Math.round(L / .45)), nw = Math.max(2, Math.round(W / .14)), dl = L / nl, dw = W / nw, yt = y0 + h + .002;
+    for (let a = 0; a < nl; a++) for (let b = 0; b < nw; b++) {
+      const u = -L / 2 + (a + .5) * dl, v = -W / 2 + (b + .5) * dw, x = cx + (along ? u : v), z = cz + (along ? v : u);
+      const grain = BFX.vnoise(v * 14 + seed, u * .55 + seed * 2), ring = Math.sin(v * 22 + BFX.vnoise(u * .4, v * 3 + seed) * 5) * .5 + .5;
+      let k = .8 + grain * .35 + ring * .16; const edge = Math.min(b, nw - 1 - b) === 0 ? 1.22 : 1;                  /* worn, lighter edge */
+      const scratch = BFX.vnoise(u * 3 + seed, v * 40) > .83 ? 1.28 : 1; k *= edge * scratch;
+      let c = [base[0] * k, base[1] * k, base[2] * k]; const endd = Math.min(a, nl - 1 - a) === 0 ? .5 : 0;
+      c = BFX.mixc(c, SANDC, Math.min(.6, endd * .6 + (BFX.vnoise(u * 2 + seed, v * 5) > .68 ? .3 : 0)));                   /* dust gathers in the corners */
+      const q = [[x - (along ? dl : dw) / 2, yt, z - (along ? dw : dl) / 2], [x + (along ? dl : dw) / 2, yt, z - (along ? dw : dl) / 2], [x + (along ? dl : dw) / 2, yt, z + (along ? dw : dl) / 2], [x - (along ? dl : dw) / 2, yt, z + (along ? dw : dl) / 2]];
+      mb.quad(q[0], q[1], q[2], q[3], c, [1, 0], [x, yt - 1, z]);
+    }
+  }
+  /* the faded stamp in the middle of a rolling area: a ring, four ticks and two bars */
+  const trayMark = d => (x, z) => { const r = Math.hypot(x, z), a = Math.atan2(z, x); let m = 0; if (Math.abs(r - d * .3) < .09) m = 1; if (Math.abs(r - d * .4) < .05) m = Math.max(m, .8); if (r > d * .3 && r < d * .46 && Math.abs(((a / (Math.PI / 2)) % 1 + 1) % 1 - .5) > .46) m = 1; if (Math.abs(z) < .07 && Math.abs(x) > d * .48 && Math.abs(x) < d * 1.5) m = 1; if (r < .5 && Math.abs(Math.abs(x) - Math.abs(z)) < .09) m = .9; return m; };
   function buildTrays() {
-    freeMesh(BF3D.trays); BF3D.trays = null; if (!BF3D.R || !BF3D.map) return; const mb = new BFX.MB();
-    const frame = (cx, cz, w, d, felt) => { const y0 = .02, x0 = cx - w / 2, z0 = cz - d / 2; BFX.box(mb, cx, y0, cz, w, .1, d, 0, felt, [.5, 0]); for (const [ax, az, sx, sz] of [[cx, z0 - .3, w + 1.2, .6], [cx, z0 + d + .3, w + 1.2, .6], [x0 - .3, cz, .6, d], [x0 + w + .3, cz, .6, d]]) BFX.box(mb, ax, y0, az, sx, .9, sz, 0, WOOD, [.35, 0]); };
+    freeMesh(BF3D.trays); BF3D.trays = null; if (!BF3D.R || !BF3D.map) return; const mb = new BFX.MB(), rng = BFX.mulberry(7731);
+    const frame = (cx, cz, w, d, felt, o) => {
+      const y0 = .02, x0 = cx - w / 2, z0 = cz - d / 2, sd = Math.abs(cx * 3 + cz * 7) % 50;
+      BFX.box(mb, cx, y0 - .06, cz, w, .1, d, 0, BFX.shade(felt, .6), [1, 0]);
+      texFloor(mb, cx, cz, w, d, y0 + .045, felt, { seed: sd, mark: o && o.mark, markCol: o && o.markCol });
+      for (const [ax, az, sx, sz] of [[cx, z0 - .3, w + 1.2, .6], [cx, z0 + d + .3, w + 1.2, .6], [x0 - .3, cz, .6, d], [x0 + w + .3, cz, .6, d]]) woodBar(mb, ax, az, sx, sz, .9, y0, sd + ax);
+      /* drifts of sand against the outside of the frame, so it stands in the dust rather than on it */
+      for (let i = 0, n = Math.round((w + d) * 1.1); i < n; i++) {
+        const side = Math.floor(rng() * 4), t = rng(); let px, pz;
+        if (side === 0) { px = x0 - .6 + t * (w + 1.2); pz = z0 - .75 - rng() * .5; } else if (side === 1) { px = x0 - .6 + t * (w + 1.2); pz = z0 + d + .75 + rng() * .5; } else if (side === 2) { px = x0 - .75 - rng() * .5; pz = z0 + t * d; } else { px = x0 + w + .75 + rng() * .5; pz = z0 + t * d; }
+        BFX.ground(mb, px, pz, .35 + rng() * .7, .25 + rng() * .45, 9, BFX.vary(SANDC, rng, .12), [1, 0], .03 + rng() * .02, null, rng, .5);
+      }
+    };
     for (const k of ['player', 'ai']) {
-      const t = TRAY[k], m = matsOf(k), blue = (typeof hotBlue === 'function') ? hotBlue(k) : k === 'player', tint = blue ? [.04, .08, .2] : [.2, .05, .05];
-      frame(t.x, t.z, t.w, t.d, FELT); frame(m.res.x, m.res.z, m.res.w, m.res.d, tint); frame(m.trn.x, m.trn.z, m.trn.w, m.trn.d, tint);
+      const t = TRAY[k], m = matsOf(k), blue = (typeof hotBlue === 'function') ? hotBlue(k) : k === 'player', tint = blue ? [.05, .09, .2] : [.2, .06, .05];
+      frame(t.x, t.z, t.w, t.d, FELT, { mark: trayMark(t.d), markCol: [.6, .55, .38] }); frame(m.res.x, m.res.z, m.res.w, m.res.d, tint, { mark: (x, z) => (Math.abs(Math.hypot(x, z) - 1.4) < .07 || (Math.abs(x) < .06 && Math.abs(z) < 1.4)) ? 1 : 0 }); frame(m.trn.x, m.trn.z, m.trn.w, m.trn.d, tint, { mark: (x, z) => (Math.abs(Math.hypot(x, z) - 1.4) < .07 || (Math.abs(z) < .06 && Math.abs(x) < 1.4)) ? 1 : 0 });
     }
     BF3D.trays = BF3D.R.upload(mb, 'solid'); BF3D.trays.hidden = !BF3D.opt.dice;
   }
