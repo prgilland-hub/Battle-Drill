@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.26-0207';
+  const VERSION = '2026.11.26-0217';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -25095,12 +25095,15 @@ function flute(t, midi, dur, gain, o) {
 }
 /* Death Guard: a slow funeral toll in three, a tuba sagging over sour drones, flies */
 function barRot(t, i) {
-  const L = 12, root = [36, 36, 35, 34][Math.floor(i / 2) % 4];
-  organ(t, root, L, .02); organ(t + .3, root + 1, L, .012); organ(t, root + 6, L, .008);
-  brass(t + 1, root + 12, 4.2, .026); brass(t + 6, root + 10, 4.6, .022);
-  for (const x of [0, 4, 8]) bell(t + x, root + 12, x ? .035 : .05, true);
-  choirNote(t + 2, root + 12, L - 3, { vowel: 'oh', gain: .04, attack: 3, release: 3, pan: -.2 });
-  if (Math.random() < .7) buzz(t + rnd(0, 4), rnd(5, 8), .018);
+  const b = 60 / 54, L = 8 * b, k = ((i % 8) + 8) % 8, root = [36, 36, 35, 34][Math.floor(i / 2) % 4];
+  organ(t, root, L, .05); organ(t, root + 7, L, .026); organ(t + .2, root + 1, L, .018); organ(t, root + 6, L, .012);
+  /* a muffled funeral tread starts at once and never stops */
+  for (let j = 0; j < 8; j++) { const tt = t + j * b; if (j % 2 === 0) drum(tt, j % 4 === 0 ? .26 : .16, true); if (j % 4 === 0) boom(tt, .2, 1.6); }
+  /* the tuba line: a slow sagging phrase, beginning on the first beat */
+  const mel = [[0, 0, 3], [3, -2, 1], [4, -3, 2], [6, -5, 2]]; for (const [bt, off, d] of mel) brass(t + bt * b, root + 12 + off + (k % 2 ? -1 : 0), d * b - .05, .042);
+  bell(t, root + 12, .1, true); if (k % 2) bell(t + 4 * b, root + 7, .06, true);
+  choirNote(t + .3, root + 12, L - 1, { vowel: 'oh', gain: .07, attack: 1, release: 2, pan: -.2 });
+  if (Math.random() < .8) buzz(t + rnd(0, 3), rnd(4, 7), .03);
   return L;
 }
 /* Chaos: shifting chromatic clusters, ragged ritual drums, shrieks */
@@ -25215,7 +25218,7 @@ const BARS = { rot: barRot, warp: barWarp, golden: barGolden, silver: barSilver,
 /* each army has its own musical colour: a key, and the kinds of music it draws from. The score follows whose turn it is. */
 const ARMY_DEFAULT = { name: 'Gothic Vigil', tr: 0, pool: ['cathedral', 'hive', 'procession', 'siege', 'forge', 'void'], w: [1, 1, 1, 1, 1, 1] };
 const ARMY_THEMES = [
-  [/death guard|nurgle|maggot|rot/i, { name: 'The Rot Turns', tr: -6, pool: ['rot'], w: [1] }],
+  [/death guard|nurgle|maggot|rot/i, { name: 'The Rot Turns', tr: -3, pool: ['rot'], w: [1] }],
   [/chaos|thousand sons|world eaters|emperor.s children|heretic|daemon|zarkan|zadophon|reaver|callous|coven|claw of/i, { name: 'Warp-Touched Dirge', tr: 3, pool: ['warp'], w: [1] }],
   [/sororitas|sisters|sanctuary|miracle/i, { name: 'Litany of the Faithful', tr: 3, pool: ['litany'], w: [1] }],
   [/custodes|gilded|tristraen/i, { name: 'The Golden Vigil', tr: 5, pool: ['golden'], w: [1] }],
