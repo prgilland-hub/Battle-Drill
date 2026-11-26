@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.25-1644';
+  const VERSION = '2026.11.26-0029';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -1139,7 +1139,7 @@ button[data-tip],label[data-tip] input,label[data-tip] select{cursor:pointer}
 .game-opts{margin:.4rem 0;border:1px solid var(--line);border-radius:6px;background:var(--raised)}
 .game-opts>summary{cursor:pointer;padding:7px 10px;font-weight:600;font-size:.92rem}
 .game-opts .setup{border-top:0;margin-top:0;padding:4px 10px 10px}
-.endrow{margin-top:8px;display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.endrow{margin-top:10px;padding-top:10px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;align-items:center;gap:8px}
 .endrow:empty{display:none}
 .endrow .btn{padding:5px 12px;font-size:.88rem}
 .next .prompt{font-size:1.05rem;font-weight:600;min-height:0;max-height:min(42vh,22rem);overflow-y:auto;overscroll-behavior:contain}
@@ -2165,7 +2165,7 @@ html[data-look="cog"] .muted{color:var(--muted)}
         <button type="button" id="b-misbtn" class="fs-btn" aria-expanded="false" aria-controls="b-mispop" title="Primary and secondary missions" hidden>Missions</button>
         <div id="b-mispop" hidden role="dialog" aria-label="Missions"></div>
         <button type="button" id="b-optbtn" class="fs-btn" aria-expanded="false" aria-controls="b-optpop" title="Game options" hidden>Options</button>
-        <div id="b-optpop" hidden role="dialog" aria-label="Game options"><div id="b-opts-pop"></div><p class="muted" style="margin:6px 0 0;font-size:.82rem">Dice rolling and the walkthrough are in <button type="button" class="linkbtn" id="b-to-settings">Settings</button>.</p></div>
+        <div id="b-optpop" hidden role="dialog" aria-label="Game options"><div id="b-opts-pop"></div><p class="muted" style="margin:6px 0 0;font-size:.82rem">Dice rolling and the walkthrough are in <button type="button" class="linkbtn" id="b-to-settings">Settings</button>.</p><div id="b-endrow" class="endrow"></div></div>
       </div>
       <div id="dice-tray" class="tray" hidden aria-live="polite"></div>
       <div class="panel map-extras">
@@ -2230,7 +2230,6 @@ html[data-look="cog"] .muted{color:var(--muted)}
       <div class="prompt" id="b-prompt"></div>
       <div class="actions" id="b-actions"></div>
       <div id="b-weapons"></div>
-      <div id="b-endrow" class="endrow"></div>
     </div>
     <aside class="panel side">
       <div id="b-armies" class="b-armies"></div>
@@ -17842,7 +17841,7 @@ function kick() { if (BF3D.raf || !BF3D.on) return; BF3D.raf = requestAnimationF
 
 
 (function () { const b = document.getElementById('b-optbtn'), pp = document.getElementById('b-optpop'); if (!b || !pp) return;
-  b.addEventListener('click', e => { e.stopPropagation(); pp.hidden = !pp.hidden; b.setAttribute('aria-expanded', String(!pp.hidden)); });
+  b.addEventListener('click', e => { e.stopPropagation(); pp.hidden = !pp.hidden; b.setAttribute('aria-expanded', String(!pp.hidden)); if (typeof G !== 'undefined' && G && G.confirmEnd) { G.confirmEnd = false; renderEndRow(); } });
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && !pp.hidden) { pp.hidden = true; b.setAttribute('aria-expanded', 'false'); } });
   document.addEventListener('pointerdown', e => { if (!pp.hidden && !pp.contains(e.target) && e.target !== b) { pp.hidden = true; b.setAttribute('aria-expanded', 'false'); } }, true);
 })();
