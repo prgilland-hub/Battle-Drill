@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.26-0205';
+  const VERSION = '2026.11.26-0207';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -24940,7 +24940,6 @@ function barHive(t, i) {
   if (i % 2 === 0) heartbeat(t + rnd(1, 4), .22);
   if (Math.random() < .55) shriek(t + rnd(3, L - 4), pick([88, 91, 93]), rnd(3, 5.5), .018);
   if (Math.random() < .6) for (let k = 0; k < 3; k++) ping(t + rnd(0, L - 1), pick([86, 89, 90, 94]), .02);
-  if (i % 4 === 3) bell(t + 2, 62, .1, true);
   buzz(t + rnd(0, 3), rnd(6, 10), .03); if (Math.random() < .6) buzz(t + rnd(2, 6), rnd(4, 8), .022);
   return L;
 }
@@ -24985,7 +24984,7 @@ function barForge(t, i) {
   drum(t, .16, false); drum(t + 8 * st, .1, false); if (i % 2 === 0) drum(t, .25, true);
   if (i % 2 === 0) choirNote(t, root + 24, L * 2 - 1, { vowel: 'eh', gain: .06, attack: 1.5, release: 2, pan: 0 });
   if (i % 4 === 1) for (let k = 0; k < 3; k++) ping(t + rnd(0, L - 1), pick([91, 93, 96]), .015);
-  if (i % 4 === 3) bell(t + 3 * st, root + 36, .06);
+  if (i % 4 === 3) clang(t + 3 * st, .05);
   return L;
 }
 /* The Silent Void: sparse drones, far-off pings and a held choir, no drums */
@@ -25037,8 +25036,32 @@ function barMain(t, i) {
   if (k >= 4) cello(t + 2 * b, ch[0] - 12, 1.9 * b, .05, { pan: .25 });
   for (const [bt, n, d] of MAIN_MEL[k]) brass(t + bt * b, n, d * b - .08, k >= 4 ? .04 : .032);
   if (k >= 4) ch.forEach((n, j) => pluck(t + (1 + j) * b, n + 12, .05));
-  if (k === 0 || last) bell(t + .1, root + 24, .11, true);
+  if (k === 0 || last) glock(t + .1, root + 36, .07);
   return L;
+}
+/* each army gets its own kind of accent instead of one shared bell */
+function glock(t, midi, gain) {
+  const ctx = Mus.ctx, f = mtof(midi), out = ctx.createGain(); out.gain.value = gain || .06;
+  for (const [r, a, d] of [[1, 1, .9], [2.76, .35, .4], [5.4, .15, .2]]) { const o = ctx.createOscillator(), g = ctx.createGain(); o.type = 'sine'; o.frequency.value = f * r; g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(a, t + .004); g.gain.exponentialRampToValueAtTime(.0008, t + d); o.connect(g); g.connect(out); o.start(t); o.stop(t + d + .1); }
+  out.connect(Mus.bus);
+}
+function gong(t, midi, gain, dur) {
+  const ctx = Mus.ctx, f = mtof(midi), out = ctx.createGain(), D = dur || 6; out.gain.value = gain || .08;
+  for (const [r, a] of [[1, 1], [1.47, .6], [2.09, .5], [2.57, .35], [3.35, .22], [4.7, .12]]) for (const dt of [-4, 5]) { const o = ctx.createOscillator(), g = ctx.createGain(); o.type = 'sine'; o.frequency.value = f * r; o.detune.value = dt; g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(a * .5, t + .25); g.gain.exponentialRampToValueAtTime(.0008, t + D * (r > 2 ? .5 : 1)); o.connect(g); g.connect(out); o.start(t); o.stop(t + D + .1); }
+  const n = ctx.createBufferSource(); n.buffer = Mus.noise; const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 900; bp.Q.value = .6; const ng = ctx.createGain(); ng.gain.setValueAtTime(.35, t); ng.gain.exponentialRampToValueAtTime(.001, t + 1.2); n.connect(bp); bp.connect(ng); ng.connect(out); n.start(t, rnd(0, 1)); n.stop(t + 1.3); out.connect(Mus.bus);
+}
+function glass(t, midi, dur, gain) {
+  const ctx = Mus.ctx, f = mtof(midi), g = ctx.createGain(); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(gain || .04, t + .7); g.gain.linearRampToValueAtTime(0, t + dur);
+  for (const [m, a, dt] of [[1, 1, 0], [1.004, .8, 0], [2, .18, 3], [3.01, .06, 0]]) { const o = ctx.createOscillator(), og = ctx.createGain(); o.type = 'sine'; o.frequency.value = f * m; o.detune.value = dt; og.gain.value = a; o.connect(og); og.connect(g); o.start(t); o.stop(t + dur + .1); }
+  const pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null; if (pan) { pan.pan.value = rnd(-.5, .5); g.connect(pan); pan.connect(Mus.bus); } else g.connect(Mus.bus);
+}
+function crash(t, gain) {
+  const ctx = Mus.ctx, n = ctx.createBufferSource(); n.buffer = Mus.noise; const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 5200; const g = ctx.createGain(); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(gain || .05, t + .01); g.gain.exponentialRampToValueAtTime(.001, t + 1.1); n.connect(hp); hp.connect(g); g.connect(Mus.bus); n.start(t, rnd(0, 1)); n.stop(t + 1.2);
+}
+function clang(t, gain) {
+  const ctx = Mus.ctx, f = rnd(180, 420), g = ctx.createGain(); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(gain || .06, t + .003); g.gain.exponentialRampToValueAtTime(.001, t + rnd(.14, .35));
+  for (const r of [1, 1.51, 2.33, 3.7]) { const o = ctx.createOscillator(); o.type = 'square'; o.frequency.value = f * r * rnd(.99, 1.01); const og = ctx.createGain(); og.gain.value = .3 / r; o.connect(og); og.connect(g); o.start(t); o.stop(t + .4); }
+  const pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null; if (pan) { pan.pan.value = rnd(-.5, .5); g.connect(pan); pan.connect(Mus.bus); } else g.connect(Mus.bus);
 }
 /* Voices of the Faithful: Sororitas. Bright and high: sung sopranos, bells and a harp, no drums, in a major key that never turns dark */
 const LIT_ROOTS = [38, 43, 35, 45, 38, 40, 43, 45];
@@ -25048,8 +25071,8 @@ function barLitany(t, i) {
   organ(t, root + 12, L, .018); organ(t, root + 19, L, .01);
   ch.forEach((n, j) => choirNote(t + j * .9, n + 12, L - 3, { vowel: ['ah', 'oh', 'ah', 'oo'][j], gain: .075, attack: 2.4, release: 3, pan: [-.6, -.2, .2, .6][j] }));
   for (let j = 0; j < 8; j++) pluck(t + .6 + j * 1.2 + rnd(-.03, .03), ch[j % 4] + (j >= 4 ? 24 : 12), .035 + (j % 4 === 0 ? .02 : 0));
-  if (k % 2 === 0) bell(t, ch[2] + 24, .1, true);
-  if (k === 7 || k === 3) bell(t + 5, ch[0] + 24, .08, true);
+  if (k % 2 === 0) for (let j = 0; j < 3; j++) glock(t + 1 + j * .35, ch[j] + 24, .035);
+  if (k === 7 || k === 3) for (let j = 0; j < 4; j++) glock(t + 6 + j * .3, ch[3 - j] + 24, .03);
   return L;
 }
 /* ---- one piece of music per army: each has its own instruments, pulse and mode ---- */
@@ -25100,7 +25123,7 @@ function barGolden(t, i) {
   ch.forEach((n, j) => { brass(t + j * .12, n, 3.8 * b, .038); brass(t + 4 * b + j * .1, n + (j === 3 && k % 2 ? 2 : 0), 3.7 * b, .034); });
   boom(t, .36, 2.2); boom(t + 4 * b, .26, 1.8); if (k === 3 || k === 7) for (let j = 0; j < 6; j++) drum(t + 6 * b + j * b / 3, .1 + j * .03, false);
   ch.slice(1).forEach((n, j) => choirNote(t + .5 + j * .4, n + 12, L - 1.5, { vowel: 'ah', gain: .06, attack: 1.8, release: 2.2, pan: [-.4, 0, .4][j] }));
-  if (k % 2 === 0) bell(t + .1, ch[3] + 24, .09, true);
+  if (k % 2 === 0) gong(t, 38, .1, 7);
   return L;
 }
 /* Grey Knights: one low voice chanting a plain line, a single tolling bell, glass overhead */
@@ -25110,7 +25133,7 @@ function barSilver(t, i) {
   organ(t, 50, L, .02); organ(t, 57, L, .012);
   for (let j = 0; j < 6; j++) { Mus.gkn = Math.max(0, Math.min(GK_SC.length - 1, Mus.gkn + pick([-2, -1, -1, 0, 1, 1, 2]))); const n = GK_SC[Mus.gkn];
     choirNote(t + j * 2.2, n, 2.7, { vowel: 'oh', gain: .1, pan: 0, attack: .5, release: .9 }); if (j % 2 === 1) choirNote(t + j * 2.2, n + 7, 2.7, { vowel: 'oo', gain: .045, pan: .45, attack: .6, release: .9 }); }
-  bell(t + 1, 62, .12, true); if (i % 2) bell(t + 8, 69, .09, true);
+  glass(t + 1, 74, 5, .04); if (i % 2) glass(t + 8, 81, 5, .03);
   for (let j = 0; j < 6; j++) ping(t + rnd(2, L - 1), pick([86, 91, 93, 98, 103]), .02);
   return L;
 }
@@ -25122,14 +25145,14 @@ function barRegiment(t, i) {
   for (let j = 0; j < 8; j++) { const tt = t + j * b; if (j % 2 === 0) { drum(tt, j % 4 === 0 ? .26 : .16, true); cello(tt, r + (j % 4 ? 7 : 0) + 12, b * .8, .07, { attack: .03, release: .1 }); } snare(tt + b * .5, .05, 2800); if (j % 2) snare(tt, .07, 2300); }
   for (let j = 0; j < 4; j++) snare(t + 7 * b + j * b / 4, .04 + j * .01, 2600);
   for (const [bt, n, d] of AM_MEL[k % 4]) { brass(t + bt * b, n - 12 + 12, d * b - .06, .042); flute(t + bt * b, n + 12, d * b - .06, .022, { pan: .35 }); }
-  if (k === 3 || k === 7) bell(t, r + 36, .08, true);
+  if (k === 3 || k === 7) crash(t, .05);
   return L;
 }
 /* Orks: stomp, clang and blat */
 function barWaaagh(t, i) {
   const b = 60 / 132, L = 8 * b, root = [34, 34, 36, 33][Math.floor(i / 2) % 4];
   [1, 0, 1, 1, 0, 1, 0, 1].forEach((on, j) => { if (on) { drum(t + j * b, j === 0 ? .4 : .26, true); if (j === 0 || j === 5) boom(t + j * b, .28, 1); } });
-  for (let j = 0; j < 8; j++) if (Math.random() < .55) bell(t + j * b + b * .5 + rnd(0, .05), pick([55, 58, 61, 63, 66]), .05, false);
+  for (let j = 0; j < 8; j++) if (Math.random() < .55) clang(t + j * b + b * .5 + rnd(0, .05), .06);
   [0, 2, 3].forEach((j, x) => brass(t + j * b * 1.25 + 2 * b * (i % 2), root + 12 + (x === 2 ? 3 : 0) + Math.floor(rnd(0, 2)), .45, .06));
   choirNote(t, root + 12, b * 1.6, { vowel: 'oh', gain: .13, attack: .08, release: .3, pan: -.2 }); choirNote(t + 4 * b, root + 15, b * 1.6, { vowel: 'ah', gain: .12, attack: .08, release: .3, pan: .2 });
   if (i % 4 === 3) shriek(t + 6 * b, 70, 1.8, .02);
@@ -25140,7 +25163,7 @@ const AEL_SC = [69, 71, 72, 74, 76, 77, 80, 81];
 function barDance(t, i) {
   const e = .3, L = 24 * e; Mus.aeI = Mus.aeI === undefined ? 3 : Mus.aeI;
   for (let j = 0; j < 24; j++) { if (j % 12 === 0) pluck(t + j * e, 45 + (j ? 3 : 0), .06);
-    Mus.aeI = Math.max(0, Math.min(AEL_SC.length - 1, Mus.aeI + pick([-2, -1, 1, 1, 2]))); const n = AEL_SC[Mus.aeI] + (j % 6 === 0 ? 12 : 0); pluck(t + j * e + rnd(-.01, .01), n, j % 3 === 0 ? .055 : .032); if (j % 6 === 0 && Math.random() < .5) bell(t + j * e, n + 12, .05, false); }
+    Mus.aeI = Math.max(0, Math.min(AEL_SC.length - 1, Mus.aeI + pick([-2, -1, 1, 1, 2]))); const n = AEL_SC[Mus.aeI] + (j % 6 === 0 ? 12 : 0); pluck(t + j * e + rnd(-.01, .01), n, j % 3 === 0 ? .055 : .032); if (j % 6 === 0 && Math.random() < .5) glock(t + j * e, n + 12, .04); }
   for (const [x, n, d] of [[0, 81, 6], [8, 80, 5], [14, 77, 7], [20, 76, 5]]) if (Math.random() < .85) choirNote(t + x * e, n, d * e + .4, { vowel: 'eh', gain: .05, attack: .5, release: 1, pan: x % 2 ? .3 : -.3 });
   flute(t + 12 * e, pick([88, 86, 84]), 3, .02, { pan: -.3 });
   return L;
@@ -25151,7 +25174,7 @@ function barTomb(t, i) {
   for (const x of [0, 3.1, 6.4, 9.2]) boom(t + x + rnd(0, .1), .2 + Math.random() * .1, 2.4);
   for (let j = 0; j < 22; j++) if (Math.random() < .8) ping(t + j * .5, 100, .006);
   const dn = [86, 84, 82, 80, 78, 76]; for (let j = 0; j < 4; j++) ping(t + 1 + j * 2.4 + rnd(0, .3), dn[(i * 2 + j) % dn.length], .028);
-  bell(t + 4, 38, .1, true); if (i % 2) bell(t + 8.5, 44, .08, true);
+  gong(t + 4, 26, .09, 9); if (i % 2) gong(t + 8.5, 31, .05, 7);
   cello(t + 2, 50 + (i % 3), 7, .035, { attack: 1.8, release: 2, pan: .2 });
   return L;
 }
@@ -25185,7 +25208,7 @@ function barHymn(t, i) {
   ch.forEach((n, j) => { choirNote(t + j * .4, n, L - 2, { vowel: ['ah', 'oh', 'ah'][j], gain: .1, attack: 2, release: 2.5, pan: [-.5, 0, .5][j] }); choirNote(t + 1 + j * .4, n - 12, L - 3, { vowel: 'oh', gain: .06, attack: 2.4, release: 2.5, pan: [.4, 0, -.4][j] }); });
   if (k % 4 === 0) { brass(t + 3, ch[0] + 12, 1.6, .05); brass(t + 4.8, ch[2] + 12, 1.6, .05); brass(t + 6.6, ch[0] + 24, 3.5, .05); }
   boom(t, .3, 2.6); if (k === 7) for (let j = 0; j < 8; j++) drum(t + 9 + j * .4, .1 + j * .03, false);
-  bell(t + .1, r + 24, .12, true); if (k % 2) bell(t + 7, ch[1] + 12, .08, true);
+  if (k % 4 === 2) boom(t + 7, .22, 2);
   return L;
 }
 const BARS = { rot: barRot, warp: barWarp, golden: barGolden, silver: barSilver, regiment: barRegiment, waaagh: barWaaagh, dance: barDance, tomb: barTomb, cadence: barCadence, fenris: barFenris, hymn: barHymn, litany: barLitany, main: barMain, cathedral: barCathedral, hive: barHive, procession: barProcession, siege: barSiege, forge: barForge, void: barVoid };
@@ -25227,7 +25250,7 @@ function barBridge(t, a, b) {
   const L = 8, tr = Mus.tr;
   organ(t, 38 + a - tr, L, .03); organ(t + 1.5, 38 + b - tr, L, .035); organ(t + 3, 45 + b - tr, L - 3, .02);
   choirNote(t, 57 + a - tr, 5, { vowel: 'oo', gain: .06, attack: 1.5, release: 2, pan: -.3 }); choirNote(t + 3, 62 + b - tr, 5, { vowel: 'ah', gain: .07, attack: 1.5, release: 2, pan: .3 });
-  bell(t + 4, 50 + b - tr, .08, true);
+  glass(t + 3.5, 62 + b - tr, 4, .03);
   return L;
 }
 function musSchedule() {
