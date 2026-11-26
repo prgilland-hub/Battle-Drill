@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.26-0040';
+  const VERSION = '2026.11.26-0057';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -2393,8 +2393,8 @@ Unit: Big Walker | models 1 | M 8 | T 10 | Sv 2 | Inv 5 | W 12 | Ld 6 | OC 4 | s
     <div class="set-sec" id="set-audio">
       <h3>Sound and music</h3>
       <div class="set-row"><div><b>Battlefield sound</b><span class="muted">Wind, a low drone, distant shelling and dice clatter. Quiet by default.</span></div><button type="button" class="chip-btn" id="snd-toggle" aria-pressed="false" data-tip="Ambient battlefield sound: wind, a low drone, distant shelling and dice clatter. Quiet by default."><span class="ico" aria-hidden="true">🔈</span><span class="lbl">Sound</span></button></div>
-      <div class="set-row"><div><b>Music</b><span class="muted">Gothic space horror, composed live in your browser: a choir and organ, bells, war drums and drones.</span></div><button type="button" class="chip-btn" id="mus-toggle" aria-pressed="false" data-tip="Gothic space horror music, made live in your browser: a choir and organ, tolling bells, war drums and drones. Pick a mood below."><span class="ico" aria-hidden="true">🎼</span><span class="lbl">Music</span></button></div>
-      <div class="mus-ctl" id="mus-ctl" hidden><select id="mus-mood" aria-label="Music mood"><option value="shuffle">Shuffle all</option><option value="cathedral">Cathedral of Dust</option><option value="hive">Hive Fleet Rising</option><option value="procession">Grim Procession</option></select><input type="range" id="mus-vol" min="0" max="100" value="50" aria-label="Music volume"><span class="muted" id="mus-now" aria-live="polite"></span></div>
+      <div class="set-row"><div><b>Music</b><span class="muted">Gothic space horror, composed live in your browser: a choir and organ, bells, war drums, low brass, machine-chant and drones. Six moods, or let each army have its own theme that follows whose turn it is.</span></div><button type="button" class="chip-btn" id="mus-toggle" aria-pressed="false" data-tip="Gothic space horror music, made live in your browser: a choir and organ, tolling bells, war drums and drones. Pick a mood below."><span class="ico" aria-hidden="true">🎼</span><span class="lbl">Music</span></button></div>
+      <div class="mus-ctl" id="mus-ctl" hidden><select id="mus-mood" aria-label="Music mood"><option value="army">By army (follows the turn)</option><option value="shuffle">Shuffle all</option><option value="cathedral">Cathedral of Dust</option><option value="hive">Hive Fleet Rising</option><option value="procession">Grim Procession</option><option value="siege">Siege of Iron</option><option value="forge">Forge Liturgy</option><option value="void">The Silent Void</option></select><input type="range" id="mus-vol" min="0" max="100" value="50" aria-label="Music volume"><span class="muted" id="mus-now" aria-live="polite"></span></div>
     </div>
     <div class="set-sec" id="set-device">
       <h3>Display</h3>
@@ -2897,7 +2897,7 @@ function sndInit() {
   const wind = ctx.createBufferSource(); wind.buffer = buf; wind.loop = true;
   const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 420;
   const lfo = ctx.createOscillator(), lfoG = ctx.createGain(); lfo.frequency.value = .07; lfoG.gain.value = 260; lfo.connect(lfoG); lfoG.connect(lp.frequency);
-  const wg = ctx.createGain(); wg.gain.value = .5;
+  const wg = ctx.createGain(); wg.gain.value = .28;
   wind.connect(lp); lp.connect(wg); wg.connect(master); wind.start(); lfo.start();
   // drone
   for (const [fq, g] of [[55, .05], [55.6, .04], [82.4, .018]]) { const o = ctx.createOscillator(), og = ctx.createGain(); o.type = 'sine'; o.frequency.value = fq; og.gain.value = g; o.connect(og); og.connect(master); o.start(); }
@@ -5715,7 +5715,7 @@ function attackersFor(u, w, t, shooting) {
     const ax = u.x + m.dx, ay = u.y + m.dy, sa = shAbs(u, m); let g = 1e9;
     for (const sb of TS) { const d = gapS(sa, sb); if (d < g) g = d; }
     if (g > range + 1e-6) continue;
-    if (tpts && !tpts.some(q => ptVisible({ x: ax, y: ay }, q))) continue;
+    if (tpts && !tpts.some(q => ptVisible({ x: ax, y: ay }, q))) { let ok2 = false; try { const tf = repPoints(t, { x: u.x, y: u.y }, true); ok2 = bodyPts(u, m).some(pp => tf.some(q => ptVisible(pp, q))); } catch (e) { } if (!ok2) continue; }
     el.push({ g });
   }
   el.sort((a, b) => a.g - b.g);
@@ -6736,14 +6736,27 @@ function hotOverlay(title, sub, label) {
 /* hand the device to the other player: cover screen first, then swap so they are "you" */
 async function hotPass(why) {
   if (!G || !G.hot) return;
-  const nxt = hotName('ai'), bits = { turn: `Battle round ${G.round}. The board is hidden until you press the button.`, setup: 'The board is hidden until you press the button, so nobody sees the other player\'s choices.' };
+  const nxt = hotName('ai'), bits = { turn: `Battle round ${G.round}. The board is hidden until you press the button.`, setup: 'The board is hidden until you press the button, so nobody sees the other player\'s choices.', react: `${escH(hotName('player'))} has finished. You can react now: ${escH(G.hotWhat || 'a stratagem')}. The board is hidden until you press the button.`, back: `Your reactions are done. ${escH(nxt)} carries on with the turn.` };
   G.busy = true; render();
   const colr = hotColour('ai'), cc = colr === 'Blue' ? '#6f9fe6' : '#e0685b';
   const qt = hotQuote(G.ab);
-  await hotOverlay(escH(nxt), `<span style="display:inline-block;padding:3px 14px;border-radius:4px;background:${cc};color:#0b0f0a;font-weight:700;letter-spacing:.12em;margin-bottom:10px">YOU PLAY ${colr.toUpperCase()}</span><br>` + (why === 'turn' ? bits.turn : bits.setup) + `<br><br><i style="color:#c9dbb8;display:inline-block;max-width:30em">“${escH(qt)}”</i>`, `I am ${escH(nxt)}: show the board`);
+  await hotOverlay(escH(nxt), `<span style="display:inline-block;padding:3px 14px;border-radius:4px;background:${cc};color:#0b0f0a;font-weight:700;letter-spacing:.12em;margin-bottom:10px">YOU PLAY ${colr.toUpperCase()}</span><br>` + (bits[why] || bits.setup) + `<br><br><i style="color:#c9dbb8;display:inline-block;max-width:30em">“${escH(qt)}”</i>`, `I am ${escH(nxt)}: show the board`);
   hotSwapState(); G.busy = false; render();
 }
 
+/* the other player's reactions during your turn (Overwatch, Rapid Ingress, Heroic Intervention, Smokescreen): the device is passed, they act as "you", then it is passed back */
+async function hotReact(can, run, what) {
+  if (!G || !G.hot || G.stage !== 'battle') return;
+  let ok = false; try { ok = !!can(); } catch (e) { console.error(e); }
+  if (!ok) return;
+  G.hotWhat = what; await hotPass('react'); G.busy = true;
+  try { await run(); } catch (e) { console.error(e); }
+  if (!G || G.stage !== 'battle') return;
+  await hotPass('back'); G.busy = true;
+}
+const hotCanMoveReact = () => (canStrat('ai', 'overwatch', 1) && aliveSide('ai').some(u => !isEngaged(u) && !has(u, 'titanic') && u.ranged.length && !G.strat.ai.units.has(u.id) && aliveSide('player').some(e => visible(u, e) && !isEngaged(e) && u.ranged.some(w => edge(u, e) <= Math.min(w.range, 24))))) || (G.round >= 2 && reserves('ai').length > 0 && canStrat('ai', 'ingress', 1));
+const hotCanHeroic = () => [1, 2].some(c => canStrat('ai', 'heroic', c) && aliveSide('ai').some(u => !isEngaged(u) && !G.strat.ai.units.has(u.id) && aliveSide('player').some(e => c === 1 ? (e.charged && edge(u, e) <= 12) : edge(u, e) <= 6)));
+const hotCanSmoke = () => canStrat('ai', 'smoke', 1) && aliveSide('ai').some(u => u.placed && !u.reserve && has(u, 'smoke') && canStrat('ai', 'smoke', 1, u) && aliveSide('player').some(e => e.placed && !e.reserve && e.ranged && e.ranged.length && visible(e, u) && e.ranged.some(w => edge(e, u) <= w.range)));
 /* ---- thrown dice for the flat view, and the roll-off shown with a red die and a blue die ---- */
 const CUBE_PIPS = { 1: [5], 2: [1, 9], 3: [1, 5, 9], 4: [1, 3, 7, 9], 5: [1, 3, 5, 7, 9], 6: [1, 3, 4, 6, 7, 9] };
 const CUBE_ROT = { 1: [0, 0], 6: [0, 180], 3: [0, -90], 4: [0, 90], 2: [-90, 0], 5: [90, 0] };
@@ -7107,9 +7120,9 @@ function endPlayerPhaseNow() {
   if (G.phase === 'command') { doReanimation('player'); dgEndCommand('player'); smEndCommand('player'); scorePrimary('player'); setPhase('movement'); render(); return; }
   if (G.phase === 'movement') { dgEndMovement('player'); tsEndMovement('player'); }
   if (G.phase === 'movement') aliveSide('player').forEach(u => { if (!u.moved && !u.arrived) u.stayed = true; });
-  if (G.phase === 'movement') { G.busy = true; render(); embarkEnd('ai', 'embark-mount').then(() => aiOverwatch()).then(() => aiIngress()).then(() => { G.busy = false; if (G.stage !== 'battle') return; setPhase('shooting'); aiSmokeScreen(); tsShootStart('player').then(() => { render(); checkEnd(); }); }); return; }
+  if (G.phase === 'movement') { G.busy = true; render(); embarkEnd('ai', 'embark-mount').then(() => G.hot ? hotReact(hotCanMoveReact, playerEndOfMovementReactions, 'Fire Overwatch or Rapid Ingress') : aiOverwatch().then(() => aiIngress())).then(async () => { G.busy = false; if (G.stage !== 'battle') return; setPhase('shooting'); if (G.hot) { G.busy = true; render(); await hotReact(hotCanSmoke, smokeScreenAsk, 'Smokescreen'); G.busy = false; if (G.stage !== 'battle') return; } else aiSmokeScreen(); tsShootStart('player').then(() => { render(); checkEnd(); }); }); return; }
   if (G.phase === 'shooting') { setPhase('charge'); dgMireAI(); render(); return; }
-  if (G.phase === 'charge') { G.busy = true; render(); aiHeroic().then(() => { G.busy = false; if (G.stage !== 'battle') return; setPhase('fight'); startFight(null); render(); }); return; }
+  if (G.phase === 'charge') { G.busy = true; render(); (G.hot ? hotReact(hotCanHeroic, playerHeroic, 'Heroic Intervention') : aiHeroic()).then(() => { G.busy = false; if (G.stage !== 'battle') return; setPhase('fight'); startFight(null); render(); }); return; }
   if (G.phase === 'fight') { G.busy = true; render(); reactMoves('fightend').then(() => { G.busy = false; if (G.stage === 'battle') endTurn(); }); }
 }
 function aircraftReturn(side) {
@@ -11942,13 +11955,45 @@ function objCounts(u, o) {
   return { body, lead, leads };
 }
 function modelsInCover(u) { const ms = modelsOf(u); return !ms || !ms.length ? TERRAIN.some(t => coversT(t) && inRect(u, t)) : ms.every(m => TERRAIN.some(t => coversT(t) && inRect({ x: u.x + m.dx, y: u.y + m.dy }, t))); }
-function repPoints(u, toward) {
+/* does any part of a model's body lie inside a terrain area? (a model "within" an area is not blocked by it) */
+function shapeInTerr(sh, t) {
+  const bx0 = t.x, by0 = t.y, bx1 = t.x + t.w, by1 = t.y + t.h;
+  if (!(sh.hw || sh.hh)) { const dx = Math.max(bx0 - sh.x, 0, sh.x - bx1), dy = Math.max(by0 - sh.y, 0, sh.y - by1); return Math.hypot(dx, dy) <= (sh.r || .5); }
+  const c = Math.cos(sh.rot || 0), sn = Math.sin(sh.rot || 0), ex = sh.hw + (sh.rho || 0), ey = sh.hh + (sh.rho || 0);
+  for (const [lx, ly] of [[0, 0], [ex, ey], [ex, -ey], [-ex, ey], [-ex, -ey], [ex, 0], [-ex, 0], [0, ey], [0, -ey]]) { const px = sh.x + lx * c - ly * sn, py = sh.y + lx * sn + ly * c; if (px >= bx0 && px <= bx1 && py >= by0 && py <= by1) return true; }
+  for (const [px, py] of [[bx0, by0], [bx1, by0], [bx1, by1], [bx0, by1], [(bx0 + bx1) / 2, (by0 + by1) / 2]]) { const dx = px - sh.x, dy = py - sh.y, lx = dx * c + dy * sn, ly = -dx * sn + dy * c; if (Math.abs(lx) <= ex && Math.abs(ly) <= ey) return true; }
+  return false;
+}
+/* points on one model's body: line of sight runs from any part of a model to any part of the other (06.01) */
+function bodyPts(u, m) {
+  const sh = shAbs(u, m), out = [{ x: sh.x, y: sh.y }];
+  if (sh.hw || sh.hh) {
+    const c = Math.cos(sh.rot || 0), sn = Math.sin(sh.rot || 0), ex = sh.hw + (sh.rho || 0) - .03, ey = sh.hh + (sh.rho || 0) - .03;
+    for (const [lx, ly] of [[ex, ey], [ex, -ey], [-ex, ey], [-ex, -ey], [ex, 0], [-ex, 0], [0, ey], [0, -ey]]) out.push({ x: sh.x + lx * c - ly * sn, y: sh.y + lx * sn + ly * c });
+  } else { const r = Math.max(.05, (sh.r || .5) - .03); for (let k = 0; k < 6; k++) out.push({ x: sh.x + Math.cos(k * 1.0472) * r, y: sh.y + Math.sin(k * 1.0472) * r }); }
+  const wi = new Set(); for (const t of TERRAIN) if (blocksSight(t) && shapeInTerr(sh, t)) wi.add(t);
+  for (const q of out) q.wi = wi;
+  return out;
+}
+function repPoints(u, toward, full) {
   const ms = modelsOf(u); if (!ms || !ms.length) return [{ x: u.x, y: u.y }];
   const ord = ms.slice().sort((a, b) => Math.hypot(u.x + a.dx - toward.x, u.y + a.dy - toward.y) - Math.hypot(u.x + b.dx - toward.x, u.y + b.dy - toward.y)), pick = new Set([0, ord.length - 1, Math.floor(ord.length / 3), Math.floor(ord.length * 2 / 3)]);
+  if (full) { const out = []; for (const i of pick) { try { out.push(...bodyPts(u, ord[i])); } catch (e) { out.push({ x: u.x + ord[i].dx, y: u.y + ord[i].dy }); } } return out; }
   const pts = [...pick].map(i => ({ x: u.x + ord[i].dx, y: u.y + ord[i].dy })); pts.push({ x: u.x, y: u.y }); return pts;
 }
-const ptVisible = (p, q) => !TERRAIN.some(t => blocksSight(t) && !inRect(p, t) && !inRect(q, t) && segHitsRect(p.x, p.y, q.x, q.y, t));
-function visibleModels(a, b) { for (const p of repPoints(a, b)) for (const q of repPoints(b, a)) if (ptVisible(p, q)) return true; return false; }
+const ptVisible = (p, q) => !TERRAIN.some(t => blocksSight(t) && !inRect(p, t) && !inRect(q, t) && !(p.wi && p.wi.has(t)) && !(q.wi && q.wi.has(t)) && segHitsRect(p.x, p.y, q.x, q.y, t));
+function visibleModels(a, b) {
+  for (const p of repPoints(a, b)) for (const q of repPoints(b, a)) if (ptVisible(p, q)) return true;
+  if (!TERRAIN.some(blocksSight)) return false;
+  for (const p of repPoints(a, b, true)) for (const q of repPoints(b, a, true)) if (ptVisible(p, q)) return true;
+  return false;
+}
+/* the clear sight line to draw: the straight centre line when it is clear, otherwise the shortest clear line between any two parts of the bodies */
+function sightPair(a, b) {
+  if (!(MODELS.on && isUnitObj(a) && isUnitObj(b))) return null;
+  for (const full of [false, true]) { const ps = repPoints(a, b, full), qs = repPoints(b, a, full); let best = null, bd = 1e9; for (const p of ps) for (const q of qs) if (ptVisible(p, q)) { const d = Math.hypot(p.x - q.x, p.y - q.y); if (d < bd) { bd = d; best = { p, q }; } } if (best) return best; }
+  return null;
+}
 function unitAt(pt) {
   const us = alive().slice().reverse();
   if (MODELS.on) for (const u of us) { const ms = isUnitObj(u) && u.placed ? modelsOf(u) : null; if (ms) for (const m of ms) if (ptGap(shAbs(u, m), pt.x, pt.y) <= 0.3) return u; }
@@ -17727,7 +17772,7 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
           const dx = e.x - me.x, dy = e.y - me.y, d = Math.hypot(dx, dy) || .001, ux = dx / d, uy = dy / d, gap = Math.max(0, src.ghost ? d - e.r - me.r : edge(src.u, e));
           const ok = visible(src.ghost ? me : src.u, e), x1 = me.x + ux * me.r, y1 = me.y + uy * me.r, x2 = e.x - ux * e.r, y2 = e.y - uy * e.r, inR = !mx || gap <= mx + .01, al = inR ? 1 : .38;
           if (gap > .05) {
-            if (ok) { path([P(x1, y1, 1.1), P(x2, y2, 1.1)]); stroke(OC.good, inR && mx ? 3 : 2.2, [], al); }
+            if (ok) { let sp = null; if (!src.ghost && ovHit(me.x, me.y, e.x, e.y) !== null) { try { sp = sightPair(src.u, e); } catch (x) { } } if (sp) { path([P(sp.p.x, sp.p.y, 1.1), P(sp.q.x, sp.q.y, 1.1)]); stroke(OC.good, inR && mx ? 3 : 2.2, [], al); } else { path([P(x1, y1, 1.1), P(x2, y2, 1.1)]); stroke(OC.good, inR && mx ? 3 : 2.2, [], al); } }
             else {
               const s = ovHit(me.x, me.y, e.x, e.y);
               if (s === null) { path([P(x1, y1, 1.1), P(x2, y2, 1.1)]); stroke(OC.bad, 2, [7, 6], al); }
@@ -24716,10 +24761,10 @@ function setReorder(on) {
 })();
 
 /* ============ MUSIC: gothic space horror, composed live with the Web Audio API (no audio files) ============ */
-const Mus = { ctx: null, bus: null, wet: null, master: null, on: false, mood: 'shuffle', cur: 'cathedral', vol: .5, timer: null, next: 0, bar: 0, left: 0, noise: null };
-try { Mus.vol = +(localStorage.getItem('battleDrill.musVol') || .5); Mus.mood = localStorage.getItem('battleDrill.musMood') || 'shuffle'; } catch (e) { }
-const MOODS = { cathedral: 'Cathedral of Dust', hive: 'Hive Fleet Rising', procession: 'Grim Procession' };
-const mtof = n => 440 * Math.pow(2, (n - 69) / 12);
+const Mus = { ctx: null, bus: null, wet: null, master: null, on: false, tr: 0, theme: null, since: 0, mood: 'shuffle', cur: 'cathedral', vol: .5, timer: null, next: 0, bar: 0, left: 0, noise: null };
+try { Mus.vol = +(localStorage.getItem('battleDrill.musVol') || .5); Mus.mood = localStorage.getItem('battleDrill.musMood') || 'army'; if (!localStorage.getItem('battleDrill.musArmy1')) { localStorage.setItem('battleDrill.musArmy1', '1'); Mus.mood = 'army'; localStorage.setItem('battleDrill.musMood', 'army'); } } catch (e) { }
+const MOODS = { cathedral: 'Cathedral of Dust', hive: 'Hive Fleet Rising', procession: 'Grim Procession', siege: 'Siege of Iron', forge: 'Forge Liturgy', void: 'The Silent Void' };
+const mtof = n => 440 * Math.pow(2, (n + (Mus.tr || 0) - 69) / 12);
 const rnd = (a, b) => a + Math.random() * (b - a);
 function musInit() {
   if (Mus.ctx || !(window.AudioContext || window.webkitAudioContext)) return !!Mus.ctx;
@@ -24809,22 +24854,110 @@ function barProcession(t, i) {
   if (i % 8 === 7) shriek(t + 1, 91, 5, .014);
   return L;
 }
-const BARS = { cathedral: barCathedral, hive: barHive, procession: barProcession };
+function brass(t, midi, dur, gain) {
+  const ctx = Mus.ctx, f = mtof(midi), g = ctx.createGain(), lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 1.2;
+  lp.frequency.setValueAtTime(300, t); lp.frequency.linearRampToValueAtTime(1500, t + Math.min(.35, dur * .4)); lp.frequency.linearRampToValueAtTime(500, t + dur);
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(gain, t + .12); g.gain.setValueAtTime(gain, t + Math.max(.12, dur - .3)); g.gain.linearRampToValueAtTime(0, t + dur + .25);
+  for (const dt of [-8, 7]) { const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f; o.detune.value = dt; o.connect(lp); o.start(t); o.stop(t + dur + .4); }
+  lp.connect(g); g.connect(Mus.bus);
+}
+function pluck(t, midi, gain) {
+  const ctx = Mus.ctx, o = ctx.createOscillator(), g = ctx.createGain(), lp = ctx.createBiquadFilter(); o.type = 'square'; o.frequency.value = mtof(midi); lp.type = 'lowpass'; lp.frequency.setValueAtTime(2400, t); lp.frequency.exponentialRampToValueAtTime(300, t + .22);
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(gain, t + .004); g.gain.exponentialRampToValueAtTime(.0005, t + .3); o.connect(lp); lp.connect(g); g.connect(Mus.bus); o.start(t); o.stop(t + .35);
+}
+/* Siege of Iron: a slow martial march, low brass over war drums */
+function barSiege(t, i) {
+  const b = 60 / 70, L = 8 * b, root = [38, 38, 41, 36][Math.floor(i / 2) % 4];
+  organ(t, root - 12 < 26 ? root : root - 12, L, .035);
+  for (let k = 0; k < 8; k++) { const tt = t + k * b; if (k === 0 || k === 4) drum(tt, .34, true); else if (k === 2 || k === 6) drum(tt, .2, false); else if (k % 2 === 1 && Math.random() < .5) drum(tt, .08, false); }
+  if (i % 4 === 3) for (let k = 0; k < 4; k++) drum(t + 6 * b + k * b / 2, .12 + k * .03, false);
+  brass(t, root + 12, 2 * b - .1, .045); brass(t + 2 * b, root + 19, 2 * b - .1, .04); brass(t + 4 * b, root + 12 + (i % 2 ? 3 : 0), 2 * b - .1, .045); brass(t + 6 * b, root + 17, 1.6 * b, .04);
+  if (i % 2 === 0) [root + 24, root + 27].forEach((n, k) => choirNote(t + k * .4, n, L - 1.5, { vowel: k ? 'oh' : 'ah', gain: .07, attack: 1.2, release: 1.6, pan: k ? .4 : -.4 }));
+  if (i % 4 === 0) bell(t, root + 24, .1, true);
+  if (i % 8 === 7) shriek(t + 2, 90, 4, .012);
+  return L;
+}
+/* Forge Liturgy: Mechanicus machine-chant, a binary arpeggio over a drone */
+function barForge(t, i) {
+  const st = 60 / 104 / 2, L = 16 * st, root = [38, 38, 39, 36][Math.floor(i / 2) % 4], sc = [root + 12, root + 13, root + 15, root + 19, root + 20, root + 24];
+  const pat = [0, 2, 1, 3, 0, 4, 2, 5, 0, 2, 1, 3, 4, 2, 1, 0];
+  organ(t, root, L * 2, .03);
+  pat.forEach((n, k) => { if (Math.random() < .12) return; pluck(t + k * st, sc[n] + (i % 8 >= 4 ? 5 : 0), k % 4 === 0 ? .05 : .03); });
+  drum(t, .16, false); drum(t + 8 * st, .1, false); if (i % 2 === 0) drum(t, .25, true);
+  if (i % 2 === 0) choirNote(t, root + 24, L * 2 - 1, { vowel: 'eh', gain: .06, attack: 1.5, release: 2, pan: 0 });
+  if (i % 4 === 1) for (let k = 0; k < 3; k++) ping(t + rnd(0, L - 1), pick([91, 93, 96]), .015);
+  if (i % 4 === 3) bell(t + 3 * st, root + 36, .06);
+  return L;
+}
+/* The Silent Void: sparse drones, far-off pings and a held choir, no drums */
+function barVoid(t, i) {
+  const L = 14, root = [33, 33, 31, 34][Math.floor(i / 2) % 4];
+  organ(t, root, L, .03); organ(t + .4, root + 7, L, .014); rumble(t, L, .05);
+  [pick([57, 60, 62]), pick([65, 67, 69]), pick([72, 74, 75])].forEach((n, k) => choirNote(t + 1 + k * 3.2, n, L - 5, { vowel: 'oo', gain: .055, attack: 4, release: 4, pan: [-.6, 0, .6][k] }));
+  for (let k = 0, n = 2 + Math.floor(Math.random() * 3); k < n; k++) ping(t + rnd(0, L - 1), pick([84, 86, 89, 91, 94]), .014);
+  if (Math.random() < .3) shriek(t + rnd(3, L - 5), pick([84, 88]), rnd(4, 6), .01);
+  if (i % 3 === 0) bell(t + 1.5, root + 36, .06, true);
+  return L;
+}
+const BARS = { cathedral: barCathedral, hive: barHive, procession: barProcession, siege: barSiege, forge: barForge, void: barVoid };
+/* each army has its own musical colour: a key, and the kinds of music it draws from. The score follows whose turn it is. */
+const ARMY_DEFAULT = { name: 'Gothic Vigil', tr: 0, pool: ['cathedral', 'hive', 'procession', 'siege', 'forge', 'void'], w: [1, 1, 1, 1, 1, 1] };
+const ARMY_THEMES = [
+  [/death guard|nurgle|maggot|rot/i, { name: 'The Rot Turns', tr: -3, pool: ['hive', 'void', 'procession', 'cathedral'], w: [4, 2, 2, 1] }],
+  [/chaos|thousand sons|world eaters|emperor.s children|heretic|daemon|zarkan|zadophon|reaver|callous|coven|claw of/i, { name: 'Warp-Touched Dirge', tr: -2, pool: ['hive', 'procession', 'void', 'cathedral'], w: [3, 3, 2, 1] }],
+  [/sororitas|sisters|sanctuary|miracle/i, { name: 'Litany of the Faithful', tr: 2, pool: ['cathedral', 'procession', 'siege'], w: [5, 2, 1] }],
+  [/custodes|gilded|tristraen/i, { name: 'The Golden Vigil', tr: 3, pool: ['cathedral', 'siege', 'procession'], w: [4, 3, 1] }],
+  [/grey knights|inquisitor|deltic|purge corps/i, { name: 'Silver Vigil', tr: 1, pool: ['cathedral', 'void', 'procession'], w: [3, 3, 1] }],
+  [/astra militarum|guard|drayden|lance/i, { name: 'March of the Regiments', tr: -2, pool: ['siege', 'procession'], w: [4, 3] }],
+  [/mechanicus|votann|leagues|skitarii|bane-slayer/i, { name: 'Forge Liturgy', tr: 4, pool: ['forge', 'siege', 'void'], w: [5, 2, 1] }],
+  [/\bork|ardmob|waaagh|goff|evil sunz|bad moon/i, { name: 'Da Big Racket', tr: -5, pool: ['procession', 'siege'], w: [3, 3] }],
+  [/aeldari|drukhari|harlequin|ynnari|kygharil|eldar/i, { name: 'Dance of Thorns', tr: 7, pool: ['forge', 'void'], w: [3, 3] }],
+  [/tyranid|genestealer|swarm|vardenghast/i, { name: 'Hunger From the Dark', tr: -1, pool: ['hive', 'void'], w: [4, 2] }],
+  [/necron|amonhotekh/i, { name: 'The Tomb Wakes', tr: -4, pool: ['void', 'forge', 'procession'], w: [4, 2, 1] }],
+  [/t.au|tau|sudden dawn|farsight/i, { name: 'Greater Good Cadence', tr: 5, pool: ['forge', 'void'], w: [3, 3] }],
+  [/space wolves|wolf|askar|fenris/i, { name: 'Howl of the Fenris', tr: -2, pool: ['siege', 'procession', 'cathedral'], w: [4, 3, 1] }],
+  [/space marines|templar|angels|ultramarines|imperial|astartes|deathwatch|raven|salamander|fist|vedrenn|crowe|sanctifiers|assault force|inexorable|vow/i, { name: 'Hymn of the Emperor\'s Sons', tr: 0, pool: ['siege', 'cathedral', 'procession'], w: [3, 3, 2] }]
+];
+function musThemeNow() {
+  try {
+    if (typeof G !== 'undefined' && G && (G.stage === 'battle' || G.stage === 'pre')) {
+      const b = (G.stage === 'battle' && G.active === 'ai') ? G.ab : G.pb; if (!b) return ARMY_DEFAULT;
+      const s = `${b.faction || ''} ${b.scheme || ''} ${b.name || ''}`, t = ARMY_THEMES.find(x => x[0].test(s)); return t ? t[1] : ARMY_DEFAULT;
+    }
+  } catch (e) { }
+  return ARMY_DEFAULT;
+}
+function pickW(th, avoid) { const idx = th.pool.map((k, i) => i).filter(i => th.pool[i] !== avoid); const tot = idx.reduce((a, i) => a + (th.w[i] || 1), 0); let r = Math.random() * tot; for (const i of idx) { r -= th.w[i] || 1; if (r <= 0) return th.pool[i]; } return th.pool[0]; }
+/* when the turn passes to another army, one slow bar glides from the old key to the new one before its own music begins */
+function barBridge(t, a, b) {
+  const L = 8, tr = Mus.tr;
+  organ(t, 38 + a - tr, L, .03); organ(t + 1.5, 38 + b - tr, L, .035); organ(t + 3, 45 + b - tr, L - 3, .02);
+  choirNote(t, 57 + a - tr, 5, { vowel: 'oo', gain: .06, attack: 1.5, release: 2, pan: -.3 }); choirNote(t + 3, 62 + b - tr, 5, { vowel: 'ah', gain: .07, attack: 1.5, release: 2, pan: .3 });
+  bell(t + 4, 50 + b - tr, .08, true);
+  return L;
+}
 function musSchedule() {
   if (!Mus.on || !Mus.ctx) return;
   while (Mus.next < Mus.ctx.currentTime + 2.5) {
-    if (Mus.mood === 'shuffle' && Mus.bar > 0 && Mus.bar % 10 === 0) { const o = Object.keys(BARS).filter(k => k !== Mus.cur); Mus.cur = pick(o); musLabel(); }
+    if (Mus.mood === 'army') {
+      const th = musThemeNow();
+      if (Mus.theme !== th) {
+        const first = !Mus.theme, prev = Mus.tr; Mus.theme = th; Mus.tr = th.tr; Mus.cur = pickW(th); Mus.since = 0; musLabel();
+        if (!first && Mus.bar > 0) { Mus.bar++; Mus.next += barBridge(Math.max(Mus.next, Mus.ctx.currentTime + .05), prev, th.tr); continue; }
+      } else if (Mus.since >= 3 && Math.random() < (Mus.since >= 8 ? 1 : .3)) { Mus.cur = pickW(th, Mus.cur); Mus.since = 0; musLabel(); }
+      Mus.since++;
+    } else if (Mus.mood === 'shuffle' && Mus.bar > 0 && Mus.bar % 10 === 0) { const o = Object.keys(BARS).filter(k => k !== Mus.cur); Mus.cur = pick(o); musLabel(); }
     const L = BARS[Mus.cur](Math.max(Mus.next, Mus.ctx.currentTime + .05), Mus.bar++); Mus.next += L;
   }
 }
-function musLabel() { const n = $('#mus-now'); if (n) n.textContent = Mus.on ? 'Now playing: ' + MOODS[Mus.cur] : ''; }
+function musLabel() { const n = $('#mus-now'); if (n) n.textContent = Mus.on ? 'Now playing: ' + (Mus.mood === 'army' && Mus.theme ? Mus.theme.name + ' (' + MOODS[Mus.cur] + ')' : MOODS[Mus.cur]) : ''; }
 function setMusicVol(v) { Mus.vol = Math.max(0, Math.min(1, v)); try { localStorage.setItem('battleDrill.musVol', String(Mus.vol)); } catch (e) { } if (Mus.master && Mus.on) Mus.master.gain.setTargetAtTime(Math.pow(Mus.vol, 2) * 1.1, Mus.ctx.currentTime, .15); }
 function setMusic(on) {
   Mus.on = on; const b = $('#mus-toggle'); if (b) b.setAttribute('aria-pressed', on ? 'true' : 'false'); const c = $('#mus-ctl'); if (c) c.hidden = !on;
   try { localStorage.setItem('battleDrill.music', on ? 'on' : 'off'); } catch (e) { }
   if (on) {
     if (!musInit()) { Mus.on = false; if (b) b.setAttribute('aria-pressed', 'false'); if (c) c.hidden = true; return; }
-    Mus.ctx.resume(); Mus.cur = Mus.mood === 'shuffle' ? pick(Object.keys(BARS)) : Mus.mood; Mus.bar = 0; Mus.next = Mus.ctx.currentTime + .1;
+    Mus.ctx.resume(); Mus.theme = null; Mus.tr = 0; Mus.cur = (Mus.mood === 'shuffle' || Mus.mood === 'army') ? pick(Object.keys(BARS)) : Mus.mood; Mus.bar = 0; Mus.next = Mus.ctx.currentTime + .1;
     Mus.master.gain.cancelScheduledValues(Mus.ctx.currentTime); Mus.master.gain.setValueAtTime(0, Mus.ctx.currentTime); Mus.master.gain.linearRampToValueAtTime(Math.pow(Mus.vol, 2) * 1.1, Mus.ctx.currentTime + 3);
     clearInterval(Mus.timer); Mus.timer = setInterval(musSchedule, 400); musSchedule(); musLabel();
   } else if (Mus.ctx) { Mus.master.gain.cancelScheduledValues(Mus.ctx.currentTime); Mus.master.gain.setTargetAtTime(0, Mus.ctx.currentTime, .6); clearInterval(Mus.timer); setTimeout(() => { if (!Mus.on && Mus.ctx) Mus.ctx.suspend(); }, 3500); musLabel(); }
@@ -24832,7 +24965,7 @@ function setMusic(on) {
 (function initMusic() {
   $('#mus-mood').value = Mus.mood; $('#mus-vol').value = Math.round(Mus.vol * 100);
   $('#mus-toggle').addEventListener('click', () => setMusic(!Mus.on));
-  $('#mus-mood').addEventListener('change', e => { Mus.mood = e.target.value; try { localStorage.setItem('battleDrill.musMood', Mus.mood); } catch (x) { } if (Mus.on) { Mus.cur = Mus.mood === 'shuffle' ? pick(Object.keys(BARS)) : Mus.mood; Mus.bar = 0; Mus.next = Mus.ctx.currentTime + 1.2; musLabel(); } });
+  $('#mus-mood').addEventListener('change', e => { Mus.mood = e.target.value; try { localStorage.setItem('battleDrill.musMood', Mus.mood); } catch (x) { } if (Mus.on) { Mus.theme = null; Mus.tr = 0; Mus.cur = (Mus.mood === 'shuffle' || Mus.mood === 'army') ? pick(Object.keys(BARS)) : Mus.mood; Mus.bar = 0; Mus.next = Mus.ctx.currentTime + 1.2; musLabel(); } });
   $('#mus-vol').addEventListener('input', e => setMusicVol(+e.target.value / 100));
   let want = false; try { want = localStorage.getItem('battleDrill.music') === 'on'; } catch (e) { }
   if (want) { const once = () => { setMusic(true); document.removeEventListener('pointerdown', once); }; document.addEventListener('pointerdown', once); }
