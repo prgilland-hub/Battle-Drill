@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.26-0134';
+  const VERSION = '2026.11.26-0137';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -2396,7 +2396,7 @@ Unit: Big Walker | models 1 | M 8 | T 10 | Sv 2 | Inv 5 | W 12 | Ld 6 | OC 4 | s
       <h3>Sound and music</h3>
       <div class="set-row"><div><b>Battlefield sound</b><span class="muted">Wind, a low drone, distant shelling and dice clatter. Quiet by default.</span></div><button type="button" class="chip-btn" id="snd-toggle" aria-pressed="false" data-tip="Ambient battlefield sound: wind, a low drone, distant shelling and dice clatter. Quiet by default."><span class="ico" aria-hidden="true">🔈</span><span class="lbl">Sound</span></button></div>
       <div class="set-row"><div><b>Music</b><span class="muted">Gothic space horror, composed live in your browser: a choir and organ, bells, war drums, low brass, machine-chant and drones. Six moods, or let each army have its own theme that follows whose turn it is.</span></div><button type="button" class="chip-btn" id="mus-toggle" aria-pressed="false" data-tip="Gothic space horror music, made live in your browser: a choir and organ, tolling bells, war drums and drones. Pick a mood below."><span class="ico" aria-hidden="true">🎼</span><span class="lbl">Music</span></button></div>
-      <div class="mus-ctl" id="mus-ctl" hidden><select id="mus-mood" aria-label="Music mood"><option value="army">By army (follows the turn)</option><option value="shuffle">Shuffle all</option><option value="cathedral">Cathedral of Dust</option><option value="hive">Hive Fleet Rising</option><option value="procession">Grim Procession</option><option value="siege">Siege of Iron</option><option value="forge">Forge Liturgy</option><option value="void">The Silent Void</option></select><input type="range" id="mus-vol" min="0" max="100" value="50" aria-label="Music volume"><span class="muted" id="mus-now" aria-live="polite"></span></div>
+      <div class="mus-ctl" id="mus-ctl" hidden><select id="mus-mood" aria-label="Music mood"><option value="army">By army (follows the turn)</option><option value="shuffle">Shuffle all</option><option value="litany">Voices of the Faithful</option><option value="cathedral">Cathedral of Dust</option><option value="hive">Hive Fleet Rising</option><option value="procession">Grim Procession</option><option value="siege">Siege of Iron</option><option value="forge">Forge Liturgy</option><option value="void">The Silent Void</option></select><input type="range" id="mus-vol" min="0" max="100" value="50" aria-label="Music volume"><span class="muted" id="mus-now" aria-live="polite"></span></div>
     </div>
     <div class="set-sec" id="set-device">
       <h3>Display</h3>
@@ -24769,7 +24769,7 @@ function setReorder(on) {
 /* ============ MUSIC: gothic space horror, composed live with the Web Audio API (no audio files) ============ */
 const Mus = { ctx: null, bus: null, wet: null, master: null, on: false, tr: 0, theme: null, since: 0, mood: 'shuffle', cur: 'cathedral', vol: .5, timer: null, next: 0, bar: 0, left: 0, noise: null };
 try { Mus.vol = +(localStorage.getItem('battleDrill.musVol') || .5); Mus.mood = localStorage.getItem('battleDrill.musMood') || 'army'; if (!localStorage.getItem('battleDrill.musArmy1')) { localStorage.setItem('battleDrill.musArmy1', '1'); Mus.mood = 'army'; localStorage.setItem('battleDrill.musMood', 'army'); } } catch (e) { }
-const MOODS = { main: 'Ashes and Dawn', cathedral: 'Cathedral of Dust', hive: 'Hive Fleet Rising', procession: 'Grim Procession', siege: 'Siege of Iron', forge: 'Forge Liturgy', void: 'The Silent Void' };
+const MOODS = { litany: 'Voices of the Faithful', main: 'Ashes and Dawn', cathedral: 'Cathedral of Dust', hive: 'Hive Fleet Rising', procession: 'Grim Procession', siege: 'Siege of Iron', forge: 'Forge Liturgy', void: 'The Silent Void' };
 const mtof = n => 440 * Math.pow(2, (n + (Mus.tr || 0) - 69) / 12);
 const rnd = (a, b) => a + Math.random() * (b - a);
 function musInit() {
@@ -24947,13 +24947,25 @@ function barMain(t, i) {
   if (k === 0 || last) bell(t + .1, root + 24, .11, true);
   return L;
 }
-const BARS = { main: barMain, cathedral: barCathedral, hive: barHive, procession: barProcession, siege: barSiege, forge: barForge, void: barVoid };
+/* Voices of the Faithful: Sororitas. Bright and high: sung sopranos, bells and a harp, no drums, in a major key that never turns dark */
+const LIT_ROOTS = [38, 43, 35, 45, 38, 40, 43, 45];
+const LIT_CH = [[62, 66, 69, 74], [67, 71, 74, 79], [59, 62, 66, 71], [57, 61, 64, 69], [62, 66, 69, 74], [64, 67, 71, 76], [67, 71, 74, 79], [57, 61, 64, 69]];
+function barLitany(t, i) {
+  const L = 12, k = ((i % 8) + 8) % 8, root = LIT_ROOTS[k], ch = LIT_CH[k];
+  organ(t, root + 12, L, .018); organ(t, root + 19, L, .01);
+  ch.forEach((n, j) => choirNote(t + j * .9, n + 12, L - 3, { vowel: ['ah', 'oh', 'ah', 'oo'][j], gain: .075, attack: 2.4, release: 3, pan: [-.6, -.2, .2, .6][j] }));
+  for (let j = 0; j < 8; j++) pluck(t + .6 + j * 1.2 + rnd(-.03, .03), ch[j % 4] + (j >= 4 ? 24 : 12), .035 + (j % 4 === 0 ? .02 : 0));
+  if (k % 2 === 0) bell(t, ch[2] + 24, .1, true);
+  if (k === 7 || k === 3) bell(t + 5, ch[0] + 24, .08, true);
+  return L;
+}
+const BARS = { litany: barLitany, main: barMain, cathedral: barCathedral, hive: barHive, procession: barProcession, siege: barSiege, forge: barForge, void: barVoid };
 /* each army has its own musical colour: a key, and the kinds of music it draws from. The score follows whose turn it is. */
 const ARMY_DEFAULT = { name: 'Gothic Vigil', tr: 0, pool: ['cathedral', 'hive', 'procession', 'siege', 'forge', 'void'], w: [1, 1, 1, 1, 1, 1] };
 const ARMY_THEMES = [
   [/death guard|nurgle|maggot|rot/i, { name: 'The Rot Turns', tr: -3, pool: ['hive', 'void', 'procession', 'cathedral'], w: [4, 2, 2, 1] }],
   [/chaos|thousand sons|world eaters|emperor.s children|heretic|daemon|zarkan|zadophon|reaver|callous|coven|claw of/i, { name: 'Warp-Touched Dirge', tr: -2, pool: ['hive', 'procession', 'void', 'cathedral'], w: [3, 3, 2, 1] }],
-  [/sororitas|sisters|sanctuary|miracle/i, { name: 'Litany of the Faithful', tr: 2, pool: ['cathedral', 'procession', 'siege'], w: [5, 2, 1] }],
+  [/sororitas|sisters|sanctuary|miracle/i, { name: 'Litany of the Faithful', tr: 3, pool: ['litany', 'cathedral'], w: [5, 1] }],
   [/custodes|gilded|tristraen/i, { name: 'The Golden Vigil', tr: 3, pool: ['cathedral', 'siege', 'procession'], w: [4, 3, 1] }],
   [/grey knights|inquisitor|deltic|purge corps/i, { name: 'Silver Vigil', tr: 1, pool: ['cathedral', 'void', 'procession'], w: [3, 3, 1] }],
   [/astra militarum|guard|drayden|lance/i, { name: 'March of the Regiments', tr: -2, pool: ['siege', 'procession'], w: [4, 3] }],
