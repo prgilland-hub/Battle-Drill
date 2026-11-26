@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.26-0238';
+  const VERSION = '2026.11.26-2329';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -13314,6 +13314,7 @@ Object.assign(PRIMARIES, {
   'On Holy Ground': { c: cp2('5 VP if a friendly unit that is not battle-shocked is within range of your home objective, then 5 VP each if you control one or more, two or more, and three or more objectives.', c => (c.myHome && aliveSide(c.side).some(u => u.placed && !u.reserve && !u.shocked && u.x >= 0 && objIn(u, c.myHome)) ? 5 : 0) + (c.held.length >= 1 ? 5 : 0) + (c.held.length >= 2 ? 5 : 0) + (c.held.length >= 3 ? 5 : 0)) },
   'Defenders of the Golden Throne': { c: cp2('10 VP if a friendly unit that is not battle-shocked is within 3" of the centre of the battlefield, and 5 VP if you control at least as many objectives as your opponent.', c => (cpCentreUnit(c.side) ? 10 : 0) + (c.held.length >= c.oppHeld.length ? 5 : 0)) },
   'Honour the Chapter': { c: cp2('5 VP if you control one or more objectives and at least as many as your opponent, and 10 VP if you control two or more objectives other than your home objective.', c => (c.held.length >= 1 && c.held.length >= c.oppHeld.length ? 5 : 0) + (c.nonHome.length >= 2 ? 10 : 0)) },
+  "Duff 'Em Up!": { c: [...cp2('5 VP if you control one or more objectives other than your home objective, and 5 VP if you control your opponent\'s home objective.', c => (c.nonHome.length ? 5 : 0) + (c.oppHome && c.held.includes(c.oppHome) ? 5 : 0)), K('eot', 1, 9, 'End of your turn, any round: 5 VP if an enemy unit was destroyed this turn or the previous turn.', c => (c.kills.length || (G.lostLast && G.lostLast[other(c.side)]) ? 5 : 0))] },
   'Inexorable Conquest': { c: cp2('10 VP if you control your opponent\'s home objective, and 5 VP if one of your units (not battle-shocked, not a Transport) is within 3" of the centre of the battlefield.', c => (c.oppHome && c.held.includes(c.oppHome) ? 10 : 0) + (cpCentreUnit(c.side) ? 5 : 0)) }
 });
 const CP_PATROLS = [
@@ -13500,6 +13501,34 @@ const CP_PATROLS = [
       cpU({ name: 'Gilded Blades Custodian Wardens', ds: 'Custodian Wardens', cpRes: 2, models: 3, M: 6, T: 6, Sv: 2, inv: 4, W: 3, OC: 2, kw: ['infantry', "tristraen's gilded blades", 'imperium', 'adeptus custodes'],
         ranged: [cpW('Castellan axe', 24, 1, 2, 4, -1, 2, { assault: true, count: 1 }), cpW('Guardian spear', 24, 2, 2, 4, -1, 2, { assault: true, count: 2 })], melee: [cpW('Castellan axe', 0, 4, 2, 9, -1, 3, { count: 1 }), cpW('Guardian spear', 0, 5, 2, 7, -2, 2, { count: 2 })],
         abilities: [{ name: 'Divine Protection', text: 'This unit has Feel No Pain 4+ against mortal wounds.', fx: [] }] })
+    ] }
+  ,
+  { id: 'cp-ardmob', faction: 'Orks', name: "'Ardmob", box: 'Orks Combat Patrol', primary: "Duff 'Em Up!", rules: [],
+    det: { name: "'Ardmob", rule: "'Ard As Nails", ruleText: "Attacks that target a friendly 'ARDMOB unit while Waaagh! is active get -1 to Wound when their Strength is greater than that unit's Toughness. Primary mission: Duff 'Em Up!",
+      strats: [
+        { name: "Krump 'Em", cp: '1', type: "'Ardmob Stratagem", when: "Fight phase, when a friendly 'ARDMOB unit is selected to fight", text: 'Its melee attacks get +1 Strength.' },
+        { name: 'Get Stuck In', cp: '1', type: "'Ardmob Stratagem", when: "Your opponent's Shooting phase, after an enemy unit that targeted a friendly unengaged 'ARDMOB unit has shot", text: 'That unit can make a surge move of up to D6+1".' },
+        { name: 'Medi-Squigs', cp: '1', type: "'Ardmob Stratagem", when: "Your opponent's Shooting phase, when an enemy unit targets a friendly 'ARDMOB unit", text: 'That unit has a 5+ invulnerable save.' }] },
+    enh: [{ name: "Extra Platin'", who: "'Ardmob Wartrakk", text: 'The bearer has a 3+ Save and a 4+ invulnerable save.' }, { name: 'Rallying War Cry', who: "'Ardmob Warboss", text: 'Once per battle, in your Command phase, return up to D3+2 destroyed bodyguard models to the bearer\'s unit.' }],
+    units: [
+      cpU({ name: "'Ardmob Boyz (Kombi-rokkit Nob)", ds: 'Boyz', models: 10, M: 6, T: 5, Sv: 5, W: 2, Ld: 7, OC: 2, kw: ['infantry', "'ardmob", 'explosives', 'mob', 'orks'],
+        ranged: [cpW('Kombi-shoota', 24, 2, 5, 4, 0, 1, { count: 1 }), cpW('Kombi-rokkit', 24, 1, 5, 10, -2, 3, { count: 1 }), cpW('Slugga', 12, 1, 5, 4, 0, 1, { xkw: ['close-quarters'], count: 10 }), cpW('Shoota', 18, 2, 5, 4, 0, 1, { rapid: 1, count: 9 })],
+        melee: [cpW('Big Choppa', 0, 3, 3, 5, -1, 2, { count: 1 }), cpW('Choppa', 0, 1, 3, 4, -1, 1, { count: 9 })],
+        abilities: [{ name: 'Waaagh!', text: 'Army rule: re-roll Advance rolls. Once per battle, at the start of your Command phase, call a Waaagh!: until the end of your next turn, units can shoot and declare charges in a turn in which they advanced.', fx: [] }, { name: 'Grab Dat Scrap', text: 'While engaged, this unit has +1 OC.', fx: [] }],
+        leader: { name: "'Ardmob Warboss", M: 6, T: 5, Sv: 4, inv: 5, W: 6, Ld: 6, OC: 1, fnp: 0, kw: ['infantry', 'character', 'explosives', "'ardmob", 'orks', 'warlord'], scouts: 0, abilities: [{ name: "Smash 'Em Up", text: "When selected to fight, this unit's melee attacks gain either Lethal Hits or Sustained Hits 1.", fx: [] }] },
+        leaderWeapons: { ranged: [cpW('Kustom Shoota', 18, 4, 5, 4, 0, 1, { rapid: 2, leader: true })], melee: [cpW('Kustom Choppa', 0, 6, 2, 8, -2, 2, { xkw: ['cleave 1'], leader: true })] } }),
+      cpU({ name: "'Ardmob Boyz (Kustom Shoota Nob)", ds: 'Boyz', models: 10, M: 6, T: 5, Sv: 5, W: 2, Ld: 7, OC: 2, kw: ['infantry', "'ardmob", 'explosives', 'mob', 'orks'],
+        ranged: [cpW('Kustom Shoota', 18, 4, 5, 4, 0, 1, { rapid: 2, count: 1 }), cpW('Slugga', 12, 1, 5, 4, 0, 1, { xkw: ['close-quarters'], count: 10 }), cpW('Shoota', 18, 2, 5, 4, 0, 1, { rapid: 1, count: 9 })],
+        melee: [cpW('Big Choppa', 0, 3, 3, 5, -1, 2, { count: 1 }), cpW('Choppa', 0, 1, 3, 4, -1, 1, { count: 9 })],
+        abilities: [{ name: 'Waaagh!', text: 'Army rule: re-roll Advance rolls. Once per battle, at the start of your Command phase, call a Waaagh!: until the end of your next turn, units can shoot and declare charges in a turn in which they advanced.', fx: [] }, { name: 'Grab Dat Scrap', text: 'While engaged, this unit has +1 OC.', fx: [] }],
+        leader: { name: "'Ardmob Weirdboy", M: 6, T: 5, Sv: 5, inv: 0, W: 4, Ld: 7, OC: 1, fnp: 0, kw: ['infantry', 'character', 'psyker', "'ardmob", 'orks'], scouts: 0, abilities: [{ name: 'Totem of Mork', text: 'At the end of your Command phase, if this unit controls an objective, that objective is secured.', fx: [] }] },
+        leaderWeapons: { ranged: [cpW('Psychic Powers - Da Stomp', 24, 'D6+2', 4, 4, 0, 1, { blast: true, xkw: ['psychic'], leader: true }), cpW("Psychic Powers - 'Eadbanger", 24, 1, 4, 8, -3, 2, { xkw: ['precision', 'psychic'], leader: true })], melee: [cpW('Waaagh! Staff - Bash', 0, 3, 3, 8, -1, 2, { xkw: ['psychic'], leader: true }), cpW('Waaagh! Staff - Clobber', 0, 4, 3, 8, -2, 2, { dev: true, xkw: ['hazardous', 'psychic'], leader: true })] } }),
+      cpU({ name: "'Ardmob Gretchin", ds: 'Gretchin', models: 10, M: 6, T: 2, Sv: 7, W: 1, Ld: 8, OC: 1, kw: ['infantry', "'ardmob", 'grots', 'orks'],
+        ranged: [cpW('Blasta', 18, 1, 4, 3, 0, 1, { xkw: ['close-quarters'], count: 10 }), cpW("Lobbin' Bombs", 6, 1, 4, 4, -1, 1, { xkw: ['hazardous'], count: 10 })], melee: [cpW('Scavenged Shivs', 0, 1, 5, 2, 0, 1, { count: 10 })],
+        abilities: [{ name: 'Waaagh!', text: 'Army rule: re-roll Advance rolls. Once per battle, at the start of your Command phase, call a Waaagh!: until the end of your next turn, units can shoot and declare charges in a turn in which they advanced.', fx: [] }, { name: 'Grot Infestation', text: 'Once per battle, when this unit is destroyed, you can place it in Strategic Reserves with all destroyed models returned. It is no longer destroyed and gains Deep Strike.', fx: [] }] }),
+      cpU({ name: "'Ardmob Wartrakk", ds: 'Wartrakk', models: 1, M: 12, T: 6, Sv: 4, inv: 6, W: 7, Ld: 7, OC: 3, kw: ['mounted', "'ardmob", 'speed freeks', 'orks'],
+        ranged: [cpW('Kustom Shoota', 18, 4, 5, 4, 0, 1, { rapid: 2 }), cpW('Rokkit Launcha', 24, 'D3+3', 5, 10, -2, 3)], melee: [cpW('Choppas', 0, 6, 3, 4, -1, 1)],
+        abilities: [{ name: 'Waaagh!', text: 'Army rule: re-roll Advance rolls. Once per battle, at the start of your Command phase, call a Waaagh!: until the end of your next turn, units can shoot and declare charges in a turn in which they advanced.', fx: [] }, { name: 'Indiscriminate Detonations', text: 'After this unit shoots in your Shooting phase, select one enemy unit it hit. That unit is suppressed until the start of your next turn, and its attacks have -1 to Hit while suppressed.', fx: [] }] })
     ] }
 ];
 /* the datasheet name behind each patrol unit: the 3D model library (yours and the built-in figures) matches on it, so "Maggot Lords Plague Marines" has to read as "Plague Marines" */
