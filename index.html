@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.26-0029';
+  const VERSION = '2026.11.26-0040';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -1563,6 +1563,30 @@ html[data-grim="on"] .b-bg{fill:var(--field)}
 #b-optpop{position:absolute;right:16px;bottom:58px;z-index:8;width:min(380px,calc(100% - 32px));max-height:60%;overflow:auto;background:var(--raised,#f3efe2);color:var(--ink,#1c1a17);border:1px solid var(--line);border-radius:10px;padding:10px 12px;box-shadow:0 8px 24px rgba(0,0,0,.5)}
 #b-optpop[hidden]{display:none}
 #b-optpop .setup{border-top:0;margin:0;padding:0}
+.offtab{margin:8px 0;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:.88rem}
+.offtab h4{margin:0 0 4px;font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.offtab .ot-side{margin:3px 0}.offtab .ot-side.blue>b{color:#7db4ff}.offtab .ot-side.red>b{color:#ff8478}
+.offtab .ot-h{display:inline-block;min-width:5.6em;color:var(--muted);font-size:.8rem;text-transform:uppercase;letter-spacing:.04em}
+/* thrown dice (flat view) and the roll-off banner */
+.cube-layer{position:absolute;inset:0;pointer-events:none;z-index:30;perspective:760px;overflow:hidden}
+.cube-w{position:absolute;left:0;top:0;width:var(--s);height:var(--s);filter:drop-shadow(0 7px 5px rgba(0,0,0,.5))}
+.cube{position:relative;width:var(--s);height:var(--s);transform-style:preserve-3d}
+.cube .f{position:absolute;inset:0;display:grid;grid-template:repeat(3,1fr)/repeat(3,1fr);padding:15%;border-radius:20%;backface-visibility:hidden;background:linear-gradient(145deg,var(--b),var(--b2));box-shadow:inset 0 0 0 1px rgba(255,255,255,.18),inset 0 -3px 5px rgba(0,0,0,.28);transform:var(--t) translateZ(calc(var(--s) / 2))}
+.cube .f i{background:var(--p);border-radius:50%;box-shadow:inset 0 -1px 2px rgba(0,0,0,.45);margin:14%}
+.cube.k-def{--b:#f1e8d0;--b2:#cdbf98;--p:#2a2418}
+.cube.k-no{--b:#8d8a80;--b2:#5f5d55;--p:#161616}
+.cube.k-ok{--b:#38b25a;--b2:#1d7437;--p:#f6f0de}
+.cube.k-bad{--b:#d8453a;--b2:#8c241c;--p:#f6f0de}
+.cube.k-crit{--b:#e6bd3e;--b2:#a77c14;--p:#241a04}
+.cube.k-blue{--b:#3d85f0;--b2:#1a47a8;--p:#fff}
+.cube.k-red{--b:#ee4b3c;--b2:#9d1f15;--p:#fff}
+.rolloff{position:absolute;left:50%;bottom:130px;transform:translateX(-50%);z-index:31;background:rgba(8,12,9,.9);border:1px solid var(--line);border-radius:10px;padding:8px 16px;text-align:center;box-shadow:0 6px 22px rgba(0,0,0,.55);pointer-events:auto;cursor:pointer;max-width:92%}
+.rolloff .ro-t{font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.rolloff .ro-r{display:flex;gap:14px;align-items:center;justify-content:center;margin-top:4px;font-size:1.05rem;flex-wrap:wrap}
+.rolloff .ro-p b{font-weight:600}.rolloff .ro-p em{font-style:normal;font-size:1.5rem;font-weight:800;margin-left:6px}
+.rolloff .ro-p.blue{color:#7db4ff}.rolloff .ro-p.red{color:#ff8478}
+.rolloff .ro-p.win em{text-decoration:underline;text-underline-offset:4px}
+
 #b-3dmore{height:30px;border-radius:8px;border:1px solid var(--line);background:rgba(14,18,20,.82);color:#f1ede0;font:600 .78rem system-ui;padding:0 10px;cursor:pointer}
 #b-3dpanel{display:none;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px;padding:8px;border-radius:10px;background:rgba(14,18,20,.78)}
 #b-3dbar.open #b-3dpanel{display:flex}
@@ -6719,8 +6743,77 @@ async function hotPass(why) {
   await hotOverlay(escH(nxt), `<span style="display:inline-block;padding:3px 14px;border-radius:4px;background:${cc};color:#0b0f0a;font-weight:700;letter-spacing:.12em;margin-bottom:10px">YOU PLAY ${colr.toUpperCase()}</span><br>` + (why === 'turn' ? bits.turn : bits.setup) + `<br><br><i style="color:#c9dbb8;display:inline-block;max-width:30em">“${escH(qt)}”</i>`, `I am ${escH(nxt)}: show the board`);
   hotSwapState(); G.busy = false; render();
 }
-function rollOffRoles() {
+
+/* ---- thrown dice for the flat view, and the roll-off shown with a red die and a blue die ---- */
+const CUBE_PIPS = { 1: [5], 2: [1, 9], 3: [1, 5, 9], 4: [1, 3, 7, 9], 5: [1, 3, 5, 7, 9], 6: [1, 3, 4, 6, 7, 9] };
+const CUBE_ROT = { 1: [0, 0], 6: [0, 180], 3: [0, -90], 4: [0, 90], 2: [-90, 0], 5: [90, 0] };
+const CUBE_FACES = [[1, 'rotateY(0deg)'], [6, 'rotateY(180deg)'], [3, 'rotateY(90deg)'], [4, 'rotateY(-90deg)'], [2, 'rotateX(90deg)'], [5, 'rotateX(-90deg)']];
+const dieKind = cls => /\bcrit\b/.test(cls || '') ? 'crit' : /\bbad\b/.test(cls || '') ? 'bad' : /\bok\b/.test(cls || '') ? 'ok' : /\bno\b/.test(cls || '') ? 'no' : /\bblue\b/.test(cls || '') ? 'blue' : /\bred\b/.test(cls || '') ? 'red' : 'def';
+function cubeEl(kind, size) {
+  const d = document.createElement('div'); d.className = 'cube k-' + kind; d.style.setProperty('--s', size + 'px');
+  d.innerHTML = CUBE_FACES.map(([v, t]) => `<div class="f" style="--t:${t}">${CUBE_PIPS[v].map(n => `<i style="grid-area:${Math.ceil(n / 3)}/${((n - 1) % 3) + 1}"></i>`).join('')}</div>`).join('');
+  return d;
+}
+function cubeThrow(items, o) {
+  o = o || {};
+  const host = document.getElementById('b-map');
+  if (!host || reduceMotion || !host.animate || !items.length) return Promise.resolve();
+  let layer = host.querySelector('.cube-layer'); if (!layer) { layer = document.createElement('div'); layer.className = 'cube-layer'; host.appendChild(layer); }
+  const W = host.clientWidth || 600, H = host.clientHeight || 400, n = Math.min(items.length, 30), size = o.size || (n <= 4 ? 52 : n <= 12 ? 38 : 28);
+  const cx = o.cx !== undefined ? o.cx : W / 2, cy = o.cy !== undefined ? o.cy : H * .36, gap = size * 1.5, cols = Math.min(n, Math.max(2, Math.floor((W * .7) / gap))), rows = Math.ceil(n / cols);
+  const T = v => `rotateX(${v[0]}deg) rotateY(${v[1]}deg) rotateZ(${v[2]}deg)`, tur = () => 360 * (1 + Math.floor(Math.random() * 3)) * (Math.random() < .5 ? -1 : 1);
+  const mine = [], fin = [];
+  items.slice(0, n).forEach((it, i) => {
+    const c = i % cols, r = Math.floor(i / cols), per = Math.min(cols, n - r * cols);
+    const ex = cx + (c - (per - 1) / 2) * gap + (Math.random() - .5) * size * .3 - size / 2, ey = cy + (r - (rows - 1) / 2) * gap + (Math.random() - .5) * size * .3 - size / 2;
+    const sx = it.from === 'left' ? -size * 2 : it.from === 'right' ? W + size : ex + (Math.random() - .5) * W * .35, sy = it.from ? ey + size * 2 : H + size * 1.5;
+    const w = document.createElement('div'); w.className = 'cube-w'; w.style.setProperty('--s', size + 'px');
+    const cube = cubeEl(it.k || 'def', size); w.appendChild(cube); layer.appendChild(w); mine.push(w);
+    const rot = CUBE_ROT[Math.max(1, Math.min(6, it.v | 0))] || [0, 0], a0 = [Math.random() * 360, Math.random() * 360, Math.random() * 360], a1 = [rot[0] + tur(), rot[1] + tur(), tur()];
+    const dur = 850 + Math.random() * 250, del = Math.min(i * 30, 500);
+    cube.style.transform = T(a1); w.style.transform = `translate(${ex}px,${ey}px)`;
+    cube.animate([{ transform: T(a0) }, { transform: T(a1) }], { duration: dur, delay: del, easing: 'cubic-bezier(.15,.65,.25,1)', fill: 'backwards' });
+    const an = w.animate([{ transform: `translate(${sx}px,${sy}px) scale(1.6)` }, { offset: .55, transform: `translate(${(sx + ex) / 2}px,${ey - size * 1.7}px) scale(1.12)` }, { offset: .78, transform: `translate(${ex}px,${ey}px) scale(1)` }, { offset: .89, transform: `translate(${ex}px,${ey - size * .3}px) scale(1)` }, { transform: `translate(${ex}px,${ey}px) scale(1)` }], { duration: dur + 160, delay: del, easing: 'ease-out', fill: 'backwards' });
+    fin.push(an.finished.catch(() => { }));
+  });
+  const hold = o.hold === undefined ? 900 : o.hold;
+  const settled = Promise.all(fin);
+  settled.then(() => setTimeout(() => { mine.forEach(w => { try { w.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 350, fill: 'forwards' }); } catch (e) { } }); setTimeout(() => { mine.forEach(w => w.remove()); }, 380); }, hold));
+  return o.wait ? settled.then(() => new Promise(r => setTimeout(r, Math.min(hold, 1400)))) : settled;
+}
+{ const _ad2 = animateDice;
+  animateDice = function (container, only) {
+    const p = _ad2.apply(this, arguments);
+    try {
+      if (!(typeof BF3D !== 'undefined' && BF3D && BF3D.on) && !reduceMotion) {
+        const els = only ? only.filter(d => d && d.dataset && d.dataset.v !== undefined) : (container ? [...container.querySelectorAll('.die[data-v]')] : []);
+        if (els.length) cubeThrow(els.map(e => ({ v: +e.dataset.v, k: dieKind(e.className) })));
+      }
+    } catch (e) { console.error(e); }
+    return p;
+  };
+}
+async function rollOffShow(a, b, what) {
+  const blueSide = hotBlue('player') ? 'player' : 'ai', redSide = blueSide === 'player' ? 'ai' : 'player', val = { player: a, ai: b };
+  const host = document.getElementById('b-map'); let wait = 0;
+  try {
+    if (typeof BF3D !== 'undefined' && BF3D && BF3D.on && BF3D.throwDice) wait = BF3D.throwDice([{ v: val[blueSide], c: 'die blue' }, { v: val[redSide], c: 'die red' }], { centre: true, hold: 3200 }) || 0;
+    else if (host && !reduceMotion) { const H = host.clientHeight || 400; wait = 1; await cubeThrow([{ v: val[blueSide], k: 'blue', from: 'left' }, { v: val[redSide], k: 'red', from: 'right' }], { size: 72, cy: H * .46, hold: 2200 }); wait = 0; }
+  } catch (e) { console.error(e); }
+  if (wait > 1) await sleep(wait);
+  if (!host) return;
+  const g = G, nm = s => `${escH(hotName(s).replace(/^The AI$/, 'AI'))}`, win = a > b ? 'player' : 'ai';
+  const el = document.createElement('div'); el.className = 'rolloff'; el.setAttribute('role', 'status');
+  el.innerHTML = `<div class="ro-t">${escH(what)}</div><div class="ro-r">${[blueSide, redSide].map(sd => `<span class="ro-p ${sd === blueSide ? 'blue' : 'red'}${sd === win ? ' win' : ''}"><b>${nm(sd)}</b> (${sd === blueSide ? 'blue' : 'red'})<em>${val[sd]}</em></span>`).join('')}</div>`;
+  host.appendChild(el);
+  await new Promise(res => { let done = false; const end = () => { if (done) return; done = true; el.remove(); res(); }; el.addEventListener('click', end); setTimeout(end, reduceMotion ? 900 : 1900); });
+  if (G !== g) return;
+}
+async function rollOffRoles() {
+  if (!G || G.rolling) return; const g0 = G; g0.rolling = true;
   let a, b; do { a = d6(); b = d6(); } while (a === b);
+  try { await rollOffShow(a, b, 'Roll-off: Attacker and Defender'); } catch (e) { console.error(e); }
+  g0.rolling = false; if (G !== g0 || G.stage === 'over') return;
   G.roll = { you: a, ai: b };
   if (G.hot) { log(`Roll-off for Attacker and Defender: you ${a}, AI ${b}. You choose.`, 'sys'); render(); if (a < b) hotPass('setup'); return; }
   if (a > b) { log(`Roll-off for Attacker and Defender: you ${a}, AI ${b}. You choose.`, 'sys'); }
@@ -6847,8 +6940,11 @@ function playerPlace(x, y) {
   G.deployTurn = 'ai';
   continueDeploy();
 }
-function rollFirstTurn() {
+async function rollFirstTurn() {
+  if (!G || G.rolling) return; const g0 = G; g0.rolling = true;
   let a, b; do { a = d6(); b = d6(); } while (a === b);
+  try { await rollOffShow(a, b, 'Roll-off: first turn'); } catch (e) { console.error(e); }
+  g0.rolling = false; if (G !== g0 || G.stage === 'over') return;
   G.roll = { you: a, ai: b };
   if (G.hot) { log(`Roll-off for the first turn: you ${a}, AI ${b}. You choose.`, 'sys'); render(); if (a < b) hotPass('setup'); return; }
   if (a > b) log(`Roll-off for the first turn: you ${a}, AI ${b}. You choose.`, 'sys');
@@ -8915,9 +9011,19 @@ function openLoadout() {
 }
 function renderEmbarked() {
   const box = $('#b-embarked'); if (!box || !G || !G.units) return;
-  const rows = G.units.filter(u => u.alive && u.embarkedIn && u.side === 'player').map(u => { const t = G.units.find(x => x.id === u.embarkedIn); return `${escH(u.name)} <span class="muted">in ${escH(t ? t.name : '?')}</span>`; });
-  const ai = G.units.filter(u => u.alive && u.embarkedIn && u.side === 'ai').length;
-  box.innerHTML = rows.length || ai ? `<p class="uinfo"><b>Embarked:</b> ${rows.join('; ') || 'none of yours'}${ai ? `. The AI has ${plural(ai, 'unit')} embarked.` : ''}</p>` : '';
+  const vis = sd => sd === 'player' || G.stage === 'battle' || G.stage === 'over' || (G.stage === 'pre' && PRE_STEPS.indexOf(G.step) > PRE_STEPS.indexOf('formations'));
+  const parts = [];
+  for (const sd of ['player', 'ai']) {
+    if (!vis(sd)) continue;
+    const us = G.units.filter(u => u.alive && u.side === sd && !u.placed), res = us.filter(u => u.reserve && !u.embarkedIn), tm = new Map();
+    for (const u of us.filter(x => x.embarkedIn)) { const t = G.units.find(x => x.id === u.embarkedIn); if (!t) continue; if (!tm.has(t)) tm.set(t, []); tm.get(t).push(u); }
+    if (!res.length && !tm.size) continue;
+    const nm = escH(hotName(sd).replace(/^The AI$/, 'AI')), blue = typeof hotBlue === 'function' ? hotBlue(sd) : sd === 'player';
+    parts.push(`<div class="ot-side ${blue ? 'blue' : 'red'}"><b>${nm}</b> <span class="muted">(${blue ? 'blue' : 'red'})</span>`
+      + (res.length ? `<div><span class="ot-h">Reserves</span> ${res.map(u => escH(u.name)).join(', ')}</div>` : '')
+      + (tm.size ? `<div><span class="ot-h">Transports</span> ${[...tm].map(([t, l]) => `${escH(t.name)}${t.placed ? '' : ' <span class="muted">(in reserve)</span>'}: ${l.map(u => escH(u.name)).join(', ')}`).join('; ')}</div>` : '') + '</div>');
+  }
+  box.innerHTML = parts.length ? `<div class="offtab"><h4>Off the table</h4>${parts.join('')}</div>` : '';
 }
 
 /* ============ TYRANID ASSIMILATION SWARM: Feed the Swarm, enhancements and stratagems ============ */
@@ -17233,8 +17339,8 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
     const cv = document.createElement('canvas'); cv.id = 'b-3d'; cv.setAttribute('aria-label', '3D battlefield, drag to look around'); cv.hidden = true;
     holder.appendChild(cv);
     try { BF3D.R = new BFX.Renderer(cv); } catch (e) { BF3D.fail = String(e.message || e); cv.remove(); return false; }
-    BF3D.fit = top => { const cv = BF3D.R && BF3D.R.cv, asp = cv && cv.clientHeight > 50 ? cv.clientWidth / cv.clientHeight : 1.6; return BF3D.lastFit = Math.max(BW * 1.1 / (.753 * asp), (top ? 60 : 51) * BH / 44); };
-    const R = BF3D.R, cam = BF3D.cam = new BFX.Cam(); cam.dist = BF3D.fit(); cam.pitch = .95; cam.target = [BW / 2, 0, BH / 2 + 2]; try { if (typeof ResizeObserver !== 'undefined') new ResizeObserver(() => { if (BF3D.cam === cam && BF3D.lastFit && Math.abs(cam.dist - BF3D.lastFit) < .01) { cam.dist = BF3D.fit(); BF3D.dirty = true; kick(); } }).observe(R.cv); } catch (e) { } { const d0 = cam.dist; for (const ms of [250, 800]) setTimeout(() => { if (BF3D.cam === cam && cam.dist === d0 && BF3D.on) { cam.dist = BF3D.fit(); BF3D.dirty = true; kick(); } }, ms); }
+    BF3D.fit = top => { const cv = BF3D.R && BF3D.R.cv, asp = cv && cv.clientHeight > 50 ? cv.clientWidth / cv.clientHeight : 1.6; const base = Math.max(BW * 1.1 / (.753 * asp) * 1.1, (BH + 22) * 1.08); return BF3D.lastFit = top ? base * 1.15 : base; };
+    const R = BF3D.R, cam = BF3D.cam = new BFX.Cam(); cam.dist = BF3D.fit(); cam.pitch = .95; cam.target = [BW / 2, 0, BH / 2 + 3.5]; try { if (typeof ResizeObserver !== 'undefined') new ResizeObserver(() => { if (BF3D.cam === cam && BF3D.lastFit && Math.abs(cam.dist - BF3D.lastFit) < .01) { cam.dist = BF3D.fit(); BF3D.dirty = true; kick(); } }).observe(R.cv); } catch (e) { } { const d0 = cam.dist; for (const ms of [250, 800]) setTimeout(() => { if (BF3D.cam === cam && cam.dist === d0 && BF3D.on) { cam.dist = BF3D.fit(); BF3D.dirty = true; kick(); } }, ms); }
     if (/Mobi|Android|iPad|iPhone/.test(navigator.userAgent) || (navigator.hardwareConcurrency || 8) <= 4) { R.q.shadow = 1024; R.q.dpr = 1; R.makeShadow(); }
     { const R2 = BF3D.R, weak = /Mobi|Android|iPad|iPhone/.test(navigator.userAgent) || (navigator.hardwareConcurrency || 8) <= 4; let sv = 'auto'; try { sv = localStorage.getItem('bd.q') || 'auto'; } catch (e) { }
       R2.q.auto = sv === 'auto'; let lv = sv === 'low' ? 0 : sv === 'high' ? 2 : sv === 'std' ? 1 : (weak ? 0 : 1); if (sv === 'auto') { try { const k = localStorage.getItem('bd.lv'); if (k !== null && !weak) lv = Math.max(0, Math.min(2, +k || 0)); } catch (e) { } }
@@ -17323,7 +17429,7 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
       o.x = e.clientX; o.y = e.clientY; BF3D.dirty = true; kick();
     });
     cv.addEventListener('wheel', e => { e.preventDefault(); cam.zoom(Math.exp(e.deltaY * .0012)); BF3D.dirty = true; kick(); }, { passive: false });
-    cv.addEventListener('dblclick', () => { cam.yaw = 0; cam.pitch = .95; cam.dist = BF3D.fit(); cam.target = [BW / 2, 0, BH / 2 + 2]; BF3D.dirty = true; kick(); });
+    cv.addEventListener('dblclick', () => { cam.yaw = 0; cam.pitch = .95; cam.dist = BF3D.fit(); cam.target = [BW / 2, 0, BH / 2 + 3.5]; BF3D.dirty = true; kick(); });
 
     /* keyboard: WASD slides the view, Q and E turn it, R and F tilt, Z and X zoom, Shift is faster */
     const keys = new Set(); let kt = 0;
@@ -17380,7 +17486,7 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
       ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); }); document.body.appendChild(ov);
     });
     bar.querySelector('#b-3dtop').addEventListener('click', () => { cam.yaw = 0; cam.pitch = 1.5; cam.dist = BF3D.fit(true); cam.target = [BW / 2, 0, BH / 2]; BF3D.dirty = true; kick(); });
-    bar.querySelector('#b-3dtab').addEventListener('click', () => { cam.yaw = 0; cam.pitch = .95; cam.dist = BF3D.fit(); cam.target = [BW / 2, 0, BH / 2 + 2]; BF3D.dirty = true; kick(); });
+    bar.querySelector('#b-3dtab').addEventListener('click', () => { cam.yaw = 0; cam.pitch = .95; cam.dist = BF3D.fit(); cam.target = [BW / 2, 0, BH / 2 + 3.5]; BF3D.dirty = true; kick(); });
     new ResizeObserver(() => { place(); BF3D.dirty = true; kick(); }).observe($b());
     return true;
   }
@@ -17456,8 +17562,35 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
       if (BF3D.sel.has(u.id)) ring(mb, u.x, H(u.x, u.y) + .08, u.y, u.r + .5, u.r + .85, [1, .82, .3], 40);
       if (G.sel === u) ring(mb, u.x, H(u.x, u.y) + .08, u.y, u.r + .5, u.r + .85, [1, .82, .3], 40);
     }
+    try { drawOffTable(mb); } catch (e) { console.error(e); }
     return mb;
   }
+  /* units that are off the battlefield: one token each on the mats beside the dice trays */
+  function drawOffTable(mb) {
+    if (!BF3D.map || !G || !G.units) return;
+    BF3D.offLabels = [];
+    for (const side of ['player', 'ai']) {
+      if (!offVisible(side)) continue;
+      const { slots, od, m } = offSlots(side), y0 = .12, face = (BF3D.trayFlip ? (side === 'player' ? 1 : -1) : (side === 'player' ? -1 : 1)) * 1.5708;
+      BF3D.offLabels.push({ x: m.res.x, z: m.res.z, w: m.res.w, d: m.res.d, text: 'Reserves' + (od.res.length ? ' (' + od.res.length + ')' : ''), side });
+      BF3D.offLabels.push({ x: m.trn.x, z: m.trn.z, w: m.trn.w, d: m.trn.d, text: 'Transports' + (od.trn.length ? ' (' + od.trn.length + ')' : ''), side });
+      for (const sl of slots) {
+        const u = sl.u, mm = u.mods && u.mods.length ? (u.mods.find(q => !q.leader) || u.mods[0]) : null, pal = miniPalOf(u), cols = palColours(pal), sc0 = SIDEC[side] || [1, 1, 1], r = mm ? Math.min(1.2, mm.r || .6) : .6;
+        let sh = null; try { sh = mm ? shAt(mm, { x: sl.x, y: sl.z }, 0) : null; } catch (e) { }
+        const hull = !!(sh && (sh.hw || sh.hh)); let done = false;
+        if (!hull && window.BDModels && BDModels.on && BDModels.on() && mm) { try { const rf = BDModels.pick(u.ds || u.name, miniFactionOf(u), u.id + ':' + mm.id, 0, 1, true); if (rf) { BDModels.add(mb, rf, sl.x, y0, sl.z, 1.5708 - face); done = true; } } catch (e) { } }
+        if (!done && !hull && MINI.on) {
+          let k = miniArchOf(u.ds || u.name, miniFactionOf(u)); if (k && (k === 'blightlord' || POSE_FAMILIES[k])) { try { k = miniPoses(k, 2)[0]; } catch (e) { } }
+          if (k && MINI_ARCH[k]) { try { addFig(mb, figOf(k, true), cols, sl.x, y0, sl.z, r / .98, 1.5708 - face); done = true; } catch (e) { } }
+        }
+        if (!done) { const hw = hull ? Math.min(1.7, (sh.hw || 1) + (sh.rho || 0)) : r, hh = hull ? Math.min(1.1, (sh.hh || .6) + (sh.rho || 0)) : r; BFX.box(mb, sl.x, y0 + .45, sl.z, hw * 2, .9, hh * 2, 0, shade3(sc0, .6), [.1, 0]); }
+        ring(mb, sl.x, y0 + .03, sl.z, r * .96, r + .22, sc0, 24);
+        const n = u.models || (u.mods ? u.mods.length : 1);
+        BF3D.offLabels.push({ x: sl.x, z: sl.z + (side === 'player' ? 1 : 1) * 1.45, text: (u.name || '?').replace(/\s*\(.*?\)\s*$/, '').slice(0, 18) + (n > 1 ? ' x' + n : '') + (sl.by ? ' in ' + String(sl.by.name || '?').replace(/^.*\s(\S+)$/, '$1') : ''), unit: true, tag: sl.tag, side });
+      }
+    }
+  }
+
   window.addEventListener('bd-models-changed', () => { try { if (BF3D.on) { sync(true); } } catch (e) { } });
   function arrow(mb, x, gy, z, fa, r) { const c = Math.cos(fa), s = Math.sin(fa), px = -s, pz = c, y = gy + .12, col = [1, .9, .45], q = (d, w) => [x + c * d + px * w, y, z + s * d + pz * w]; mb.tri(q(r + 1, 0), q(r + .2, .4), q(r + .2, -.4), col, [0, .6], [x, y - 5, z]); }
   function buildGhost() {
@@ -17485,7 +17618,7 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
     const sig = BW + 'x' + BH + '|' + TERRAIN.length + ':' + TERRAIN.map(t => (t.x | 0) + ',' + (t.y | 0) + ',' + (t.w | 0) + (t.cat || '')).join(';') + '|' + OBJ.map(o => (o.x | 0) + ',' + (o.y | 0)).join(';') + '|' + BF3D.theme + '|' + (G.decor || []).length;
     const R = BF3D.R;
     if (force || sig !== BF3D.tsig) {
-      { const sz = BW + 'x' + BH; if (BF3D.cam && BF3D.lastSz && BF3D.lastSz !== sz) { const cm = BF3D.cam; cm.yaw = 0; cm.pitch = .95; cm.dist = BF3D.fit(); cm.target = [BW / 2, 0, BH / 2 + 2]; for (const ms of [300, 900]) setTimeout(() => { if (BF3D.cam === cm && BF3D.lastSz === sz) { cm.dist = BF3D.fit(); BF3D.dirty = true; kick(); } }, ms); } BF3D.lastSz = sz; }
+      { const sz = BW + 'x' + BH; if (BF3D.cam && BF3D.lastSz && BF3D.lastSz !== sz) { const cm = BF3D.cam; cm.yaw = 0; cm.pitch = .95; cm.dist = BF3D.fit(); cm.target = [BW / 2, 0, BH / 2 + 3.5]; for (const ms of [300, 900]) setTimeout(() => { if (BF3D.cam === cm && BF3D.lastSz === sz) { cm.dist = BF3D.fit(); BF3D.dirty = true; kick(); } }, ms); } BF3D.lastSz = sz; }
       BF3D.tsig = sig; R.clear(); BF3D.dyn = null;
       try { BF3D.map = BFX.buildMap(specNow()); } catch (e) { console.error(e); BF3D.map = null; return; }
       BF3D.mapMesh = R.upload(BF3D.map.solid, 'solid'); BF3D.mapMesh.fade = true; R.upload(BF3D.map.decal, 'decal'); BF3D.zm = R.upload(BF3D.map.zdec, 'decal'); BF3D.om = R.upload(BF3D.map.odec, 'decal'); applyOpts(); BF3D.trays = null; BF3D.diceMesh = null; buildTrays(); if (DICE.list.length) { clearDice(); }
@@ -17651,6 +17784,13 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
         if (BF3D.fx.length) { BF3D.dirty = true; kick(); }
       }
     } catch (e) { console.error(e); }
+    try {
+      if (BF3D.opt.dice && BF3D.offLabels) for (const l of BF3D.offLabels) {
+        const blue = typeof hotBlue === 'function' ? hotBlue(l.side) : l.side === 'player';
+        if (l.unit) pill(P(l.x, l.z, .2), (l.tag === 'in' ? '\u21b3 ' : '') + l.text, blue ? '#a9c9ff' : '#ffb0a6', false, l.tag === 'carrier' ? 1 : .95);
+        else { const out = l.z > BH / 2 ? 1 : -1; pill(P(l.x, l.z + out * (l.d / 2 + 1.3), .2), l.text, blue ? '#7db4ff' : '#ff8478', false, 1); }
+      }
+    } catch (e) { }
     for (const l of labels) pill(l[0], l[1], l[2], l[3], l[4]);
     const sb = document.getElementById('b-3dsight'); if (sb) sb.setAttribute('aria-pressed', String(!!sightOn));
   }
@@ -17739,14 +17879,39 @@ function gfxStatsText(Rn) {
 }
 function kick() { if (BF3D.raf || !BF3D.on) return; BF3D.raf = requestAnimationFrame(() => { BF3D.raf = 0; if (!BF3D.on || !BF3D.map || !BF3D.dirty) return; BF3D.dirty = false; place(); try { BF3D.R.fades = bfFades(); } catch (e) { BF3D.R.fades = []; } try { BF3D.pulseOn = gfxPulse(BF3D.R); } catch (e) { BF3D.pulseOn = false; } BF3D.R.draw(BF3D.cam, BF3D.map.th.env); try { gfxSample(BF3D.R, performance.now()); gfxStatsEl(); } catch (e) { } try { overlay(); } catch (e) { console.error(e); } try { if (BF3D.pulseOn) { BF3D.dirty = true; kick(); } } catch (e) { } }); }
   /* ---- dice trays and rolling: the game decides every result, the table only shows it ---- */
-  const TRAY = { get player() { return { x: BW / 2, z: BF3D.trayFlip ? -7 : BH + 7, w: 26, d: 9 }; }, get ai() { return { x: BW / 2, z: BF3D.trayFlip ? BH + 7 : -7, w: 26, d: 9 }; } };
+  const TW = 18, TD = 6.4, TOFF = 5.6;
+  const TRAY = { get player() { return { x: BW / 2, z: BF3D.trayFlip ? -TOFF : BH + TOFF, w: TW, d: TD }; }, get ai() { return { x: BW / 2, z: BF3D.trayFlip ? BH + TOFF : -TOFF, w: TW, d: TD }; } };
   const FELT = [.03, .1, .05], WOOD = [.14, .08, .04];
+  /* the two felt mats beside each dice tray: units that are off the battlefield sit here (reserves one side, transports and their passengers the other) */
+  function matsOf(k) {
+    const t = TRAY[k], w = Math.max(6, (BW - TW) / 2 - 1.5), cxL = t.x - TW / 2 - .9 - w / 2, cxR = t.x + TW / 2 + .9 + w / 2;
+    return { res: { x: cxL, z: t.z, w, d: TD }, trn: { x: cxR, z: t.z, w, d: TD } };
+  }
+  function offTable(side) {
+    const out = { res: [], trn: [] }; if (!G || !G.units) return out;
+    const us = G.units.filter(u => u.alive && u.side === side && !u.placed);
+    out.res = us.filter(u => u.reserve && !u.embarkedIn);
+    const tm = new Map(); for (const u of us.filter(u => u.embarkedIn)) { const t = G.units.find(x => x.id === u.embarkedIn); if (!t) continue; if (!tm.has(t)) tm.set(t, []); tm.get(t).push(u); }
+    out.trn = [...tm].map(([t, list]) => ({ t, us: list }));
+    return out;
+  }
+  const offVisible = side => { if (!G) return false; if (side === 'player') return true; if (G.stage === 'battle' || G.stage === 'over') return true; return G.stage === 'pre' && PRE_STEPS.indexOf(G.step) > PRE_STEPS.indexOf('formations'); };
+  /* where each off-table token stands: [{u, x, z, tag}] */
+  function offSlots(side) {
+    const m = matsOf(side), od = offTable(side), out = [], sp = 3.1;
+    const grid = (mat, list, rowsFirst) => { const cols = Math.max(1, Math.floor((mat.w - 1) / sp)), rowsN = Math.max(1, Math.floor((mat.d - .6) / sp)); list.forEach((it, i) => { const c = i % cols, r = Math.floor(i / cols); if (r >= rowsN) return; const per = Math.min(cols, list.length - r * cols); out.push({ u: it.u, x: mat.x + (c - (per - 1) / 2) * sp, z: mat.z + (r - (Math.min(rowsN, Math.ceil(list.length / cols)) - 1) / 2) * sp, tag: it.tag, by: it.by }); }); };
+    grid(m.res, od.res.map(u => ({ u })));
+    const tl = []; for (const g of od.trn) { if (!g.t.placed) tl.push({ u: g.t, tag: 'carrier' }); for (const u of g.us) tl.push({ u, tag: 'in', by: g.t }); }
+    grid(m.trn, tl);
+    return { slots: out, od, m };
+  }
+  BF3D.offTable = offTable; BF3D.offSlots = offSlots;
   function buildTrays() {
     freeMesh(BF3D.trays); BF3D.trays = null; if (!BF3D.R || !BF3D.map) return; const mb = new BFX.MB();
+    const frame = (cx, cz, w, d, felt) => { const y0 = .02, x0 = cx - w / 2, z0 = cz - d / 2; BFX.box(mb, cx, y0, cz, w, .1, d, 0, felt, [.5, 0]); for (const [ax, az, sx, sz] of [[cx, z0 - .3, w + 1.2, .6], [cx, z0 + d + .3, w + 1.2, .6], [x0 - .3, cz, .6, d], [x0 + w + .3, cz, .6, d]]) BFX.box(mb, ax, y0, az, sx, .9, sz, 0, WOOD, [.35, 0]); };
     for (const k of ['player', 'ai']) {
-      const t = TRAY[k], H = BF3D.map.H, y0 = 0.02, x0 = t.x - t.w / 2, z0 = t.z - t.d / 2;
-      BFX.box(mb, t.x, y0, t.z, t.w, .1, t.d, 0, FELT, [.5, 0]);
-      for (const [cx, cz, sx, sz] of [[t.x, z0 - .3, t.w + 1.2, .6], [t.x, z0 + t.d + .3, t.w + 1.2, .6], [x0 - .3, t.z, .6, t.d], [x0 + t.w + .3, t.z, .6, t.d]]) BFX.box(mb, cx, y0, cz, sx, .9, sz, 0, WOOD, [.35, 0]);
+      const t = TRAY[k], m = matsOf(k), blue = (typeof hotBlue === 'function') ? hotBlue(k) : k === 'player', tint = blue ? [.04, .08, .2] : [.2, .05, .05];
+      frame(t.x, t.z, t.w, t.d, FELT); frame(m.res.x, m.res.z, m.res.w, m.res.d, tint); frame(m.trn.x, m.trn.z, m.trn.w, m.trn.d, tint);
     }
     BF3D.trays = BF3D.R.upload(mb, 'solid'); BF3D.trays.hidden = !BF3D.opt.dice;
   }
@@ -17758,7 +17923,7 @@ function kick() { if (BF3D.raf || !BF3D.on) return; BF3D.raf = requestAnimationF
   /* each face: value, outward normal, two tangents */
   const FACES = [[1, [0, 1, 0], [1, 0, 0], [0, 0, 1]], [6, [0, -1, 0], [1, 0, 0], [0, 0, -1]], [2, [1, 0, 0], [0, 0, -1], [0, 1, 0]], [5, [-1, 0, 0], [0, 0, 1], [0, 1, 0]], [3, [0, 0, 1], [1, 0, 0], [0, 1, 0]], [4, [0, 0, -1], [-1, 0, 0], [0, 1, 0]]];
   const PIPS = { 1: [[0, 0]], 2: [[-.25, -.25], [.25, .25]], 3: [[-.27, -.27], [0, 0], [.27, .27]], 4: [[-.25, -.25], [.25, -.25], [-.25, .25], [.25, .25]], 5: [[-.27, -.27], [.27, -.27], [0, 0], [-.27, .27], [.27, .27]], 6: [[-.25, -.28], [.25, -.28], [-.25, 0], [.25, 0], [-.25, .28], [.25, .28]] };
-  const DCOL = { ok: [.1, .46, .18], bad: [.58, .09, .07], no: [.34, .33, .29], crit: [.82, .6, .14], def: [.78, .72, .52] };
+  const DCOL = { ok: [.12, .52, .2], bad: [.66, .1, .08], no: [.34, .33, .29], crit: [.88, .64, .14], def: [.82, .76, .56], blue: [.1, .3, .85], red: [.82, .1, .08] };
   function dieMesh(mb, p, q, S, body, pip) {
     const h = S / 2, X = v => { const r = qRot(q, v); return [p[0] + r[0], p[1] + r[1], p[2] + r[2]]; };
     for (const [val, n, u, w] of FACES) {
@@ -17774,11 +17939,11 @@ function kick() { if (BF3D.raf || !BF3D.on) return; BF3D.raf = requestAnimationF
       }
     }
   }
-  const DICE = { list: [], t0: 0, dur: 0, raf: 0, held: 0, side: 'player' };
+  const DICE = { list: [], t0: 0, dur: 0, raf: 0, held: 0, side: 'player', S: 1.4, holdUntil: 0 };
   const ease = u => 1 - Math.pow(1 - u, 3);
   function diceFrame(now) {
     DICE.raf = 0; if (!BF3D.on || !BF3D.R || !DICE.list.length) return;
-    const t = now - DICE.t0; let moving = false; const mb = new BFX.MB(), S = 1.15;
+    const t = now - DICE.t0; let moving = false; const mb = new BFX.MB(), S = DICE.S;
     for (const d of DICE.list) {
       const u = Math.max(0, Math.min(1, (t - d.delay) / d.dur)); if (u < 1) moving = true;
       const e = ease(u), x = d.sx + (d.ex - d.sx) * e, z = d.sz + (d.ez - d.sz) * e, y = S / 2 + .02 + (u < 1 ? 5.5 * Math.pow(1 - u, 2) * Math.abs(Math.cos(2.5 * Math.PI * u)) : 0);
@@ -17792,22 +17957,26 @@ function kick() { if (BF3D.raf || !BF3D.on) return; BF3D.raf = requestAnimationF
   /* once landed, the dice stay until the tray is dismissed */
   function diceWatch(now) {
     DICE.raf = 0; if (!BF3D.on || !DICE.list.length) return; const tray = document.getElementById('dice-tray');
-    if (tray && tray.hidden && now - DICE.landedAt > 700) { clearDice(); return; }
+    if (tray && tray.hidden && now - DICE.landedAt > 700 && now > DICE.holdUntil) { clearDice(); return; }
     DICE.raf = requestAnimationFrame(diceWatch);
   }
   function clearDice() { DICE.list = []; DICE.landedAt = 0; freeMesh(BF3D.diceMesh); BF3D.diceMesh = null; BF3D.dirty = true; kick(); }
-  function throwDice(items) {
-    if (!BF3D.on || !BF3D.map) return 0;
-    const now = performance.now(), merge = DICE.list.length && now - DICE.t0 < 250 && !DICE.landedAt, tr = TRAY[(G && G.active === 'ai') ? 'ai' : 'player'];
+  function throwDice(items, opt) {
+    if (!BF3D.on || !BF3D.map) return 0; opt = opt || {};
+    const now = performance.now(), merge = !opt.centre && DICE.list.length && now - DICE.t0 < 250 && !DICE.landedAt, tr = TRAY[(G && G.active === 'ai') ? 'ai' : 'player'];
     if (!merge) { DICE.list = []; DICE.side = (G && G.active === 'ai') ? 'ai' : 'player'; DICE.t0 = now; }
-    const n0 = DICE.list.length, take = items.slice(0, Math.max(0, 28 - n0)), cols = 12, gap = 2.1, rows = Math.ceil((n0 + take.length) / cols), instant = typeof reduceMotion !== 'undefined' && reduceMotion;
-    DICE.landedAt = 0; const fromAi = DICE.side === 'ai', dur = instant ? 1 : 950;
+    const n0 = DICE.list.length, take = items.slice(0, Math.max(0, 32 - n0)), tot = n0 + take.length, instant = typeof reduceMotion !== 'undefined' && reduceMotion;
+    const lay = opt.centre ? { cols: 2, gap: 4.6, S: 2.4 } : tot <= 12 ? { cols: 6, gap: 2.8, S: 1.6 } : tot <= 20 ? { cols: 8, gap: 2.1, S: 1.4 } : { cols: 10, gap: 1.65, S: 1.15 };
+    DICE.S = lay.S; DICE.landedAt = 0; DICE.holdUntil = opt.hold ? now + opt.hold : 0;
+    const fromAi = DICE.side === 'ai', dur = instant ? 1 : (opt.centre ? 1100 : 950), cx = opt.centre ? BW / 2 : tr.x, cz = opt.centre ? BH / 2 : tr.z, rows = Math.ceil(tot / lay.cols);
+    const spot = i => { const c = i % lay.cols, r = Math.floor(i / lay.cols), per = Math.min(lay.cols, tot - r * lay.cols); return [cx + (c - (per - 1) / 2) * lay.gap, cz + (r - (rows - 1) / 2) * lay.gap * .9]; };
+    DICE.list.forEach((d, i) => { const q = spot(i); d.ex = q[0] + d.jx; d.ez = q[1] + d.jz; });
     take.forEach((it, k) => {
-      const i = n0 + k, c = i % cols, r = Math.floor(i / cols), per = Math.min(cols, n0 + take.length - r * cols);
-      const ex = tr.x + (c - (per - 1) / 2) * gap + (Math.random() - .5) * .5, ez = tr.z + (r - (rows - 1) / 2) * gap * (fromAi ? 1 : 1) + (Math.random() - .5) * .5;
-      const cls = it.c || '', kind = /\bcrit\b/.test(cls) ? 'crit' : /\bbad\b/.test(cls) ? 'bad' : /\bok\b/.test(cls) ? 'ok' : /\bno\b/.test(cls) ? 'no' : 'def', body = DCOL[kind], pip = kind === 'def' || kind === 'no' ? [.03, .03, .03] : [.92, .9, .84];
+      const i = n0 + k, q = spot(i), jx = (Math.random() - .5) * .35, jz = (Math.random() - .5) * .35;
+      const cls = it.c || '', kind = /\bcrit\b/.test(cls) ? 'crit' : /\bbad\b/.test(cls) ? 'bad' : /\bok\b/.test(cls) ? 'ok' : /\bblue\b/.test(cls) ? 'blue' : /\bred\b/.test(cls) ? 'red' : /\bno\b/.test(cls) ? 'no' : 'def', body = DCOL[kind], pip = (kind === 'def' || kind === 'no' || kind === 'crit') ? [.03, .03, .03] : [.96, .94, .88];
       const qf = qMul(qAx([0, 1, 0], Math.random() * 6.2832), FACEQ[Math.max(1, Math.min(6, it.v | 0))]);
-      DICE.list.push({ sx: tr.x + (Math.random() - .5) * 10, sz: tr.z + (fromAi ? -1 : 1) * (tr.d / 2 + 6), ex, ez, qf, ax: [Math.random() - .5, Math.random() - .5, Math.random() - .5], spin: (4 + Math.random() * 4) * Math.PI * (instant ? 0 : 1), delay: instant ? 0 : k * 22, dur, body, pip });
+      const fromX = opt.centre ? (kind === 'blue' ? -9 : kind === 'red' ? BW + 9 : cx) : tr.x + (Math.random() - .5) * 10, fromZ = opt.centre ? cz + (Math.random() - .5) * 6 : tr.z + (fromAi ? -1 : 1) * (tr.d / 2 + 7);
+      DICE.list.push({ sx: fromX, sz: fromZ, ex: q[0] + jx, ez: q[1] + jz, jx, jz, qf, ax: [Math.random() - .5, Math.random() - .5, Math.random() - .5], spin: (4 + Math.random() * 4) * Math.PI * (instant ? 0 : 1), delay: instant ? 0 : k * 22, dur, body, pip });
     });
     if (!merge) DICE.t0 = performance.now();
     if (!DICE.raf) DICE.raf = requestAnimationFrame(diceFrame);
