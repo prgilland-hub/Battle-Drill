@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.26-0221';
+  const VERSION = '2026.11.26-0224';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -17353,8 +17353,31 @@ function buildMap(spec) {
   const outD = (x, z) => Math.hypot(Math.max(-x, 0, x - BW), Math.max(-z, 0, z - BH)), H = (x, z) => th.amp * (fbm(x * th.freq + sd, z * th.freq * 1.3 + sd) - .5) * 2.4 * mask(x, z) * (1 - sstep(.5, 4, outD(x, z)));
   const ok = (x, z, m) => { for (const r of rects) if (tdist(x, z, r) < m + .3) return false; for (const o of OB) if (Math.hypot(x - o.x, z - o.y) < OR + .6) return false; return true; };
   const solid = new MB(), decal = new MB(), zdec = new MB(), odec = new MB(); DECAL = decal;
-  const step = 1, x0 = -60, z0 = -60, nx = Math.ceil((BW + 120) / step), nz = Math.ceil((BH + 120) / step), idx = (i, j) => i * (nz + 1) + j, base = solid.n;
-  for (let i = 0; i <= nx; i++) for (let j = 0; j <= nz; j++) { const x = x0 + i * step, z = z0 + j * step, h = H(x, z), e = .3, dx = (H(x + e, z) - H(x - e, z)) / (2 * e), dz = (H(x, z + e) - H(x, z - e)) / (2 * e), n = v3.norm([-dx, 1, -dz]); { const g0 = th.ground(x, z, h, fbm(x * .22 + sd, z * .22)), w = fbm(x * .06 + sd + 40, z * .06 + 7) - .5, d = fbm(x * .5 + sd, z * .5) - .5, k = 1 + d * .22; const od = 1 - .62 * sstep(0, 7, outD(x, z)); solid.vtx([x, h, z], n, [clamp(g0[0] * (1 + w * .7) * k * od, 0, 1), clamp(g0[1] * k * od, 0, 1), clamp(g0[2] * (1 - w * .7) * k * od, 0, 1)], [th.gloss ? 2.9 : .9, 0]); } }
+  /* a fine grid across the board and a coarse one beyond it, so the ground can carry real texture where it is looked at */
+  const axis = L => { const a = []; let v = -60; while (v < L + 60) { a.push(v); v += (v > -9 && v < L + 9) ? .34 : 1.6; } a.push(L + 60); return a; };
+  const XS = axis(BW), ZS = axis(BH), nx = XS.length - 1, nz = ZS.length - 1, idx = (i, j) => i * (nz + 1) + j, base = solid.n;
+  /* surface detail: the finest grain, then the marks each kind of ground collects */
+  const detail = (x, z, c, key, n) => {
+    const grain = fbm(x * 3.1 + sd, z * 3.1) - .5, speck = hash2(Math.floor(x * 4.2) + sd, Math.floor(z * 4.2)), crack = Math.abs(vnoise(x * 1.25 + sd, z * 1.25 + 3) - .5);
+    let k = 1 + grain * .3, r = c;
+    if (speck > .94) k *= 1.22; else if (speck < .05) k *= .82;
+    if (key === 'desert') {
+      const rip = Math.sin((x * .9 + z * .45) * 6.3 + fbm(x * .22 + sd, z * .22) * 7) * .5 + .5, dune = sstep(.42, .62, fbm(x * .1 + sd + 5, z * .1));
+      k *= 1 + (rip - .5) * .14 * dune;                                             /* wind ripples in the drifts */
+      if (crack < .02 && n > .4) k *= .62;                                           /* dry cracked earth on the harder ground */
+      if (fbm(x * .7 + sd + 20, z * .7) > .66) r = mixc(c, [.3, .27, .22], .35);     /* patches of gravel */
+    } else if (key === 'base') {
+      if (crack < .012) k *= .55;                                                    /* hairline cracks in the concrete */
+      const oil = fbm(x * .45 + sd + 9, z * .45 + 2); if (oil > .68) k *= 1 - (oil - .68) * 2.2;   /* oil stains */
+      k *= 1 + (Math.sin(x * 22 + fbm(x * .3, z * .3) * 4) * .5 + .5 - .5) * .05 * sstep(.4, .7, fbm(x * .15 + 40, z * .15)); /* tyre scuffing */
+    } else if (key === 'marsh') {
+      const moss = fbm(x * 1.4 + sd + 30, z * 1.4 + 8); if (moss > .6) r = mixc(c, [.1, .2, .07], clamp((moss - .6) * 3, 0, .6));   /* moss */
+      if (crack < .018) k *= .7;
+      if (speck > .965) r = mixc(r, [.22, .3, .1], .5);                                /* grass tufts */
+    } else { if (crack < .015) k *= .7; }
+    return [r[0] * k, r[1] * k, r[2] * k];
+  };
+  for (let i = 0; i <= nx; i++) for (let j = 0; j <= nz; j++) { const x = XS[i], z = ZS[j], h = H(x, z), e = .3, dx = (H(x + e, z) - H(x - e, z)) / (2 * e), dz = (H(x, z + e) - H(x, z - e)) / (2 * e), n = v3.norm([-dx, 1, -dz]); { const n0 = fbm(x * .22 + sd, z * .22), g0 = detail(x, z, th.ground(x, z, h, n0), spec.theme, n0), w = fbm(x * .06 + sd + 40, z * .06 + 7) - .5, d = fbm(x * .5 + sd, z * .5) - .5, k = 1 + d * .22; const od = 1 - .62 * sstep(0, 7, outD(x, z)); solid.vtx([x, h, z], n, [clamp(g0[0] * (1 + w * .7) * k * od, 0, 1), clamp(g0[1] * k * od, 0, 1), clamp(g0[2] * (1 - w * .7) * k * od, 0, 1)], [th.gloss ? 2.9 : .9, 0]); } }
   for (let i = 0; i < nx; i++) for (let j = 0; j < nz; j++) { const a = base + idx(i, j), b = base + idx(i + 1, j), c = base + idx(i + 1, j + 1), d = base + idx(i, j + 1); solid.I.push(a, d, c, a, c, b); }
   const tv0 = solid.n;
   rects.forEach((r, i) => { const rr = mulberry(seed * 101 + i * 17 + th.seed); if (r.poly && r.cat === 'light') propsLowPoly(solid, r, rr, th.poly); else if (r.poly) propsPoly(solid, r, rr, i, th.poly); else if (r.cat && r.cat !== 'dense') propsLow(solid, r, rr, i); else th.props(solid, r, rr, i); });
