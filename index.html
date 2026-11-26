@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.26-0151';
+  const VERSION = '2026.11.26-0155';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -130,7 +130,7 @@
     const css = document.createElement('style'); css.textContent = '#bdl-b{position:fixed;left:8px;bottom:8px;z-index:99999;width:30px;height:30px;border-radius:50%;border:1px solid #888;background:#222;color:#ddd;font:16px/1 sans-serif;cursor:pointer;opacity:.45}#bdl-b:hover{opacity:1}#bdl-p{position:fixed;left:8px;bottom:46px;z-index:99999;width:300px;background:#1d1d1d;color:#eee;border:1px solid #666;border-radius:8px;padding:12px;font:13px/1.4 sans-serif;display:none}#bdl-p input,#bdl-p button{font:inherit;margin:3px 0}#bdl-p input[type=password],#bdl-p input[type=text]{width:100%;box-sizing:border-box}#bdl-p button{padding:4px 8px;cursor:pointer}#bdl-p h4{margin:8px 0 2px;font-size:12px;color:#aaa;text-transform:uppercase}#bdl-s{color:#9c9;min-height:1.2em}';
     document.head.appendChild(css);
     const b = document.createElement('button'); b.id = 'bdl-b'; b.title = 'Desktop settings'; b.textContent = '⚙'; const p = document.createElement('div'); p.id = 'bdl-p';
-    p.innerHTML = '<h4>App and updates</h4><p class="muted">Battle Drill desktop v' + VERSION + '</p><button id="bdl-u">Check for update</button><div id="bdl-s"></div><h4>Coach</h4><p class="muted">Your Anthropic API key and model, kept on this computer only.</p><input type="password" id="bdl-k" placeholder="sk-ant-…" autocomplete="off"><input type="text" id="bdl-m" placeholder="model"><button id="bdl-ks">Save key and model</button><h4>Backup</h4><p class="muted">Armies, saved games and settings, as one file.</p><button id="bdl-ex">Back up everything</button> <button id="bdl-im">Restore backup</button><h4>3D models</h4><div id="bdl-ms" style="color:#aaa"></div><button id="bdl-mi">Import models folder…</button><div id="bdl-mf" style="max-height:200px;overflow:auto"></div> <button id="bdl-mx">Remove</button><label style=\"display:block;margin:5px 0\"><input type="checkbox" id="bdl-mo"> Use my models on the 3D board</label><label style=\"display:block;margin:5px 0\"><input type="checkbox" id="bdl-mm"> Mirror left/right</label><label style=\"display:block;margin:5px 0\">Turn all models <select id="bdl-my"><option value="0">0°</option><option value="90">90°</option><option value="180">180°</option><option value="270">270°</option></select></label><label style=\"display:block;margin:5px 0\">Detail on import <select id="bdl-mq"><option value="1">Standard (about 10k triangles per model)</option><option value="2.5">Higher (about 25k)</option><option value="full">Full, no simplifying (very large)</option></select></label><label style=\"display:block;margin:5px 0\">Also keep a high-detail copy <select id="bdl-mh"><option value="">No</option><option value="hi">High (about 40k triangles, 100k for big models)</option><option value="max">Maximum (about 120k, 250k for big models)</option></select></label><div style="color:#999;font-size:.85em;margin:2px 0 6px">The high-detail copy is used in the datasheet previews. Re-import your models after changing either setting. Maximum uses a lot of disk space (roughly 3 MB per model).</div><label style=\"display:block;margin:5px 0\"><input type="checkbox" id="bdl-mb"> Use the high-detail models in battles</label><div id="bdl-mhs" style="color:#999;font-size:.85em"></div><h4>Window</h4><button id="bdl-f">Toggle full screen</button>';
+    p.innerHTML = '<h4>App and updates</h4><p class="muted">Battle Drill desktop v' + VERSION + '</p><button id="bdl-u">Check for update</button><div id="bdl-s"></div><h4>Coach</h4><p class="muted">Your Anthropic API key and model, kept on this computer only.</p><input type="password" id="bdl-k" placeholder="sk-ant-…" autocomplete="off"><input type="text" id="bdl-m" placeholder="model"><button id="bdl-ks">Save key and model</button><h4>Backup</h4><p class="muted">Armies, saved games and settings, as one file.</p><button id="bdl-ex">Back up everything</button> <button id="bdl-im">Restore backup</button><h4>3D models</h4><div id="bdl-ms" style="color:#aaa"></div><button id="bdl-mi">Import models folder…</button><div id="bdl-mf" style="max-height:200px;overflow:auto"></div> <button id="bdl-mx">Remove</button><label style=\"display:block;margin:5px 0\"><input type="checkbox" id="bdl-mo"> Use my models on the 3D board</label><label style=\"display:block;margin:5px 0\"><input type="checkbox" id="bdl-mm"> Mirror left/right</label><label style=\"display:block;margin:5px 0\"><input type="checkbox" id="bdl-mk"> Turn cold blue Khorne models blood red</label><label style=\"display:block;margin:5px 0\">Turn all models <select id="bdl-my"><option value="0">0°</option><option value="90">90°</option><option value="180">180°</option><option value="270">270°</option></select></label><label style=\"display:block;margin:5px 0\">Detail on import <select id="bdl-mq"><option value="1">Standard (about 10k triangles per model)</option><option value="2.5">Higher (about 25k)</option><option value="full">Full, no simplifying (very large)</option></select></label><label style=\"display:block;margin:5px 0\">Also keep a high-detail copy <select id="bdl-mh"><option value="">No</option><option value="hi">High (about 40k triangles, 100k for big models)</option><option value="max">Maximum (about 120k, 250k for big models)</option></select></label><div style="color:#999;font-size:.85em;margin:2px 0 6px">The high-detail copy is used in the datasheet previews. Re-import your models after changing either setting. Maximum uses a lot of disk space (roughly 3 MB per model).</div><label style=\"display:block;margin:5px 0\"><input type="checkbox" id="bdl-mb"> Use the high-detail models in battles</label><div id="bdl-mhs" style="color:#999;font-size:.85em"></div><h4>Window</h4><button id="bdl-f">Toggle full screen</button>';
     const host = document.querySelector('#tab-settings .settings');
     if (host) {
       /* inside the app's Settings page: one section per heading, in the app's own look, no floating button */
@@ -155,8 +155,9 @@
     $('bdl-im').onclick = () => { const i = document.createElement('input'); i.type = 'file'; i.accept = '.json'; i.onchange = async () => { try { await restore(JSON.parse(await i.files[0].text())); say('Restored. Reloading…'); setTimeout(() => location.reload(), 800); } catch (e) { say('Restore failed: ' + e.message); } }; i.click(); };
     const M = () => window.BDModels, mstat = () => { const m = M(); $('bdl-ms').textContent = m && m.count() ? m.count() + ' models loaded: ' + Object.entries(m.factions()).sort().map(([k, v]) => k + ' ' + v).join(', ') + '.' : 'No models imported yet.'; try { hstat(); } catch (e) { } };
     const mfx = () => { try { document.dispatchEvent(new Event('bd-models-changed')); window.dispatchEvent(new Event('bd-models-changed')); } catch (e) { } };
-    setTimeout(async () => { if (M()) { await M().load(); mstat(); $('bdl-mo').checked = M().get('on', '1') === '1'; $('bdl-mm').checked = M().get('mirror', '1') === '1'; $('bdl-my').value = M().get('yaw', '0'); $('bdl-mq').value = M().get('q', '1'); $('bdl-mh').value = M().get('hiq', 'hi'); $('bdl-mb').checked = M().get('hiBattle', '1') === '1'; hstat(); mfx(); } }, 0);
+    setTimeout(async () => { if (M()) { await M().load(); mstat(); $('bdl-mo').checked = M().get('on', '1') === '1'; $('bdl-mm').checked = M().get('mirror', '1') === '1'; $('bdl-mk').checked = M().get('khfix', '1') === '1'; $('bdl-my').value = M().get('yaw', '0'); $('bdl-mq').value = M().get('q', '1'); $('bdl-mh').value = M().get('hiq', 'hi'); $('bdl-mb').checked = M().get('hiBattle', '1') === '1'; hstat(); mfx(); } }, 0);
     $('bdl-mo').onchange = () => { M().set('on', $('bdl-mo').checked ? '1' : '0'); mfx(); };
+    $('bdl-mk').onchange = async () => { M().set('khfix', $('bdl-mk').checked ? '1' : '0'); await M().reprep(); mfx(); };
     $('bdl-mm').onchange = async () => { M().set('mirror', $('bdl-mm').checked ? '1' : '0'); await M().reprep(); mfx(); };
     $('bdl-my').onchange = async () => { M().set('yaw', $('bdl-my').value); await M().reprep(); mfx(); };
     const hstat = () => { const m = M(); if (!m) return; const n = m.hiCount ? m.hiCount() : 0; $('bdl-mhs').textContent = n ? n + ' models have a high-detail copy (about ' + Math.round(m.hiTris() / 1000) + 'k triangles in total).' : 'No high-detail copies yet. Pick a level above, then import your models again.'; };
@@ -359,8 +360,20 @@ const BDModels = (function () {
   const done = t => new Promise((res, rej) => { t.oncomplete = res; t.onerror = () => rej(t.error); t.onabort = () => rej(t.error); });
   const ping = () => { clearTimeout(pingT); pingT = setTimeout(() => { try { window.dispatchEvent(new Event('bd-models-changed')); } catch (e) { } }, 120); };
   /* pose the stored mesh for the board: optional left-right mirror and a turn so every model faces +z */
+  /* Khorne models whose texture came out a cold blue/violet: pull blue, violet and magenta hues round to blood red, leaving greys, bone, brass and the reds already there alone */
+  const KHORNE = /bloodthirster|kharn|khârn|slaughterbound|khorne|angron|skarbrand|bloodletter|bloodcrusher|flesh hound|karanak|skarr|skulltaker|valkia|blood throne|skull cannon/i;
+  function recolour(C) {
+    for (let i = 0; i < C.length; i += 3) {
+      const r = C[i], g = C[i + 1], b = C[i + 2], mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn; if (d < .05 || mx < .04) continue;
+      let h = mx === r ? ((g - b) / d + 6) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; h *= 60; const sat = d / mx;
+      if (h < 165 || h > 345) continue;
+      const ns = Math.min(1, sat * 1.1 + .12), nh = 358, v = mx * .96, c = v * ns, hp = ((nh % 360) / 60), x = c * (1 - Math.abs(hp % 2 - 1)), m = v - c;
+      let rr = 0, gg = 0, bb = 0; if (hp < 1) { rr = c; gg = x; } else if (hp < 2) { rr = x; gg = c; } else if (hp < 3) { gg = c; bb = x; } else if (hp < 4) { gg = x; bb = c; } else if (hp < 5) { rr = x; bb = c; } else { rr = c; bb = x; }
+      C[i] = rr + m; C[i + 1] = gg + m; C[i + 2] = bb + m;
+    }
+  }
   function prep(rec) {
-    const mir = get('mirror', '1') === '1', turn = (+get('yaw', '0')) * Math.PI / 180, c = Math.cos(turn), s = Math.sin(turn);
+    const fix = get('khfix', '1') === '1' && KHORNE.test(String(rec.name || '')), mir = get('mirror', '1') === '1', turn = (+get('yaw', '0')) * Math.PI / 180, c = Math.cos(turn), s = Math.sin(turn);
     return { name: rec.name, parts: rec.parts.map(p => {
       const V = new Float32Array(p.V), N = new Float32Array(p.N), T = new Uint32Array(p.T);
       for (let i = 0; i < V.length; i += 3) {
@@ -369,6 +382,7 @@ const BDModels = (function () {
       }
       if (mir) for (let i = 0; i < T.length; i += 3) { const t = T[i + 1]; T[i + 1] = T[i + 2]; T[i + 2] = t; }
       const C = new Float32Array(p.C.length); for (let i = 0; i < C.length; i++) C[i] = p.C[i] / 255;
+      if (fix) recolour(C);
       return { V, N, C, T };
     }) };
   }
@@ -398,7 +412,7 @@ const BDModels = (function () {
     [/poxbringer/, ANY, /^poxbringer/], [/sloppity|bilepiper/, ANY, /piper/], [/spoilpox/, ANY, /spoilpox/], [/slimux/, ANY, /slimux/], [/gnarlmaw/, ANY, /gnarlmaw/],
   ];
   /* every other faction: match the datasheet's words against the model names */
-  const ALIAS = [[/wolf guard terminator|wolf guard \w* ?terminator/, ['terminator']], [/battle leader|wolf lord|wolf guard|wolf priest|rune priest|njal|ragnar|logan|arjac|bjorn/, ['captain', 'lieutenant', 'primaris captain', 'chaplain']], [/sword brethren/, ['bladeguard veteran', 'crusader', 'primaris crusader', 'intercessor']], [/execrator|grimaldus|castellan|marshal|champion/, ['chaplain', 'captain']], [/terminator assault|assault terminator/, ['terminator']]];
+  const ALIAS = [[/^angron/, ['daemon prince of khorne with wings', 'daemon prince of khorne', 'bloodthirster', 'daemon prince']], [/^skarbrand/, ['bloodthirster', 'daemon prince of khorne']], [/wolf guard terminator|wolf guard \w* ?terminator/, ['terminator']], [/battle leader|wolf lord|wolf guard|wolf priest|rune priest|njal|ragnar|logan|arjac|bjorn/, ['captain', 'lieutenant', 'primaris captain', 'chaplain']], [/sword brethren/, ['bladeguard veteran', 'crusader', 'primaris crusader', 'intercessor']], [/execrator|grimaldus|castellan|marshal|champion/, ['chaplain', 'captain']], [/terminator assault|assault terminator/, ['terminator']]];
   const WEAKHEAD = new Set(['sword', 'assault', 'heavy', 'storm', 'death', 'great', 'grand', 'high', 'lord', 'chaos', 'plague', 'imperial']);
   const STOP = new Set(['squad', 'unit', 'the', 'of', 'with', 'w', 'and', 'model', 'models', 'a', 'in', 'on']);
   const toks = s => String(s || '').toLowerCase().replace(/armour/g, 'armor').replace(/\bwargear\b/g, ' ').replace(/\[[^\]]*\]/g, ' ').replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(w => w && !STOP.has(w)).map(w => w.length > 3 && w.endsWith('s') && !w.endsWith('ss') ? w.slice(0, -1) : w);

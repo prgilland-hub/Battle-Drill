@@ -138,8 +138,20 @@ const BDModels = (function () {
   const done = t => new Promise((res, rej) => { t.oncomplete = res; t.onerror = () => rej(t.error); t.onabort = () => rej(t.error); });
   const ping = () => { clearTimeout(pingT); pingT = setTimeout(() => { try { window.dispatchEvent(new Event('bd-models-changed')); } catch (e) { } }, 120); };
   /* pose the stored mesh for the board: optional left-right mirror and a turn so every model faces +z */
+  /* Khorne models whose texture came out a cold blue/violet: pull blue, violet and magenta hues round to blood red, leaving greys, bone, brass and the reds already there alone */
+  const KHORNE = /bloodthirster|kharn|khârn|slaughterbound|khorne|angron|skarbrand|bloodletter|bloodcrusher|flesh hound|karanak|skarr|skulltaker|valkia|blood throne|skull cannon/i;
+  function recolour(C) {
+    for (let i = 0; i < C.length; i += 3) {
+      const r = C[i], g = C[i + 1], b = C[i + 2], mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn; if (d < .05 || mx < .04) continue;
+      let h = mx === r ? ((g - b) / d + 6) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; h *= 60; const sat = d / mx;
+      if (h < 165 || h > 345) continue;
+      const ns = Math.min(1, sat * 1.1 + .12), nh = 358, v = mx * .96, c = v * ns, hp = ((nh % 360) / 60), x = c * (1 - Math.abs(hp % 2 - 1)), m = v - c;
+      let rr = 0, gg = 0, bb = 0; if (hp < 1) { rr = c; gg = x; } else if (hp < 2) { rr = x; gg = c; } else if (hp < 3) { gg = c; bb = x; } else if (hp < 4) { gg = x; bb = c; } else if (hp < 5) { rr = x; bb = c; } else { rr = c; bb = x; }
+      C[i] = rr + m; C[i + 1] = gg + m; C[i + 2] = bb + m;
+    }
+  }
   function prep(rec) {
-    const mir = get('mirror', '1') === '1', turn = (+get('yaw', '0')) * Math.PI / 180, c = Math.cos(turn), s = Math.sin(turn);
+    const fix = get('khfix', '1') === '1' && KHORNE.test(String(rec.name || '')), mir = get('mirror', '1') === '1', turn = (+get('yaw', '0')) * Math.PI / 180, c = Math.cos(turn), s = Math.sin(turn);
     return { name: rec.name, parts: rec.parts.map(p => {
       const V = new Float32Array(p.V), N = new Float32Array(p.N), T = new Uint32Array(p.T);
       for (let i = 0; i < V.length; i += 3) {
@@ -148,6 +160,7 @@ const BDModels = (function () {
       }
       if (mir) for (let i = 0; i < T.length; i += 3) { const t = T[i + 1]; T[i + 1] = T[i + 2]; T[i + 2] = t; }
       const C = new Float32Array(p.C.length); for (let i = 0; i < C.length; i++) C[i] = p.C[i] / 255;
+      if (fix) recolour(C);
       return { V, N, C, T };
     }) };
   }
@@ -177,7 +190,7 @@ const BDModels = (function () {
     [/poxbringer/, ANY, /^poxbringer/], [/sloppity|bilepiper/, ANY, /piper/], [/spoilpox/, ANY, /spoilpox/], [/slimux/, ANY, /slimux/], [/gnarlmaw/, ANY, /gnarlmaw/],
   ];
   /* every other faction: match the datasheet's words against the model names */
-  const ALIAS = [[/wolf guard terminator|wolf guard \w* ?terminator/, ['terminator']], [/battle leader|wolf lord|wolf guard|wolf priest|rune priest|njal|ragnar|logan|arjac|bjorn/, ['captain', 'lieutenant', 'primaris captain', 'chaplain']], [/sword brethren/, ['bladeguard veteran', 'crusader', 'primaris crusader', 'intercessor']], [/execrator|grimaldus|castellan|marshal|champion/, ['chaplain', 'captain']], [/terminator assault|assault terminator/, ['terminator']]];
+  const ALIAS = [[/^angron/, ['daemon prince of khorne with wings', 'daemon prince of khorne', 'bloodthirster', 'daemon prince']], [/^skarbrand/, ['bloodthirster', 'daemon prince of khorne']], [/wolf guard terminator|wolf guard \w* ?terminator/, ['terminator']], [/battle leader|wolf lord|wolf guard|wolf priest|rune priest|njal|ragnar|logan|arjac|bjorn/, ['captain', 'lieutenant', 'primaris captain', 'chaplain']], [/sword brethren/, ['bladeguard veteran', 'crusader', 'primaris crusader', 'intercessor']], [/execrator|grimaldus|castellan|marshal|champion/, ['chaplain', 'captain']], [/terminator assault|assault terminator/, ['terminator']]];
   const WEAKHEAD = new Set(['sword', 'assault', 'heavy', 'storm', 'death', 'great', 'grand', 'high', 'lord', 'chaos', 'plague', 'imperial']);
   const STOP = new Set(['squad', 'unit', 'the', 'of', 'with', 'w', 'and', 'model', 'models', 'a', 'in', 'on']);
   const toks = s => String(s || '').toLowerCase().replace(/armour/g, 'armor').replace(/\bwargear\b/g, ' ').replace(/\[[^\]]*\]/g, ' ').replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(w => w && !STOP.has(w)).map(w => w.length > 3 && w.endsWith('s') && !w.endsWith('ss') ? w.slice(0, -1) : w);
