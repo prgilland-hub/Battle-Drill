@@ -141,6 +141,8 @@
       p.querySelectorAll('[style*="color:#9"],[style*="color:#a"]').forEach(x => { x.style.color = ''; x.classList.add('muted'); });
       const hd = document.createElement('h2'); hd.textContent = 'Desktop app'; hd.style.cssText = 'margin:18px 0 0;padding-top:12px;border-top:1px solid var(--line)';
       host.appendChild(hd); host.appendChild(p); b.remove();
+      /* the app and update section goes first in Settings */
+      { const top = p.querySelector('.set-sec'), intro = host.querySelector(':scope > p'); if (top && intro) { top.id = 'bdl-top'; css.textContent += '#bdl-top button{margin:3px 6px 3px 0}'; intro.after(top); } }
     } else { document.body.appendChild(css); document.body.appendChild(b); document.body.appendChild(p); }
     const $ = id => document.getElementById(id), say = t => { $('bdl-s').textContent = t; };
     if (!host) b.onclick = () => { p.style.display = p.style.display === 'block' ? 'none' : 'block'; $('bdl-k').value = getKey(); $('bdl-m').value = getModel(); };
