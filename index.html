@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.26-0127';
+  const VERSION = '2026.11.26-0130';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -24913,6 +24913,16 @@ function snare(t, gain, tone) {
   g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(gain, t + .003); g.gain.exponentialRampToValueAtTime(.001, t + .16); n.connect(hp); hp.connect(g); g.connect(Mus.bus); n.start(t, rnd(0, 1)); n.stop(t + .2);
   const o = ctx.createOscillator(), og = ctx.createGain(); o.type = 'triangle'; o.frequency.setValueAtTime(190, t); o.frequency.exponentialRampToValueAtTime(120, t + .08); og.gain.setValueAtTime(gain * .5, t); og.gain.exponentialRampToValueAtTime(.001, t + .1); o.connect(og); og.connect(Mus.bus); o.start(t); o.stop(t + .12);
 }
+function cello(t, midi, dur, gain, o) {
+  o = o || {}; const ctx = Mus.ctx, f = mtof(midi), g = ctx.createGain(), lp = ctx.createBiquadFilter(), at = o.attack || .22, rl = o.release || .5;
+  lp.type = 'lowpass'; lp.Q.value = 1.4; lp.frequency.setValueAtTime(500, t); lp.frequency.linearRampToValueAtTime(1500, t + Math.min(dur * .5, 1.2)); lp.frequency.linearRampToValueAtTime(800, t + dur);
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(gain, t + at); g.gain.setValueAtTime(gain, t + Math.max(at, dur - rl)); g.gain.linearRampToValueAtTime(0, t + dur + rl * .4);
+  const lfo = ctx.createOscillator(), lg = ctx.createGain(); lfo.frequency.value = rnd(5, 5.8); lg.gain.setValueAtTime(0, t); lg.gain.linearRampToValueAtTime(f * .007, t + .7); lfo.connect(lg); lfo.start(t); lfo.stop(t + dur + rl);
+  for (const dt of [-7, 6]) { const os = ctx.createOscillator(); os.type = 'sawtooth'; os.frequency.value = f; os.detune.value = dt; lg.connect(os.frequency); os.connect(lp); os.start(t); os.stop(t + dur + rl * .5); }
+  const sb = ctx.createOscillator(); sb.type = 'sine'; sb.frequency.value = f / 2 >= 30 ? f / 2 : f; const sg = ctx.createGain(); sg.gain.value = .5; sb.connect(sg); sg.connect(lp); sb.start(t); sb.stop(t + dur + rl * .5);
+  const pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null; if (pan) pan.pan.value = o.pan !== undefined ? o.pan : -.25;
+  lp.connect(g); if (pan) { g.connect(pan); pan.connect(Mus.bus); } else g.connect(Mus.bus);
+}
 function barMain(t, i) {
   const b = 60 / 66, L = 8 * b, k = ((i % 8) + 8) % 8, root = MAIN_ROOTS[k], ch = MAIN_CH[k], last = k === 7;
   organ(t, root, L, .04); organ(t, root + 7, L, .02);
@@ -24922,6 +24932,9 @@ function barMain(t, i) {
   if (last) for (let j = 0; j < 8; j++) snare(t + 6 * b + j * b / 4, .04 + j * .012, 2600);
   if (k === 3 || last) for (let j = 0; j < 4; j++) drum(t + 6 * b + j * b / 2, .1 + j * .04, false);
   ch.forEach((n, j) => choirNote(t + j * .35, n, L - 1, { vowel: last ? 'ah' : ['oo', 'oh', 'ah'][j], gain: last ? .11 : .08, attack: 1.6, release: 2, pan: [-.4, 0, .4][j] }));
+  /* cellos: a sustained root, then a low answer to the melody that rises through the second half */
+  cello(t, root + 12, 3.9 * b, .09); cello(t + 4 * b, ch[k >= 4 ? 2 : 1] - 12, last ? 3.8 * b : 3.9 * b, .085);
+  if (k >= 4) cello(t + 2 * b, ch[0] - 12, 1.9 * b, .05, { pan: .25 });
   for (const [bt, n, d] of MAIN_MEL[k]) brass(t + bt * b, n, d * b - .08, k >= 4 ? .04 : .032);
   if (k >= 4) ch.forEach((n, j) => pluck(t + (1 + j) * b, n + 12, .05));
   if (k === 0 || last) bell(t + .1, root + 24, .11, true);
