@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.26-0121';
+  const VERSION = '2026.11.26-0127';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -24908,10 +24908,19 @@ const MAIN_ROOTS = [38, 34, 41, 36, 38, 34, 36, 38];
 const MAIN_CH = [[62, 65, 69], [58, 62, 65], [60, 65, 69], [60, 64, 67], [62, 65, 69], [58, 62, 65], [60, 64, 67], [62, 66, 69]];
 const MAIN_MEL = [[[0, 69, 3], [3, 72, 1], [4, 74, 4]], [[0, 74, 2], [2, 72, 2], [4, 70, 2], [6, 72, 2]], [[0, 72, 3], [3, 77, 1], [4, 76, 2], [6, 74, 2]], [[0, 76, 2], [2, 74, 2], [4, 72, 4]],
   [[0, 69, 2], [2, 74, 2], [4, 77, 3], [7, 76, 1]], [[0, 77, 3], [3, 74, 1], [4, 79, 4]], [[0, 79, 2], [2, 76, 2], [4, 74, 2], [6, 72, 2]], [[0, 78, 4], [4, 81, 4]]];
+function snare(t, gain, tone) {
+  const ctx = Mus.ctx, n = ctx.createBufferSource(); n.buffer = Mus.noise; const hp = ctx.createBiquadFilter(); hp.type = 'bandpass'; hp.frequency.value = tone || 2400; hp.Q.value = .8; const g = ctx.createGain();
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(gain, t + .003); g.gain.exponentialRampToValueAtTime(.001, t + .16); n.connect(hp); hp.connect(g); g.connect(Mus.bus); n.start(t, rnd(0, 1)); n.stop(t + .2);
+  const o = ctx.createOscillator(), og = ctx.createGain(); o.type = 'triangle'; o.frequency.setValueAtTime(190, t); o.frequency.exponentialRampToValueAtTime(120, t + .08); og.gain.setValueAtTime(gain * .5, t); og.gain.exponentialRampToValueAtTime(.001, t + .1); o.connect(og); og.connect(Mus.bus); o.start(t); o.stop(t + .12);
+}
 function barMain(t, i) {
   const b = 60 / 66, L = 8 * b, k = ((i % 8) + 8) % 8, root = MAIN_ROOTS[k], ch = MAIN_CH[k], last = k === 7;
   organ(t, root, L, .04); organ(t, root + 7, L, .02);
-  drum(t, .3, true); drum(t + 4 * b, .2, true); if (k === 3 || last) for (let j = 0; j < 4; j++) drum(t + 6 * b + j * b / 2, .1 + j * .04, false);
+  drum(t, .3, true); drum(t + 4 * b, .2, true);
+  /* the march: a steady tread under everything, a snare on the back beats, rolling into the turn of each phrase */
+  for (let j = 0; j < 8; j++) { const tt = t + j * b; if (j % 2 === 0 && j % 4 !== 0) drum(tt, .13, true); if (j % 2 === 1) { snare(tt, .075 + (k >= 4 ? .03 : 0)); if (j === 7 || (j === 3 && k % 2)) { snare(tt - b * .25, .04, 2000); snare(tt + b * .5, .05, 2800); snare(tt + b * .75, .06, 3000); } } else if (Math.random() < .5) snare(tt + b * .75, .03, 3200); }
+  if (last) for (let j = 0; j < 8; j++) snare(t + 6 * b + j * b / 4, .04 + j * .012, 2600);
+  if (k === 3 || last) for (let j = 0; j < 4; j++) drum(t + 6 * b + j * b / 2, .1 + j * .04, false);
   ch.forEach((n, j) => choirNote(t + j * .35, n, L - 1, { vowel: last ? 'ah' : ['oo', 'oh', 'ah'][j], gain: last ? .11 : .08, attack: 1.6, release: 2, pan: [-.4, 0, .4][j] }));
   for (const [bt, n, d] of MAIN_MEL[k]) brass(t + bt * b, n, d * b - .08, k >= 4 ? .04 : .032);
   if (k >= 4) ch.forEach((n, j) => pluck(t + (1 + j) * b, n + 12, .05));
