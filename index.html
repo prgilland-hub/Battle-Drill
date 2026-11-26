@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.26-0130';
+  const VERSION = '2026.11.26-0133';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -24923,12 +24923,17 @@ function cello(t, midi, dur, gain, o) {
   const pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null; if (pan) pan.pan.value = o.pan !== undefined ? o.pan : -.25;
   lp.connect(g); if (pan) { g.connect(pan); pan.connect(Mus.bus); } else g.connect(Mus.bus);
 }
+function boom(t, gain, len) {
+  const ctx = Mus.ctx, o = ctx.createOscillator(), g = ctx.createGain(); o.type = 'sine'; o.frequency.setValueAtTime(72, t); o.frequency.exponentialRampToValueAtTime(30, t + .5);
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(gain, t + .008); g.gain.exponentialRampToValueAtTime(.001, t + (len || 1.8)); o.connect(g); g.connect(Mus.bus); o.start(t); o.stop(t + (len || 1.8) + .1);
+  const o2 = ctx.createOscillator(), g2 = ctx.createGain(); o2.type = 'triangle'; o2.frequency.setValueAtTime(110, t); o2.frequency.exponentialRampToValueAtTime(48, t + .12); g2.gain.setValueAtTime(gain * .6, t); g2.gain.exponentialRampToValueAtTime(.001, t + .25); o2.connect(g2); g2.connect(Mus.bus); o2.start(t); o2.stop(t + .3);
+}
 function barMain(t, i) {
   const b = 60 / 66, L = 8 * b, k = ((i % 8) + 8) % 8, root = MAIN_ROOTS[k], ch = MAIN_CH[k], last = k === 7;
   organ(t, root, L, .04); organ(t, root + 7, L, .02);
-  drum(t, .3, true); drum(t + 4 * b, .2, true);
+  drum(t, .34, true); drum(t + 4 * b, .24, true); boom(t, .42, 2.4); boom(t + 4 * b, .3, 1.8);
   /* the march: a steady tread under everything, a snare on the back beats, rolling into the turn of each phrase */
-  for (let j = 0; j < 8; j++) { const tt = t + j * b; if (j % 2 === 0 && j % 4 !== 0) drum(tt, .13, true); if (j % 2 === 1) { snare(tt, .075 + (k >= 4 ? .03 : 0)); if (j === 7 || (j === 3 && k % 2)) { snare(tt - b * .25, .04, 2000); snare(tt + b * .5, .05, 2800); snare(tt + b * .75, .06, 3000); } } else if (Math.random() < .5) snare(tt + b * .75, .03, 3200); }
+  for (let j = 0; j < 8; j++) { const tt = t + j * b; if (j % 2 === 0 && j % 4 !== 0) { drum(tt, .15, true); boom(tt, .2, .9); } if (j % 2 === 1) { snare(tt, .06 + (k >= 4 ? .025 : 0), 1700); if (j === 7 || (j === 3 && k % 2)) { snare(tt - b * .25, .04, 2000); snare(tt + b * .5, .05, 2800); snare(tt + b * .75, .06, 3000); } } else if (Math.random() < .5) snare(tt + b * .75, .03, 3200); }
   if (last) for (let j = 0; j < 8; j++) snare(t + 6 * b + j * b / 4, .04 + j * .012, 2600);
   if (k === 3 || last) for (let j = 0; j < 4; j++) drum(t + 6 * b + j * b / 2, .1 + j * .04, false);
   ch.forEach((n, j) => choirNote(t + j * .35, n, L - 1, { vowel: last ? 'ah' : ['oo', 'oh', 'ah'][j], gain: last ? .11 : .08, attack: 1.6, release: 2, pan: [-.4, 0, .4][j] }));
