@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.26-0109';
+  const VERSION = '2026.11.26-0121';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -24940,6 +24940,9 @@ const ARMY_THEMES = [
 const MAIN_THEME = { name: 'Ashes and Dawn', tr: 0, pool: ['main'], w: [1] };
 function musThemeNow() {
   try {
+    if (typeof battleStarted !== 'undefined' && !(battleStarted && G && G.stage !== 'over') && currentTab() === 'armies' && typeof B !== 'undefined' && B.faction && $('#builder') && !$('#builder').hidden) {
+      const t = ARMY_THEMES.find(x => x[0].test(`${B.faction} ${B.name || ''}`)); return t ? t[1] : ARMY_DEFAULT;
+    }
     if (typeof G === 'undefined' || !G || !battleStarted || G.stage === 'over' || !G.pb) return MAIN_THEME;
     if (typeof G !== 'undefined' && G && (G.stage === 'battle' || G.stage === 'pre')) {
       const b = (G.stage === 'battle' && G.active === 'ai') ? G.ab : G.pb; if (!b) return ARMY_DEFAULT;
