@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.26-0102';
+  const VERSION = '2026.11.26-0109';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -24767,7 +24767,7 @@ function setReorder(on) {
 /* ============ MUSIC: gothic space horror, composed live with the Web Audio API (no audio files) ============ */
 const Mus = { ctx: null, bus: null, wet: null, master: null, on: false, tr: 0, theme: null, since: 0, mood: 'shuffle', cur: 'cathedral', vol: .5, timer: null, next: 0, bar: 0, left: 0, noise: null };
 try { Mus.vol = +(localStorage.getItem('battleDrill.musVol') || .5); Mus.mood = localStorage.getItem('battleDrill.musMood') || 'army'; if (!localStorage.getItem('battleDrill.musArmy1')) { localStorage.setItem('battleDrill.musArmy1', '1'); Mus.mood = 'army'; localStorage.setItem('battleDrill.musMood', 'army'); } } catch (e) { }
-const MOODS = { cathedral: 'Cathedral of Dust', hive: 'Hive Fleet Rising', procession: 'Grim Procession', siege: 'Siege of Iron', forge: 'Forge Liturgy', void: 'The Silent Void' };
+const MOODS = { main: 'Ashes and Dawn', cathedral: 'Cathedral of Dust', hive: 'Hive Fleet Rising', procession: 'Grim Procession', siege: 'Siege of Iron', forge: 'Forge Liturgy', void: 'The Silent Void' };
 const mtof = n => 440 * Math.pow(2, (n + (Mus.tr || 0) - 69) / 12);
 const rnd = (a, b) => a + Math.random() * (b - a);
 function musInit() {
@@ -24903,7 +24903,22 @@ function barVoid(t, i) {
   if (i % 3 === 0) bell(t + 1.5, root + 36, .06, true);
   return L;
 }
-const BARS = { cathedral: barCathedral, hive: barHive, procession: barProcession, siege: barSiege, forge: barForge, void: barVoid };
+/* Ashes and Dawn: the main theme. A slow minor hymn that climbs out of the dark and lifts into a major chord at the end of every eight bars */
+const MAIN_ROOTS = [38, 34, 41, 36, 38, 34, 36, 38];
+const MAIN_CH = [[62, 65, 69], [58, 62, 65], [60, 65, 69], [60, 64, 67], [62, 65, 69], [58, 62, 65], [60, 64, 67], [62, 66, 69]];
+const MAIN_MEL = [[[0, 69, 3], [3, 72, 1], [4, 74, 4]], [[0, 74, 2], [2, 72, 2], [4, 70, 2], [6, 72, 2]], [[0, 72, 3], [3, 77, 1], [4, 76, 2], [6, 74, 2]], [[0, 76, 2], [2, 74, 2], [4, 72, 4]],
+  [[0, 69, 2], [2, 74, 2], [4, 77, 3], [7, 76, 1]], [[0, 77, 3], [3, 74, 1], [4, 79, 4]], [[0, 79, 2], [2, 76, 2], [4, 74, 2], [6, 72, 2]], [[0, 78, 4], [4, 81, 4]]];
+function barMain(t, i) {
+  const b = 60 / 66, L = 8 * b, k = ((i % 8) + 8) % 8, root = MAIN_ROOTS[k], ch = MAIN_CH[k], last = k === 7;
+  organ(t, root, L, .04); organ(t, root + 7, L, .02);
+  drum(t, .3, true); drum(t + 4 * b, .2, true); if (k === 3 || last) for (let j = 0; j < 4; j++) drum(t + 6 * b + j * b / 2, .1 + j * .04, false);
+  ch.forEach((n, j) => choirNote(t + j * .35, n, L - 1, { vowel: last ? 'ah' : ['oo', 'oh', 'ah'][j], gain: last ? .11 : .08, attack: 1.6, release: 2, pan: [-.4, 0, .4][j] }));
+  for (const [bt, n, d] of MAIN_MEL[k]) brass(t + bt * b, n, d * b - .08, k >= 4 ? .04 : .032);
+  if (k >= 4) ch.forEach((n, j) => pluck(t + (1 + j) * b, n + 12, .05));
+  if (k === 0 || last) bell(t + .1, root + 24, .11, true);
+  return L;
+}
+const BARS = { main: barMain, cathedral: barCathedral, hive: barHive, procession: barProcession, siege: barSiege, forge: barForge, void: barVoid };
 /* each army has its own musical colour: a key, and the kinds of music it draws from. The score follows whose turn it is. */
 const ARMY_DEFAULT = { name: 'Gothic Vigil', tr: 0, pool: ['cathedral', 'hive', 'procession', 'siege', 'forge', 'void'], w: [1, 1, 1, 1, 1, 1] };
 const ARMY_THEMES = [
@@ -24922,8 +24937,10 @@ const ARMY_THEMES = [
   [/space wolves|wolf|askar|fenris/i, { name: 'Howl of the Fenris', tr: -2, pool: ['siege', 'procession', 'cathedral'], w: [4, 3, 1] }],
   [/space marines|templar|angels|ultramarines|imperial|astartes|deathwatch|raven|salamander|fist|vedrenn|crowe|sanctifiers|assault force|inexorable|vow/i, { name: 'Hymn of the Emperor\'s Sons', tr: 0, pool: ['siege', 'cathedral', 'procession'], w: [3, 3, 2] }]
 ];
+const MAIN_THEME = { name: 'Ashes and Dawn', tr: 0, pool: ['main'], w: [1] };
 function musThemeNow() {
   try {
+    if (typeof G === 'undefined' || !G || !battleStarted || G.stage === 'over' || !G.pb) return MAIN_THEME;
     if (typeof G !== 'undefined' && G && (G.stage === 'battle' || G.stage === 'pre')) {
       const b = (G.stage === 'battle' && G.active === 'ai') ? G.ab : G.pb; if (!b) return ARMY_DEFAULT;
       const s = `${b.faction || ''} ${b.scheme || ''} ${b.name || ''}`, t = ARMY_THEMES.find(x => x[0].test(s)); return t ? t[1] : ARMY_DEFAULT;
@@ -24946,22 +24963,22 @@ function musSchedule() {
     if (Mus.mood === 'army') {
       const th = musThemeNow();
       if (Mus.theme !== th) {
-        const first = !Mus.theme, prev = Mus.tr; Mus.theme = th; Mus.tr = th.tr; Mus.cur = pickW(th); Mus.since = 0; musLabel();
+        const first = !Mus.theme, prev = Mus.tr; Mus.theme = th; Mus.tr = th.tr; Mus.cur = pickW(th); Mus.since = 0; if (th === MAIN_THEME) Mus.bar = -1; musLabel();
         if (!first && Mus.bar > 0) { Mus.bar++; Mus.next += barBridge(Math.max(Mus.next, Mus.ctx.currentTime + .05), prev, th.tr); continue; }
       } else if (Mus.since >= 3 && Math.random() < (Mus.since >= 8 ? 1 : .3)) { Mus.cur = pickW(th, Mus.cur); Mus.since = 0; musLabel(); }
       Mus.since++;
-    } else if (Mus.mood === 'shuffle' && Mus.bar > 0 && Mus.bar % 10 === 0) { const o = Object.keys(BARS).filter(k => k !== Mus.cur); Mus.cur = pick(o); musLabel(); }
+    } else if (Mus.mood === 'shuffle' && Mus.bar > 0 && Mus.bar % 10 === 0) { const o = Object.keys(BARS).filter(k => k !== Mus.cur && k !== 'main'); Mus.cur = pick(o); musLabel(); }
     const L = BARS[Mus.cur](Math.max(Mus.next, Mus.ctx.currentTime + .05), Mus.bar++); Mus.next += L;
   }
 }
-function musLabel() { const n = $('#mus-now'); if (n) n.textContent = Mus.on ? 'Now playing: ' + (Mus.mood === 'army' && Mus.theme ? Mus.theme.name + ' (' + MOODS[Mus.cur] + ')' : MOODS[Mus.cur]) : ''; }
+function musLabel() { const n = $('#mus-now'); if (n) n.textContent = Mus.on ? 'Now playing: ' + (Mus.mood === 'army' && Mus.theme ? Mus.theme.name + (MOODS[Mus.cur] === Mus.theme.name ? '' : ' (' + MOODS[Mus.cur] + ')') : MOODS[Mus.cur]) : ''; }
 function setMusicVol(v) { Mus.vol = Math.max(0, Math.min(1, v)); try { localStorage.setItem('battleDrill.musVol', String(Mus.vol)); } catch (e) { } if (Mus.master && Mus.on) Mus.master.gain.setTargetAtTime(Math.pow(Mus.vol, 2) * 1.1, Mus.ctx.currentTime, .15); }
 function setMusic(on) {
   Mus.on = on; const b = $('#mus-toggle'); if (b) b.setAttribute('aria-pressed', on ? 'true' : 'false'); const c = $('#mus-ctl'); if (c) c.hidden = !on;
   try { localStorage.setItem('battleDrill.music', on ? 'on' : 'off'); } catch (e) { }
   if (on) {
     if (!musInit()) { Mus.on = false; if (b) b.setAttribute('aria-pressed', 'false'); if (c) c.hidden = true; return; }
-    Mus.ctx.resume(); Mus.theme = null; Mus.tr = 0; Mus.cur = (Mus.mood === 'shuffle' || Mus.mood === 'army') ? pick(Object.keys(BARS)) : Mus.mood; Mus.bar = 0; Mus.next = Mus.ctx.currentTime + .1;
+    Mus.ctx.resume(); Mus.theme = null; Mus.tr = 0; Mus.cur = (Mus.mood === 'shuffle' || Mus.mood === 'army') ? pick(Object.keys(BARS).filter(k => k !== 'main')) : Mus.mood; Mus.bar = 0; Mus.next = Mus.ctx.currentTime + .1;
     Mus.master.gain.cancelScheduledValues(Mus.ctx.currentTime); Mus.master.gain.setValueAtTime(0, Mus.ctx.currentTime); Mus.master.gain.linearRampToValueAtTime(Math.pow(Mus.vol, 2) * 1.1, Mus.ctx.currentTime + 3);
     clearInterval(Mus.timer); Mus.timer = setInterval(musSchedule, 400); musSchedule(); musLabel();
   } else if (Mus.ctx) { Mus.master.gain.cancelScheduledValues(Mus.ctx.currentTime); Mus.master.gain.setTargetAtTime(0, Mus.ctx.currentTime, .6); clearInterval(Mus.timer); setTimeout(() => { if (!Mus.on && Mus.ctx) Mus.ctx.suspend(); }, 3500); musLabel(); }
@@ -24969,7 +24986,7 @@ function setMusic(on) {
 (function initMusic() {
   $('#mus-mood').value = Mus.mood; $('#mus-vol').value = Math.round(Mus.vol * 100);
   $('#mus-toggle').addEventListener('click', () => setMusic(!Mus.on));
-  $('#mus-mood').addEventListener('change', e => { Mus.mood = e.target.value; try { localStorage.setItem('battleDrill.musMood', Mus.mood); } catch (x) { } if (Mus.on) { Mus.theme = null; Mus.tr = 0; Mus.cur = (Mus.mood === 'shuffle' || Mus.mood === 'army') ? pick(Object.keys(BARS)) : Mus.mood; Mus.bar = 0; Mus.next = Mus.ctx.currentTime + 1.2; musLabel(); } });
+  $('#mus-mood').addEventListener('change', e => { Mus.mood = e.target.value; try { localStorage.setItem('battleDrill.musMood', Mus.mood); } catch (x) { } if (Mus.on) { Mus.theme = null; Mus.tr = 0; Mus.cur = (Mus.mood === 'shuffle' || Mus.mood === 'army') ? pick(Object.keys(BARS).filter(k => k !== 'main')) : Mus.mood; Mus.bar = 0; Mus.next = Mus.ctx.currentTime + 1.2; musLabel(); } });
   $('#mus-vol').addEventListener('input', e => setMusicVol(+e.target.value / 100));
   let want = false; try { want = localStorage.getItem('battleDrill.music') === 'on'; } catch (e) { }
   if (want) { const once = () => { setMusic(true); document.removeEventListener('pointerdown', once); }; document.addEventListener('pointerdown', once); }
