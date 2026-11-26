@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.26-0217';
+  const VERSION = '2026.11.26-0221';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -25218,31 +25218,36 @@ const BARS = { rot: barRot, warp: barWarp, golden: barGolden, silver: barSilver,
 /* each army has its own musical colour: a key, and the kinds of music it draws from. The score follows whose turn it is. */
 const ARMY_DEFAULT = { name: 'Gothic Vigil', tr: 0, pool: ['cathedral', 'hive', 'procession', 'siege', 'forge', 'void'], w: [1, 1, 1, 1, 1, 1] };
 const ARMY_THEMES = [
-  [/death guard|nurgle|maggot|rot/i, { name: 'The Rot Turns', tr: -3, pool: ['rot'], w: [1] }],
+  [/death guard|nurgle|maggot|\brot\b/i, { name: 'The Rot Turns', tr: -3, pool: ['rot'], w: [1] }],
   [/chaos|thousand sons|world eaters|emperor.s children|heretic|daemon|zarkan|zadophon|reaver|callous|coven|claw of/i, { name: 'Warp-Touched Dirge', tr: 3, pool: ['warp'], w: [1] }],
   [/sororitas|sisters|sanctuary|miracle/i, { name: 'Litany of the Faithful', tr: 3, pool: ['litany'], w: [1] }],
   [/custodes|gilded|tristraen/i, { name: 'The Golden Vigil', tr: 5, pool: ['golden'], w: [1] }],
   [/grey knights|inquisitor|deltic|purge corps/i, { name: 'Silver Vigil', tr: -2, pool: ['silver'], w: [1] }],
-  [/astra militarum|guard|drayden|lance/i, { name: 'March of the Regiments', tr: 1, pool: ['regiment'], w: [1] }],
+  [/astra militarum|imperial guard|cadian|drayden|\blance\b/i, { name: 'March of the Regiments', tr: 1, pool: ['regiment'], w: [1] }],
   [/mechanicus|votann|leagues|skitarii|bane-slayer/i, { name: 'Forge Liturgy', tr: 2, pool: ['forge'], w: [1] }],
   [/\bork|ardmob|waaagh|goff|evil sunz|bad moon/i, { name: 'Da Big Racket', tr: -3, pool: ['waaagh'], w: [1] }],
   [/aeldari|drukhari|harlequin|ynnari|kygharil|eldar/i, { name: 'Dance of Thorns', tr: -1, pool: ['dance'], w: [1] }],
   [/tyranid|genestealer|swarm|vardenghast/i, { name: 'Hunger From the Dark', tr: -1, pool: ['hive'], w: [1] }],
   [/necron|amonhotekh/i, { name: 'The Tomb Wakes', tr: -4, pool: ['tomb'], w: [1] }],
-  [/t.au|tau|sudden dawn|farsight/i, { name: 'Greater Good Cadence', tr: 4, pool: ['cadence'], w: [1] }],
+  [/\bt.au\b|\btau\b|sudden dawn|farsight/i, { name: 'Greater Good Cadence', tr: 4, pool: ['cadence'], w: [1] }],
   [/space wolves|wolf|askar|fenris/i, { name: 'Howl of the Fenris', tr: 7, pool: ['fenris'], w: [1] }],
   [/space marines|templar|angels|ultramarines|imperial|astartes|deathwatch|raven|salamander|fist|vedrenn|crowe|sanctifiers|assault force|inexorable|vow/i, { name: 'Hymn of the Emperor\'s Sons', tr: -3, pool: ['hymn'], w: [1] }]
 ];
 const MAIN_THEME = { name: 'Ashes and Dawn', tr: 0, pool: ['main'], w: [1] };
+const themeOfBuild = b => { const t = ARMY_THEMES.find(x => x[0].test(`${b.faction || ''} ${b.chapter || ''} ${b.scheme || ''} ${b.name || ''}`)); return t ? t[1] : ARMY_DEFAULT; };
 function musThemeNow() {
   try {
-    if (typeof battleStarted !== 'undefined' && !(battleStarted && G && G.stage !== 'over') && currentTab() === 'armies' && typeof B !== 'undefined' && B.faction && $('#builder') && !$('#builder').hidden) {
-      const t = ARMY_THEMES.find(x => x[0].test(`${B.faction} ${B.name || ''}`)); return t ? t[1] : ARMY_DEFAULT;
+    const tab = typeof currentTab === 'function' ? currentTab() : '', live = typeof battleStarted !== 'undefined' && battleStarted && G && G.stage !== 'over';
+    /* the army screens and the battle setup follow whichever army is being looked at */
+    if (tab === 'armies') {
+      if (typeof B !== 'undefined' && B.faction && $('#builder') && !$('#builder').hidden) return themeOfBuild(B);
+      const sb = typeof findBuild === 'function' && A && A.editing ? findBuild(A.editing) : null; if (sb) return themeOfBuild(sb);
     }
+    if (tab === 'battle' && $('#b-setup') && !$('#b-setup').hidden && typeof findBuild === 'function') { const pb = $('#b-army-p') && findBuild($('#b-army-p').value); if (pb) return themeOfBuild(pb); }
     if (typeof G === 'undefined' || !G || !battleStarted || G.stage === 'over' || !G.pb) return MAIN_THEME;
     if (typeof G !== 'undefined' && G && (G.stage === 'battle' || G.stage === 'pre')) {
       const b = (G.stage === 'battle' && G.active === 'ai') ? G.ab : G.pb; if (!b) return ARMY_DEFAULT;
-      const s = `${b.faction || ''} ${b.scheme || ''} ${b.name || ''}`, t = ARMY_THEMES.find(x => x[0].test(s)); return t ? t[1] : ARMY_DEFAULT;
+      return themeOfBuild(b);
     }
   } catch (e) { }
   return ARMY_DEFAULT;
