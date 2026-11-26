@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.26-0137';
+  const VERSION = '2026.11.26-0141';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -1229,6 +1229,12 @@ html[data-sb="min"] .sb-top{flex-direction:column;padding:10px 6px;gap:8px}
 html[data-sb="min"] .sidebar .tabs button{justify-content:center;padding:11px 0;border-left-width:0;border-bottom:0}
 html[data-sb="min"] .sidebar .tabs button[aria-selected="true"]{box-shadow:inset 3px 0 0 var(--brass)}
 html[data-sb="min"] .sb-foot .chip-btn{justify-content:center;padding:8px 0}
+.sb-music{display:flex;flex-direction:column;gap:4px}
+.sb-music .chip-btn{padding:6px 8px;font-size:.8rem}
+.sb-music .chip-btn[aria-pressed="false"] .lbl{opacity:.65}
+.sb-music select{width:100%;font-size:.76rem;padding:3px 4px;border-radius:6px;min-width:0}
+html[data-sb="min"] .sb-music select{display:none}
+html[data-sb="min"] .sb-music .chip-btn{justify-content:center;padding:6px 0}
 
 /* menu reordering and music */
 .sidebar .tabs .mv{display:none;flex:none;gap:2px;margin-left:auto}
@@ -2060,6 +2066,10 @@ html[data-look="cog"] .muted{color:var(--muted)}
   </nav>
   <div class="sb-foot">
     <span class="ticker" id="ticker" aria-hidden="true"></span>
+    <div class="sb-music" id="sb-music">
+      <button type="button" class="chip-btn" id="sb-mus-btn" aria-pressed="false" data-tip="Turn the music on or off."><span class="ico" aria-hidden="true">🎵</span><span class="lbl" id="sb-mus-name">Music off</span></button>
+      <select id="sb-track" aria-label="Choose a music track" data-tip="Pick a track, or leave it on Auto to follow the army whose turn it is."></select>
+    </div>
     <button type="button" class="chip-btn" id="sb-settings" aria-controls="tab-settings" data-tip="Dice rolling, sound and music, atmosphere and the order of this menu."><span class="ico" aria-hidden="true">⚙️</span><span class="lbl">Settings</span></button>
   </div>
 </aside>
@@ -2396,7 +2406,7 @@ Unit: Big Walker | models 1 | M 8 | T 10 | Sv 2 | Inv 5 | W 12 | Ld 6 | OC 4 | s
       <h3>Sound and music</h3>
       <div class="set-row"><div><b>Battlefield sound</b><span class="muted">Wind, a low drone, distant shelling and dice clatter. Quiet by default.</span></div><button type="button" class="chip-btn" id="snd-toggle" aria-pressed="false" data-tip="Ambient battlefield sound: wind, a low drone, distant shelling and dice clatter. Quiet by default."><span class="ico" aria-hidden="true">🔈</span><span class="lbl">Sound</span></button></div>
       <div class="set-row"><div><b>Music</b><span class="muted">Gothic space horror, composed live in your browser: a choir and organ, bells, war drums, low brass, machine-chant and drones. Six moods, or let each army have its own theme that follows whose turn it is.</span></div><button type="button" class="chip-btn" id="mus-toggle" aria-pressed="false" data-tip="Gothic space horror music, made live in your browser: a choir and organ, tolling bells, war drums and drones. Pick a mood below."><span class="ico" aria-hidden="true">🎼</span><span class="lbl">Music</span></button></div>
-      <div class="mus-ctl" id="mus-ctl" hidden><select id="mus-mood" aria-label="Music mood"><option value="army">By army (follows the turn)</option><option value="shuffle">Shuffle all</option><option value="litany">Voices of the Faithful</option><option value="cathedral">Cathedral of Dust</option><option value="hive">Hive Fleet Rising</option><option value="procession">Grim Procession</option><option value="siege">Siege of Iron</option><option value="forge">Forge Liturgy</option><option value="void">The Silent Void</option></select><input type="range" id="mus-vol" min="0" max="100" value="50" aria-label="Music volume"><span class="muted" id="mus-now" aria-live="polite"></span></div>
+      <div class="mus-ctl" id="mus-ctl" hidden><select id="mus-mood" aria-label="Music mood"><option value="army">By army (follows the turn)</option><option value="shuffle">Shuffle all</option><option value="litany">Voices of the Faithful</option><option value="rot">The Rot Turns</option><option value="warp">Warp-Touched Dirge</option><option value="golden">The Golden Vigil</option><option value="silver">Silver Vigil</option><option value="regiment">March of the Regiments</option><option value="waaagh">Da Big Racket</option><option value="dance">Dance of Thorns</option><option value="tomb">The Tomb Wakes</option><option value="cadence">Greater Good Cadence</option><option value="fenris">Howl of the Fenris</option><option value="hymn">Hymn of the Emperor's Sons</option><option value="cathedral">Cathedral of Dust</option><option value="hive">Hive Fleet Rising</option><option value="procession">Grim Procession</option><option value="siege">Siege of Iron</option><option value="forge">Forge Liturgy</option><option value="void">The Silent Void</option></select><input type="range" id="mus-vol" min="0" max="100" value="50" aria-label="Music volume"><span class="muted" id="mus-now" aria-live="polite"></span></div>
     </div>
     <div class="set-sec" id="set-device">
       <h3>Display</h3>
@@ -24769,7 +24779,7 @@ function setReorder(on) {
 /* ============ MUSIC: gothic space horror, composed live with the Web Audio API (no audio files) ============ */
 const Mus = { ctx: null, bus: null, wet: null, master: null, on: false, tr: 0, theme: null, since: 0, mood: 'shuffle', cur: 'cathedral', vol: .5, timer: null, next: 0, bar: 0, left: 0, noise: null };
 try { Mus.vol = +(localStorage.getItem('battleDrill.musVol') || .5); Mus.mood = localStorage.getItem('battleDrill.musMood') || 'army'; if (!localStorage.getItem('battleDrill.musArmy1')) { localStorage.setItem('battleDrill.musArmy1', '1'); Mus.mood = 'army'; localStorage.setItem('battleDrill.musMood', 'army'); } } catch (e) { }
-const MOODS = { litany: 'Voices of the Faithful', main: 'Ashes and Dawn', cathedral: 'Cathedral of Dust', hive: 'Hive Fleet Rising', procession: 'Grim Procession', siege: 'Siege of Iron', forge: 'Forge Liturgy', void: 'The Silent Void' };
+const MOODS = { rot: 'The Rot Turns', warp: 'Warp-Touched Dirge', golden: 'The Golden Vigil', silver: 'Silver Vigil', regiment: 'March of the Regiments', waaagh: 'Da Big Racket', dance: 'Dance of Thorns', tomb: 'The Tomb Wakes', cadence: 'Greater Good Cadence', fenris: 'Howl of the Fenris', hymn: "Hymn of the Emperor's Sons", litany: 'Voices of the Faithful', main: 'Ashes and Dawn', cathedral: 'Cathedral of Dust', hive: 'Hive Fleet Rising', procession: 'Grim Procession', siege: 'Siege of Iron', forge: 'Forge Liturgy', void: 'The Silent Void' };
 const mtof = n => 440 * Math.pow(2, (n + (Mus.tr || 0) - 69) / 12);
 const rnd = (a, b) => a + Math.random() * (b - a);
 function musInit() {
@@ -24959,24 +24969,161 @@ function barLitany(t, i) {
   if (k === 7 || k === 3) bell(t + 5, ch[0] + 24, .08, true);
   return L;
 }
-const BARS = { litany: barLitany, main: barMain, cathedral: barCathedral, hive: barHive, procession: barProcession, siege: barSiege, forge: barForge, void: barVoid };
+/* ---- one piece of music per army: each has its own instruments, pulse and mode ---- */
+function buzz(t, dur, gain) {
+  const ctx = Mus.ctx, n = ctx.createBufferSource(); n.buffer = Mus.noise; n.loop = true; const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = rnd(300, 520); bp.Q.value = 6;
+  const g = ctx.createGain(), lfo = ctx.createOscillator(), lg = ctx.createGain(); lfo.frequency.value = rnd(30, 46); lg.gain.value = gain * .6; lfo.connect(lg); lg.connect(g.gain);
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(gain, t + dur * .3); g.gain.linearRampToValueAtTime(0, t + dur); n.connect(bp); bp.connect(g); g.connect(Mus.bus); n.start(t, rnd(0, 1)); n.stop(t + dur + .1); lfo.start(t); lfo.stop(t + dur + .1);
+}
+function reed(t, midi, dur, gain, o) {
+  o = o || {}; const ctx = Mus.ctx, f = mtof(midi), g = ctx.createGain(), bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = Math.min(2400, f * 3); bp.Q.value = 2.5;
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(gain, t + .1); g.gain.setValueAtTime(gain, t + Math.max(.1, dur - .25)); g.gain.linearRampToValueAtTime(0, t + dur + .15);
+  for (const dt of [-12, 11]) { const os = ctx.createOscillator(); os.type = 'sawtooth'; os.frequency.value = f; os.detune.value = dt; os.connect(bp); os.start(t); os.stop(t + dur + .2); }
+  const pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null; if (pan) pan.pan.value = o.pan || 0; bp.connect(g); if (pan) { g.connect(pan); pan.connect(Mus.bus); } else g.connect(Mus.bus);
+}
+function flute(t, midi, dur, gain, o) {
+  o = o || {}; const ctx = Mus.ctx, f = mtof(midi), g = ctx.createGain(); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(gain, t + .12); g.gain.setValueAtTime(gain, t + Math.max(.12, dur - .2)); g.gain.linearRampToValueAtTime(0, t + dur + .2);
+  const lfo = ctx.createOscillator(), lg = ctx.createGain(); lfo.frequency.value = 5.2; lg.gain.setValueAtTime(0, t); lg.gain.linearRampToValueAtTime(f * .006, t + .5); lfo.connect(lg); lfo.start(t); lfo.stop(t + dur + .3);
+  for (const [m, ty, a] of [[1, 'sine', 1], [2, 'sine', .22], [3, 'triangle', .06]]) { const os = ctx.createOscillator(), og = ctx.createGain(); os.type = ty; os.frequency.value = f * m; og.gain.value = a; lg.connect(os.frequency); os.connect(og); og.connect(g); os.start(t); os.stop(t + dur + .3); }
+  const pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null; if (pan) pan.pan.value = o.pan !== undefined ? o.pan : .2; if (pan) { g.connect(pan); pan.connect(Mus.bus); } else g.connect(Mus.bus);
+}
+/* Death Guard: a slow funeral toll in three, a tuba sagging over sour drones, flies */
+function barRot(t, i) {
+  const L = 12, root = [36, 36, 35, 34][Math.floor(i / 2) % 4];
+  organ(t, root, L, .045); organ(t + .3, root + 1, L, .022); organ(t, root + 6, L, .012);
+  brass(t + 1, root + 12, 4.2, .05); brass(t + 6, root + 10, 4.6, .045);
+  for (const x of [0, 4, 8]) bell(t + x, root + 12, x ? .09 : .14, true);
+  choirNote(t + 2, root + 12, L - 3, { vowel: 'oh', gain: .055, attack: 3, release: 3, pan: -.2 });
+  if (Math.random() < .7) buzz(t + rnd(0, 4), rnd(5, 8), .028);
+  if (i % 2) heartbeat(t + 1.5, .16);
+  return L;
+}
+/* Chaos: shifting chromatic clusters, ragged ritual drums, shrieks */
+function barWarp(t, i) {
+  const L = 10, base = 54 + ((i * 5) % 7), cl = [base + 12, base + 13, base + 18, base + 19];
+  organ(t, base - 18 < 26 ? base - 6 : base - 18, L, .04);
+  cl.forEach((n, j) => choirNote(t + j * rnd(.3, 1.4), n, L - 1.5, { vowel: ['eh', 'oo', 'oh', 'ah'][j], gain: .07, attack: 2, release: 2.5, pan: rnd(-.7, .7) }));
+  const n = 4 + Math.floor(Math.random() * 3); for (let j = 0; j < n; j++) drum(t + rnd(0, L - 1), rnd(.12, .3), Math.random() < .6);
+  if (Math.random() < .8) shriek(t + rnd(1, L - 4), pick([84, 87, 91]), rnd(2.5, 4.5), .02);
+  if (i % 3 === 0) boom(t + 4, .3, 2.2);
+  for (let j = 0; j < 3; j++) ping(t + rnd(0, L - 1), pick([85, 88, 89, 93]), .018);
+  return L;
+}
+/* Custodes: a slow golden chorale of brass over timpani, bells on high */
+const GOLD_R = [38, 43, 40, 45, 38, 43, 45, 38];
+const GOLD_C = [[50, 57, 62, 66], [55, 62, 67, 71], [52, 59, 64, 67], [57, 64, 69, 73], [50, 57, 62, 66], [55, 62, 67, 71], [57, 64, 69, 73], [50, 57, 62, 66]];
+function barGolden(t, i) {
+  const b = 60 / 54, L = 8 * b, k = ((i % 8) + 8) % 8, ch = GOLD_C[k];
+  organ(t, GOLD_R[k], L, .035);
+  ch.forEach((n, j) => { brass(t + j * .12, n, 3.8 * b, .038); brass(t + 4 * b + j * .1, n + (j === 3 && k % 2 ? 2 : 0), 3.7 * b, .034); });
+  boom(t, .36, 2.2); boom(t + 4 * b, .26, 1.8); if (k === 3 || k === 7) for (let j = 0; j < 6; j++) drum(t + 6 * b + j * b / 3, .1 + j * .03, false);
+  ch.slice(1).forEach((n, j) => choirNote(t + .5 + j * .4, n + 12, L - 1.5, { vowel: 'ah', gain: .06, attack: 1.8, release: 2.2, pan: [-.4, 0, .4][j] }));
+  if (k % 2 === 0) bell(t + .1, ch[3] + 24, .09, true);
+  return L;
+}
+/* Grey Knights: one low voice chanting a plain line, a single tolling bell, glass overhead */
+const GK_SC = [50, 52, 53, 55, 57, 59, 60, 62];
+function barSilver(t, i) {
+  const L = 14; Mus.gkn = Mus.gkn === undefined ? 4 : Mus.gkn;
+  organ(t, 38, L, .026); organ(t, 45, L, .012);
+  for (let j = 0; j < 6; j++) { Mus.gkn = Math.max(0, Math.min(GK_SC.length - 1, Mus.gkn + pick([-2, -1, -1, 0, 1, 1, 2]))); const n = GK_SC[Mus.gkn];
+    choirNote(t + j * 2.2, n, 2.7, { vowel: 'oh', gain: .1, pan: 0, attack: .5, release: .9 }); if (j % 2 === 1) choirNote(t + j * 2.2, n + 7, 2.7, { vowel: 'oo', gain: .045, pan: .45, attack: .6, release: .9 }); }
+  bell(t + 1, 50, .12, true); if (i % 2) bell(t + 8, 57, .09, true);
+  for (let j = 0; j < 3; j++) ping(t + rnd(2, L - 1), pick([86, 91, 93, 98]), .014);
+  return L;
+}
+/* Astra Militarum: a brisk brass-band march on snare, fife on top */
+const AM_R = [36, 41, 43, 36];
+const AM_MEL = [[[0, 64, 1], [1, 67, 1], [2, 72, 2], [4, 71, 1], [5, 69, 1], [6, 67, 2]], [[0, 65, 1], [1, 69, 1], [2, 72, 2], [4, 74, 1], [5, 72, 1], [6, 69, 2]], [[0, 67, 1], [1, 71, 1], [2, 74, 2], [4, 72, 1], [5, 71, 1], [6, 67, 2]], [[0, 72, 2], [2, 67, 1], [3, 64, 1], [4, 67, 2], [6, 64, 2]]];
+function barRegiment(t, i) {
+  const b = 60 / 104, L = 8 * b, k = ((i % 8) + 8) % 8, r = AM_R[k % 4];
+  for (let j = 0; j < 8; j++) { const tt = t + j * b; if (j % 2 === 0) { drum(tt, j % 4 === 0 ? .26 : .16, true); cello(tt, r + (j % 4 ? 7 : 0) + 12, b * .8, .07, { attack: .03, release: .1 }); } snare(tt + b * .5, .05, 2800); if (j % 2) snare(tt, .07, 2300); }
+  for (let j = 0; j < 4; j++) snare(t + 7 * b + j * b / 4, .04 + j * .01, 2600);
+  for (const [bt, n, d] of AM_MEL[k % 4]) { brass(t + bt * b, n - 12 + 12, d * b - .06, .042); flute(t + bt * b, n + 12, d * b - .06, .022, { pan: .35 }); }
+  if (k === 3 || k === 7) bell(t, r + 36, .08, true);
+  return L;
+}
+/* Orks: stomp, clang and blat */
+function barWaaagh(t, i) {
+  const b = 60 / 100, L = 8 * b, root = [34, 34, 36, 33][Math.floor(i / 2) % 4];
+  [1, 0, 1, 1, 0, 1, 0, 1].forEach((on, j) => { if (on) { drum(t + j * b, j === 0 ? .4 : .26, true); if (j === 0 || j === 5) boom(t + j * b, .28, 1); } });
+  for (let j = 0; j < 8; j++) if (Math.random() < .55) bell(t + j * b + b * .5 + rnd(0, .05), pick([55, 58, 61, 63, 66]), .05, false);
+  [0, 2, 3].forEach((j, x) => brass(t + j * b * 1.25 + 2 * b * (i % 2), root + 12 + (x === 2 ? 3 : 0) + Math.floor(rnd(0, 2)), .45, .06));
+  choirNote(t, root + 12, b * 1.6, { vowel: 'oh', gain: .13, attack: .08, release: .3, pan: -.2 }); choirNote(t + 4 * b, root + 15, b * 1.6, { vowel: 'ah', gain: .12, attack: .08, release: .3, pan: .2 });
+  if (i % 4 === 3) shriek(t + 6 * b, 70, 1.8, .02);
+  return L;
+}
+/* Aeldari: a lilting six-eight on plucked glass, an elegant wail above */
+const AEL_SC = [69, 71, 72, 74, 76, 77, 80, 81];
+function barDance(t, i) {
+  const e = .3, L = 24 * e; Mus.aeI = Mus.aeI === undefined ? 3 : Mus.aeI;
+  for (let j = 0; j < 24; j++) { if (j % 12 === 0) pluck(t + j * e, 45 + (j ? 3 : 0), .06);
+    Mus.aeI = Math.max(0, Math.min(AEL_SC.length - 1, Mus.aeI + pick([-2, -1, 1, 1, 2]))); const n = AEL_SC[Mus.aeI] + (j % 6 === 0 ? 12 : 0); pluck(t + j * e + rnd(-.01, .01), n, j % 3 === 0 ? .055 : .032); if (j % 6 === 0 && Math.random() < .5) bell(t + j * e, n + 12, .05, false); }
+  for (const [x, n, d] of [[0, 81, 6], [8, 80, 5], [14, 77, 7], [20, 76, 5]]) if (Math.random() < .85) choirNote(t + x * e, n, d * e + .4, { vowel: 'eh', gain: .05, attack: .5, release: 1, pan: x % 2 ? .3 : -.3 });
+  flute(t + 12 * e, pick([88, 86, 84]), 3, .02, { pan: -.3 });
+  return L;
+}
+/* Necrons: a dead pulse, a ticking clock, cold metal bells */
+function barTomb(t, i) {
+  const L = 12; organ(t, 26, L, .04); organ(t, 32, L, .014); rumble(t, L, .05);
+  for (const x of [0, 3.1, 6.4, 9.2]) boom(t + x + rnd(0, .1), .2 + Math.random() * .1, 2.4);
+  for (let j = 0; j < 22; j++) if (Math.random() < .8) ping(t + j * .5, 100, .006);
+  const dn = [86, 84, 82, 80, 78, 76]; for (let j = 0; j < 4; j++) ping(t + 1 + j * 2.4 + rnd(0, .3), dn[(i * 2 + j) % dn.length], .028);
+  bell(t + 4, 38, .1, true); if (i % 2) bell(t + 8.5, 44, .08, true);
+  cello(t + 2, 50 + (i % 3), 7, .035, { attack: 1.8, release: 2, pan: .2 });
+  return L;
+}
+/* Tau: clean pulse, a bright arpeggio, a hopeful pad */
+const TAU_CH = [[62, 66, 69, 73], [67, 71, 74, 78], [59, 62, 66, 69], [64, 67, 71, 74]];
+function barCadence(t, i) {
+  const b = 60 / 112, s = b / 4, L = 8 * b, ch = TAU_CH[Math.floor(((i % 8) + 8) % 8 / 2)], k = ((i % 8) + 8) % 8;
+  for (let j = 0; j < 8; j++) { if (j % 2 === 0) boom(t + j * b, j % 4 === 0 ? .2 : .13, .6); if (j % 2) ping(t + j * b, 100, .012); }
+  for (let j = 0; j < 32; j++) { const n = ch[[0, 1, 2, 3, 2, 1, 3, 2][j % 8]] + (j % 16 > 7 ? 12 : 0); pluck(t + j * s, n, j % 4 === 0 ? .045 : .024); }
+  ch.slice(0, 3).forEach((n, j) => choirNote(t + j * .25, n, L - 1, { vowel: 'oo', gain: .045, attack: 1.6, release: 2, pan: [-.4, 0, .4][j] }));
+  if (k % 4 === 3) flute(t + 4 * b, ch[3] + 12, 3 * b, .03);
+  return L;
+}
+/* Space Wolves: bagpipe drone, frame-drum stomp, a whistle and a distant howl */
+const FEN_MEL = [[[0, 74, 2], [2, 72, 1], [3, 69, 1], [4, 67, 4]], [[0, 69, 2], [2, 72, 2], [4, 74, 3], [7, 72, 1]], [[0, 76, 2], [2, 74, 1], [3, 72, 1], [4, 69, 4]], [[0, 67, 1], [1, 69, 1], [2, 72, 2], [4, 74, 4]]];
+function barFenris(t, i) {
+  const b = 60 / 82, L = 8 * b, k = ((i % 8) + 8) % 8;
+  reed(t, 38, L, .036, { pan: -.3 }); reed(t, 45, L, .028, { pan: .3 }); organ(t, 26 + 12, L, .02);
+  for (let j = 0; j < 8; j++) { if (j % 2 === 0) drum(t + j * b, j % 4 === 0 ? .34 : .22, true); else drum(t + j * b, .09, false); }
+  for (const [bt, n, d] of FEN_MEL[k % 4]) flute(t + bt * b, n, d * b - .05, .035, { pan: .25 });
+  if (k % 2 === 0) choirNote(t + 2 * b, 50, 4 * b, { vowel: 'oh', gain: .09, attack: .8, release: 1.2, pan: 0 });
+  if (k === 7) shriek(t + 3 * b, 64, 4, .014);
+  return L;
+}
+/* Space Marines: a full organ hymn, a wall of choir, a short brass call */
+const HYM_R = [36, 32, 39, 34, 36, 29, 31, 36];
+const HYM_C = [[60, 63, 67], [56, 60, 63], [63, 67, 70], [58, 62, 65], [60, 63, 67], [53, 56, 60], [55, 59, 62], [60, 64, 67]];
+function barHymn(t, i) {
+  const L = 14, k = ((i % 8) + 8) % 8, r = HYM_R[k], ch = HYM_C[k];
+  organ(t, r, L, .055); organ(t, r + 7, L, .03); organ(t, r + 12, L, .02);
+  ch.forEach((n, j) => { choirNote(t + j * .4, n, L - 2, { vowel: ['ah', 'oh', 'ah'][j], gain: .1, attack: 2, release: 2.5, pan: [-.5, 0, .5][j] }); choirNote(t + 1 + j * .4, n - 12, L - 3, { vowel: 'oh', gain: .06, attack: 2.4, release: 2.5, pan: [.4, 0, -.4][j] }); });
+  if (k % 4 === 0) { brass(t + 3, ch[0] + 12, 1.6, .05); brass(t + 4.8, ch[2] + 12, 1.6, .05); brass(t + 6.6, ch[0] + 24, 3.5, .05); }
+  boom(t, .3, 2.6); if (k === 7) for (let j = 0; j < 8; j++) drum(t + 9 + j * .4, .1 + j * .03, false);
+  bell(t + .1, r + 24, .12, true); if (k % 2) bell(t + 7, ch[1] + 12, .08, true);
+  return L;
+}
+const BARS = { rot: barRot, warp: barWarp, golden: barGolden, silver: barSilver, regiment: barRegiment, waaagh: barWaaagh, dance: barDance, tomb: barTomb, cadence: barCadence, fenris: barFenris, hymn: barHymn, litany: barLitany, main: barMain, cathedral: barCathedral, hive: barHive, procession: barProcession, siege: barSiege, forge: barForge, void: barVoid };
 /* each army has its own musical colour: a key, and the kinds of music it draws from. The score follows whose turn it is. */
 const ARMY_DEFAULT = { name: 'Gothic Vigil', tr: 0, pool: ['cathedral', 'hive', 'procession', 'siege', 'forge', 'void'], w: [1, 1, 1, 1, 1, 1] };
 const ARMY_THEMES = [
-  [/death guard|nurgle|maggot|rot/i, { name: 'The Rot Turns', tr: -3, pool: ['hive', 'void', 'procession', 'cathedral'], w: [4, 2, 2, 1] }],
-  [/chaos|thousand sons|world eaters|emperor.s children|heretic|daemon|zarkan|zadophon|reaver|callous|coven|claw of/i, { name: 'Warp-Touched Dirge', tr: -2, pool: ['hive', 'procession', 'void', 'cathedral'], w: [3, 3, 2, 1] }],
-  [/sororitas|sisters|sanctuary|miracle/i, { name: 'Litany of the Faithful', tr: 3, pool: ['litany', 'cathedral'], w: [5, 1] }],
-  [/custodes|gilded|tristraen/i, { name: 'The Golden Vigil', tr: 3, pool: ['cathedral', 'siege', 'procession'], w: [4, 3, 1] }],
-  [/grey knights|inquisitor|deltic|purge corps/i, { name: 'Silver Vigil', tr: 1, pool: ['cathedral', 'void', 'procession'], w: [3, 3, 1] }],
-  [/astra militarum|guard|drayden|lance/i, { name: 'March of the Regiments', tr: -2, pool: ['siege', 'procession'], w: [4, 3] }],
-  [/mechanicus|votann|leagues|skitarii|bane-slayer/i, { name: 'Forge Liturgy', tr: 4, pool: ['forge', 'siege', 'void'], w: [5, 2, 1] }],
-  [/\bork|ardmob|waaagh|goff|evil sunz|bad moon/i, { name: 'Da Big Racket', tr: -5, pool: ['procession', 'siege'], w: [3, 3] }],
-  [/aeldari|drukhari|harlequin|ynnari|kygharil|eldar/i, { name: 'Dance of Thorns', tr: 7, pool: ['forge', 'void'], w: [3, 3] }],
-  [/tyranid|genestealer|swarm|vardenghast/i, { name: 'Hunger From the Dark', tr: -1, pool: ['hive', 'void'], w: [4, 2] }],
-  [/necron|amonhotekh/i, { name: 'The Tomb Wakes', tr: -4, pool: ['void', 'forge', 'procession'], w: [4, 2, 1] }],
-  [/t.au|tau|sudden dawn|farsight/i, { name: 'Greater Good Cadence', tr: 5, pool: ['forge', 'void'], w: [3, 3] }],
-  [/space wolves|wolf|askar|fenris/i, { name: 'Howl of the Fenris', tr: -2, pool: ['siege', 'procession', 'cathedral'], w: [4, 3, 1] }],
-  [/space marines|templar|angels|ultramarines|imperial|astartes|deathwatch|raven|salamander|fist|vedrenn|crowe|sanctifiers|assault force|inexorable|vow/i, { name: 'Hymn of the Emperor\'s Sons', tr: 0, pool: ['siege', 'cathedral', 'procession'], w: [3, 3, 2] }]
+  [/death guard|nurgle|maggot|rot/i, { name: 'The Rot Turns', tr: 0, pool: ['rot'], w: [1] }],
+  [/chaos|thousand sons|world eaters|emperor.s children|heretic|daemon|zarkan|zadophon|reaver|callous|coven|claw of/i, { name: 'Warp-Touched Dirge', tr: 0, pool: ['warp'], w: [1] }],
+  [/sororitas|sisters|sanctuary|miracle/i, { name: 'Litany of the Faithful', tr: 0, pool: ['litany'], w: [1] }],
+  [/custodes|gilded|tristraen/i, { name: 'The Golden Vigil', tr: 0, pool: ['golden'], w: [1] }],
+  [/grey knights|inquisitor|deltic|purge corps/i, { name: 'Silver Vigil', tr: 0, pool: ['silver'], w: [1] }],
+  [/astra militarum|guard|drayden|lance/i, { name: 'March of the Regiments', tr: 0, pool: ['regiment'], w: [1] }],
+  [/mechanicus|votann|leagues|skitarii|bane-slayer/i, { name: 'Forge Liturgy', tr: 0, pool: ['forge'], w: [1] }],
+  [/\bork|ardmob|waaagh|goff|evil sunz|bad moon/i, { name: 'Da Big Racket', tr: 0, pool: ['waaagh'], w: [1] }],
+  [/aeldari|drukhari|harlequin|ynnari|kygharil|eldar/i, { name: 'Dance of Thorns', tr: 0, pool: ['dance'], w: [1] }],
+  [/tyranid|genestealer|swarm|vardenghast/i, { name: 'Hunger From the Dark', tr: 0, pool: ['hive'], w: [1] }],
+  [/necron|amonhotekh/i, { name: 'The Tomb Wakes', tr: 0, pool: ['tomb'], w: [1] }],
+  [/t.au|tau|sudden dawn|farsight/i, { name: 'Greater Good Cadence', tr: 0, pool: ['cadence'], w: [1] }],
+  [/space wolves|wolf|askar|fenris/i, { name: 'Howl of the Fenris', tr: 0, pool: ['fenris'], w: [1] }],
+  [/space marines|templar|angels|ultramarines|imperial|astartes|deathwatch|raven|salamander|fist|vedrenn|crowe|sanctifiers|assault force|inexorable|vow/i, { name: 'Hymn of the Emperor\'s Sons', tr: 0, pool: ['hymn'], w: [1] }]
 ];
 const MAIN_THEME = { name: 'Ashes and Dawn', tr: 0, pool: ['main'], w: [1] };
 function musThemeNow() {
@@ -25015,7 +25162,13 @@ function musSchedule() {
     const L = BARS[Mus.cur](Math.max(Mus.next, Mus.ctx.currentTime + .05), Mus.bar++); Mus.next += L;
   }
 }
-function musLabel() { const n = $('#mus-now'); if (n) n.textContent = Mus.on ? 'Now playing: ' + (Mus.mood === 'army' && Mus.theme ? Mus.theme.name + (MOODS[Mus.cur] === Mus.theme.name ? '' : ' (' + MOODS[Mus.cur] + ')') : MOODS[Mus.cur]) : ''; }
+function musLabel() {
+  const n = $('#mus-now'), nm = Mus.on ? (Mus.mood === 'army' && Mus.theme ? Mus.theme.name + (MOODS[Mus.cur] === Mus.theme.name ? '' : ' (' + MOODS[Mus.cur] + ')') : MOODS[Mus.cur]) : '';
+  if (n) n.textContent = Mus.on ? 'Now playing: ' + nm : '';
+  const sn = $('#sb-mus-name'), sb = $('#sb-mus-btn'), st = $('#sb-track');
+  if (sn) { sn.textContent = Mus.on ? nm : 'Music off'; sn.title = Mus.on ? 'Now playing: ' + nm : ''; } if (sb) sb.setAttribute('aria-pressed', Mus.on ? 'true' : 'false');
+  if (st && st.value !== Mus.mood) st.value = Mus.mood;
+}
 function setMusicVol(v) { Mus.vol = Math.max(0, Math.min(1, v)); try { localStorage.setItem('battleDrill.musVol', String(Mus.vol)); } catch (e) { } if (Mus.master && Mus.on) Mus.master.gain.setTargetAtTime(Math.pow(Mus.vol, 2) * 1.1, Mus.ctx.currentTime, .15); }
 function setMusic(on) {
   Mus.on = on; const b = $('#mus-toggle'); if (b) b.setAttribute('aria-pressed', on ? 'true' : 'false'); const c = $('#mus-ctl'); if (c) c.hidden = !on;
@@ -25031,6 +25184,10 @@ function setMusic(on) {
   $('#mus-mood').value = Mus.mood; $('#mus-vol').value = Math.round(Mus.vol * 100);
   $('#mus-toggle').addEventListener('click', () => setMusic(!Mus.on));
   $('#mus-mood').addEventListener('change', e => { Mus.mood = e.target.value; try { localStorage.setItem('battleDrill.musMood', Mus.mood); } catch (x) { } if (Mus.on) { Mus.theme = null; Mus.tr = 0; Mus.cur = (Mus.mood === 'shuffle' || Mus.mood === 'army') ? pick(Object.keys(BARS).filter(k => k !== 'main')) : Mus.mood; Mus.bar = 0; Mus.next = Mus.ctx.currentTime + 1.2; musLabel(); } });
+  { const st = $('#sb-track'); if (st) {
+    st.innerHTML = '<option value="army">Auto: follows the army</option><option value="shuffle">Shuffle all</option>' + Object.keys(MOODS).map(k => `<option value="${k}">${MOODS[k].replace(/&/g, '&amp;')}</option>`).join('');
+    st.value = Mus.mood; st.addEventListener('change', () => { const m = $('#mus-mood'); m.value = st.value; m.dispatchEvent(new Event('change')); if (!Mus.on) setMusic(true); });
+    $('#sb-mus-btn').addEventListener('click', () => setMusic(!Mus.on)); } }
   $('#mus-vol').addEventListener('input', e => setMusicVol(+e.target.value / 100));
   let want = false; try { want = localStorage.getItem('battleDrill.music') === 'on'; } catch (e) { }
   if (want) { const once = () => { setMusic(true); document.removeEventListener('pointerdown', once); }; document.addEventListener('pointerdown', once); }
