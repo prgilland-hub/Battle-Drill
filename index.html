@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.27-1442';
+  const VERSION = '2026.11.27-1454';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -7377,7 +7377,8 @@ function cubeThrow(items, o) {
   const hold = o.hold === undefined ? 900 : o.hold;
   const settled = Promise.all(fin);
   settled.then(() => setTimeout(() => { mine.forEach(w => { try { w.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 350, fill: 'forwards' }); } catch (e) { } }); setTimeout(() => { mine.forEach(w => w.remove()); }, 380); }, hold));
-  return o.wait ? settled.then(() => new Promise(r => setTimeout(r, Math.min(hold, 1400)))) : settled;
+  /* never hold the game up for longer than the throw should take, even if the browser pauses animations (a hidden tab, a busy page) */
+  return Promise.race([o.wait ? settled.then(() => new Promise(r => setTimeout(r, Math.min(hold, 1400)))) : settled, new Promise(r => setTimeout(r, 3500 + (o.wait ? Math.min(hold, 1400) : 0)))]);
 }
 { const _ad2 = animateDice;
   animateDice = function (container, only) {
@@ -7947,7 +7948,7 @@ async function fireAt(u, t) {
   const ws = unfiredChosen(u).filter(w => edge(u, t) <= w.range && !(w.blast && isEngaged(t)));
   if (!ws.length) { flash(isEngaged(t) ? 'Blast weapons cannot target an engaged unit. None of the other ticked weapons can reach that target.' : 'None of the ticked weapons can reach that target.'); return; }
   G.busy = true; G.msg = ''; render();
-  await doShoot(u, t, ws);
+  let shootErr = null; try { await doShoot(u, t, ws); } catch (e) { shootErr = e; console.error('shoot', e); try { log(`Something went wrong resolving ${u.name}'s shooting (${String(e && e.message || e).slice(0, 140)}). Its attack is skipped so you can carry on.`, 'sys'); } catch (x) { } }
   ws.forEach(w => S.fired.push(u.ranged.indexOf(w)));
   G.busy = false;
   if (G.stage !== 'battle') return;
@@ -9447,7 +9448,7 @@ function renderSide() {
       if (G.mode && G.mode.type === 'grenade') { prompt = `Click a visible enemy within 8" of ${u.name}.`; acts.push(btn('Cancel', () => { G.mode = null; render(); })); }
       else {
         const S = u ? shootState(u) : null;
-        prompt = G.busy ? 'Rolling…' : u && !canShoot(u) ? `${u.name} has nothing to shoot with right now, but it can start a mission action (buttons below).` : u ? `Tick the weapons to fire, then click an enemy with a dashed ring. ${S.fired.length ? 'Weapons that haven\'t fired can pick another target.' : 'You can split fire: untick some weapons and shoot another target with them next.'}` : 'Click one of your units with a gold outline to shoot.';
+        prompt = G.busy ? (acts.push(btn('Stuck? Unlock the shooting phase', () => { G.busy = false; G.prompt = null; log('Unlocked by hand.', 'sys'); render(); }, false, false, 'Use this only if nothing has happened for several seconds')), 'Rolling…') : u && !canShoot(u) ? `${u.name} has nothing to shoot with right now, but it can start a mission action (buttons below).` : u ? `Tick the weapons to fire, then click an enemy with a dashed ring. ${S.fired.length ? 'Weapons that haven\'t fired can pick another target.' : 'You can split fire: untick some weapons and shoot another target with them next.'}` : 'Click one of your units with a gold outline to shoot.';
         if (u && !G.busy) {
           if (!S.fired.length && has(u, 'grenades') && grenadeTargets(u).length && canStrat('player', 'explosives', 1, u)) acts.push(btn('Explosives (1 CP) instead', () => { G.mode = { type: 'grenade' }; render(); }));
           if (!S.fired.length) for (const a of actionsFor(u)) acts.push(btn(`Action: ${a.label}`, async () => { let keep = false; const sa = detFind('adaptive-operations'); if (sa && G.phase === 'shooting' && (has(u, 'phobos') || /scout/i.test(u.name)) && canStrat('player', sa.slug, sa.cost, u) && await askStrat(sa, `Use Adaptive Operations (${sa.cost} CP)? ${u.name} starts the action but stays eligible to shoot.`) && useDetStrat(sa, u)) keep = true; startAction(u, a, keep); G.sel = null; G.shoot = null; render(); }, false, false, actTip(a)));
