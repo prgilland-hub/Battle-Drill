@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.27-1349';
+  const VERSION = '2026.11.27-1354';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -24857,7 +24857,7 @@ function bcMd(s) {
   for (const ln of h.split('\n')) { const m = /^\s*[-*•]\s+(.*)$/.exec(ln); if (m) { if (!inList) { out.push('<ul>'); inList = true; } out.push('<li>' + m[1] + '</li>'); } else { if (inList) { out.push('</ul>'); inList = false; } out.push(ln.trim() ? '<p>' + ln + '</p>' : ''); } }
   if (inList) out.push('</ul>'); return out.join('');
 }
-const BC_ERR = { not_granted: 'Claude access was not allowed for this page, so the coach cannot answer.', rate_limited: 'Too many questions in a short time (or your Claude usage limit). Wait a little, then ask again.', session_expired: 'Your session has expired. Sign in again to use the coach.', sampling_disabled: 'Claude is not available for this account.', prompt_too_large: 'That was too much for one question. Try a shorter one.', refused: 'Claude declined that question. Try rewording it.', upstream_error: 'The coach hit a temporary problem. Try again.', empty_completion: 'The coach gave no answer. Try rewording the question.' };
+const BC_ERR = { invalid_request: 'The coach request was malformed', tools_unavailable: 'This connection cannot run the coach tools.', not_granted: 'Claude access was not allowed for this page, so the coach cannot answer.', rate_limited: 'Too many questions in a short time (or your Claude usage limit). Wait a little, then ask again.', session_expired: 'Your session has expired. Sign in again to use the coach.', sampling_disabled: 'Claude is not available for this account.', prompt_too_large: 'That was too much for one question. Try a shorter one.', refused: 'Claude declined that question. Try rewording it.', upstream_error: 'The coach hit a temporary problem. Try again.', empty_completion: 'The coach gave no answer. Try rewording the question.' };
 /* ===== Army coach: helps fill out a list and finds synergies; reads and edits the list in the builder ===== */
 const BC = { el: null, turns: [], busy: false, ctl: null, sample: undefined, tools: false, open: false, resolved: false };
 const BC_RULES = `You are the army-building coach inside Battle Drill, a Warhammer 40,000 11th edition practice app. The player is in the army builder. You can read and edit their list with tools. Rules for you:
@@ -24921,9 +24921,9 @@ function bcTools() {
       } },
     { name: 'remove_unit', description: 'Removes one unit by its roster key (from get_list).', inputSchema: { type: 'object', properties: { key: { type: 'number' } }, required: ['key'] },
       execute: async inp => { const e = B.roster.find(x => x.key === +inp.key); if (!e) return fail('no unit with that key'); const nm = libOf(e).name; B.roster = B.roster.filter(x => x.key !== e.key); B.roster.forEach(x => { if (x.leadTo === e.key) x.leadTo = null; }); if (B.warlord === e.key) { const c = B.roster.find(x => isChar(libOf(x))); B.warlord = c ? c.key : null; } for (const n in B.enh) if (B.enh[n] === e.key) delete B.enh[n]; bcRefresh(); return { removed: nm, points_used: rosterPts() }; } },
-    { name: 'attach_leader', description: 'Attaches a Leader to a bodyguard unit already in the army (both by roster key). Pass unit_key null to detach.', inputSchema: { type: 'object', properties: { leader_key: { type: 'number' }, unit_key: { type: ['number', 'null'] } }, required: ['leader_key'] },
+    { name: 'attach_leader', description: 'Attaches a Leader to a bodyguard unit already in the army (both by roster key). Omit unit_key to detach.', inputSchema: { type: 'object', properties: { leader_key: { type: 'number' }, unit_key: { type: 'number', description: 'omit to detach or remove' } }, required: ['leader_key'] },
       execute: async inp => { const e = B.roster.find(x => x.key === +inp.leader_key); if (!e) return fail('no leader with that key'); if (inp.unit_key == null) { e.leadTo = null; bcRefresh(); return { ok: true, detached: true }; } const t = B.roster.find(x => x.key === +inp.unit_key); if (!t) return fail('no unit with that key'); const elig = eligibleBodyguards(e); if (!elig.includes(t) && e.leadTo !== t.key) return fail(`${libOf(e).name} cannot lead ${libOf(t).name} (or it already has a leader). It can lead: ${leadsOf(libOf(e)).join(', ')}`); e.leadTo = t.key; bcRefresh(); return { ok: true, leader: libOf(e).name, leads: libOf(t).name }; } },
-    { name: 'set_enhancement', description: 'Gives an Enhancement from the chosen detachment to a character by roster key. Pass unit_key null to take it off. Epic Heroes cannot carry Enhancements.', inputSchema: { type: 'object', properties: { enhancement: { type: 'string' }, unit_key: { type: ['number', 'null'] } }, required: ['enhancement'] },
+    { name: 'set_enhancement', description: 'Gives an Enhancement from the chosen detachment to a character by roster key. Omit unit_key to take it off. Epic Heroes cannot carry Enhancements.', inputSchema: { type: 'object', properties: { enhancement: { type: 'string' }, unit_key: { type: 'number', description: 'omit to detach or remove' } }, required: ['enhancement'] },
       execute: async inp => {
         const d = curDet(); if (!d) return fail('choose a detachment first'); const x = (d.enh || []).find(z => z.name.toLowerCase() === String(inp.enhancement).toLowerCase()); if (!x) return fail('that Enhancement is not in the chosen detachments: ' + (d.enh || []).map(z => z.name).join(', '));
         if (inp.unit_key == null) { delete B.enh[x.name]; bcRefresh(); return { ok: true }; }
@@ -24972,7 +24972,7 @@ async function bcAsk(q) {
     BC.turns.push({ role: 'user', content: q }, { role: 'assistant', content: r.text });
   } catch (e) {
     const code = e && e.code; if (code === 'cancelled') bub.innerHTML = (e.text ? bcMd(e.text) : '') + '<p class="kt-note">Stopped.</p>';
-    else bub.innerHTML = (e && e.text ? bcMd(e.text) : '') + `<p class="kt-note" style="color:var(--bad)">${bcEsc((BC_ERR[code] || BC_ERR.upstream_error))}</p>`;
+    else { try { console.error('coach', e); } catch (x) { } bub.innerHTML = (e && e.text ? bcMd(e.text) : '') + `<p class="kt-note" style="color:var(--bad)">${bcEsc((BC_ERR[code] || BC_ERR.upstream_error))}${e && e.message ? bcEsc(' (' + code + ': ' + String(e.message).slice(0, 240) + ')') : ''}</p>`; }
   }
   BC.busy = false; BC.ctl = null; if (BC.el) { BC.el.querySelector('[data-bc="stop"]').hidden = true; BC.el.querySelector('[data-bc="ask"]').disabled = false; }
 }
