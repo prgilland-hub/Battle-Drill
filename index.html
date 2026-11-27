@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.27-1503';
+  const VERSION = '2026.11.27-1508';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -18607,7 +18607,11 @@ function buildMap(spec) {
     const grain = fbm(x * 3.1 + sd, z * 3.1) - .5, speck = hash2(Math.floor(x * 4.2) + sd, Math.floor(z * 4.2)), crack = Math.abs(vnoise(x * 1.25 + sd, z * 1.25 + 3) - .5);
     let k = 1 + grain * .3, r = c;
     if (speck > .94) k *= 1.22; else if (speck < .05) k *= .82;
+    /* broad drifts of tone, a mid-scale mottle and fine pebbles, on every kind of ground */
+    { const patch = fbm(x * .16 + sd + 70, z * .16 + 11) - .5, mid = fbm(x * .85 + sd + 13, z * .85 + 5) - .5, peb = hash2(Math.floor(x * 8.5) + sd, Math.floor(z * 8.5) + 3); k *= 1 + patch * .3 + mid * .15; if (peb > .986) k *= 1.38; else if (peb < .01) k *= .68; }
     if (key === 'desert') {
+      const strata = Math.sin(z * .55 + fbm(x * .13 + sd, z * .13) * 6.5) * .5 + .5; k *= 1 + (strata - .5) * .1;      /* bands of different sands */
+      const wadi = Math.abs(vnoise(x * .11 + sd + 50, z * .11 + 8) - .5); if (wadi < .03 && n > .3) { r = mixc(r, [.17, .13, .09], .55); k *= .86; }   /* dry stream beds */
       const rip = Math.sin((x * .9 + z * .45) * 6.3 + fbm(x * .22 + sd, z * .22) * 7) * .5 + .5, dune = sstep(.42, .62, fbm(x * .1 + sd + 5, z * .1));
       k *= 1 + (rip - .5) * .14 * dune;                                             /* wind ripples in the drifts */
       if (crack < .02 && n > .4) k *= .62;                                           /* dry cracked earth on the harder ground */
@@ -18620,6 +18624,21 @@ function buildMap(spec) {
       const moss = fbm(x * 1.4 + sd + 30, z * 1.4 + 8); if (moss > .6) r = mixc(c, [.1, .2, .07], clamp((moss - .6) * 3, 0, .6));   /* moss */
       if (crack < .018) k *= .7;
       if (speck > .965) r = mixc(r, [.22, .3, .1], .5);                                /* grass tufts */
+    } else if (key === 'ice') {
+      if (crack < .014) r = mixc(r, [.42, .58, .8], .6);                              /* blue cracks in the ice sheet */
+      const dr = fbm(x * .2 + sd + 60, z * .2 + 4); if (dr > .6) k *= 1 + (dr - .6) * .55;   /* wind-packed drifts */
+      const sc = fbm(x * .5 + sd + 90, z * .5 + 2); if (sc < .36) r = mixc(r, [.3, .4, .55], clamp((.36 - sc) * 4, 0, .55));   /* scoured dark ice */
+    } else if (key === 'jungle') {
+      const lit = fbm(x * .9 + sd + 33, z * .9 + 6); if (lit > .56) r = mixc(r, [.2, .14, .07], clamp((lit - .56) * 3.2, 0, .65));   /* leaf litter and mud */
+      if (speck > .93) r = mixc(r, [.16, .36, .1], .55);                               /* grass tufts */
+      if (crack < .012) k *= .62;
+    } else if (key === 'forge') {
+      const ash = fbm(x * .35 + sd + 21, z * .35 + 9); if (ash > .58) r = mixc(r, [.2, .19, .2], clamp((ash - .58) * 3, 0, .6));   /* drifts of ash */
+      if (crack < .0085 && n > .45) { r = [.85, .3, .06]; k = Math.max(k, 1); }       /* glowing slag cracks */
+      else if (crack < .02) k *= .6;
+    } else if (key === 'hive') {
+      const sx = Math.abs(((x / 3) % 1 + 1) % 1 - .5), sz = Math.abs(((z / 3) % 1 + 1) % 1 - .5); if (sx > .485 || sz > .485) k *= .6;     /* plate seams */
+      const rust = fbm(x * .5 + sd + 17, z * .08 + 4); if (rust > .62) r = mixc(r, [.2, .1, .06], clamp((rust - .62) * 3, 0, .5));        /* rust streaks */
     } else { if (crack < .015) k *= .7; }
     return [r[0] * k, r[1] * k, r[2] * k];
   };
