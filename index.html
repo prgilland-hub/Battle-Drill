@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.27-1454';
+  const VERSION = '2026.11.27-1503';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -18229,12 +18229,52 @@ function chaosDetail(solid, decal, rng, ok, H, key) {
   void key; return lights;
 }
 /* the world beyond the table edge: the table surface is marked by a dark skirt, and the far ground is dressed so the board does not float in empty space (looks only; the 60" x 44" board and every rule are unchanged) */
+/* a ring of distant landforms round the table, so the view past the edge is a horizon rather than a dark void */
+function ridgeRing(mb, rng, R, hMax, depth, col, fogc, o) {
+  o = o || {}; const cx = BW / 2, cz = BH / 2, N = o.n || 260, sd = rng() * 100, y0 = -1.5, ring = [];
+  for (let i = 0; i <= N; i++) {
+    const a = i / N * 6.2832, c = Math.cos(a), sn = Math.sin(a), n = fbm(c * 2.4 + sd, sn * 2.4 + sd * .7), n2 = fbm(a * 9 + sd, sd + 3), n3 = fbm(a * 23 + sd, sd + 9);
+    let h = hMax * (.18 + .82 * n) * (.65 + .7 * n2) + n3 * hMax * .12;
+    if (o.mesa) { const st = hMax * .38; h = Math.round(h / st) * st * (.85 + .15 * n3); }
+    if (o.spike) h *= 1 + Math.pow(n3, 2.2) * 1.6;
+    ring.push({ c, sn, h });
+  }
+  const at = (i, rad, y) => { const q = ring[i % ring.length]; return [cx + q.c * (BW / 2 + rad), y, cz + q.sn * (BH / 2 + rad)]; };
+  for (let i = 0; i < N; i++) {
+    const q0 = ring[i], q1 = ring[i + 1], bA = at(i, R, y0), bB = at(i + 1, R, y0), tA = at(i, R + depth, y0 + q0.h), tB = at(i + 1, R + depth, y0 + q1.h);
+    const ref = [cx + (bA[0] - cx) * 2.2, 0, cz + (bA[2] - cz) * 2.2], hv = clamp((q0.h + q1.h) / (2 * hMax), 0, 1), lo = mixc(col, fogc, .55), hi = o.cap && hv > .62 ? mixc(col, o.cap, clamp((hv - .62) * 3, 0, .85)) : col;
+    const cA = vary(mixc(lo, hi, .45 + hv * .4), rng, .08);
+    mb.quad(bA, bB, tB, tA, cA, [1, 0], ref);
+    /* a second, smaller crest behind the front slope breaks the straight line of the silhouette */
+    if (o.crest) { const t2A = at(i, R + depth * 1.5, y0 + q0.h * .8 + hMax * .25 * ring[(i * 3) % N].h / hMax), t2B = at(i + 1, R + depth * 1.5, y0 + q1.h * .8 + hMax * .25 * ring[(i * 3 + 3) % N].h / hMax); mb.quad(tA, tB, t2B, t2A, vary(hi, rng, .06), [1, 0], ref); }
+  }
+}
+function horizon(solid, rng, H, key, th) {
+  const fog = (th.env && th.env.fog) || [.05, .05, .06], g0 = th.ground ? th.ground(BW / 2, -90, 0, .5) : [.1, .1, .1], far = mixc(g0, fog, .35);
+  /* the flat country beyond the ground the table sits on */
+  solid.quad([-900, -.06, -900], [-900, -.06, 900], [900, -.06, 900], [900, -.06, -900], far, [.95, 0], [0, -10, 0]);
+  const rock = (th.poly && th.poly.wall && th.poly.wall.col) || [.3, .3, .3];
+  const hz = (R, hMax, depth, col, o) => ridgeRing(solid, rng, R, hMax, depth, col, fog, o);
+  if (key === 'desert') { hz(84, 12, 20, mixc(g0, [.3, .22, .15], .5), { crest: 1 }); hz(110, 24, 24, mixc(rock, fog, .3), { mesa: 1, crest: 1 }); hz(140, 36, 32, mixc(rock, fog, .5), { mesa: 1 }); }
+  else if (key === 'marsh') { hz(84, 6, 16, mixc(g0, [.08, .12, .07], .5), { crest: 1 }); hz(108, 12, 22, mixc(g0, fog, .5), { crest: 1 }); hz(134, 16, 26, mixc(g0, fog, .75), {}); }
+  else if (key === 'ice') { hz(88, 12, 20, [.7, .76, .86], { spike: 1, cap: [.96, .98, 1], crest: 1 }); hz(114, 24, 26, [.62, .69, .8], { spike: 1, cap: [.95, .97, 1] }); hz(142, 36, 34, mixc([.55, .62, .74], fog, .4), { spike: 1, cap: [.93, .96, 1] }); }
+  else if (key === 'jungle') { hz(84, 10, 18, [.09, .2, .07], { crest: 1 }); hz(108, 18, 24, mixc([.1, .22, .08], fog, .35), { crest: 1 }); hz(136, 26, 30, mixc([.1, .2, .1], fog, .6), {}); }
+  else if (key === 'forge') { hz(90, 8, 18, [.05, .045, .05], { mesa: 1 }); hz(118, 16, 24, mixc([.08, .07, .08], fog, .4), { mesa: 1, crest: 1 }); }
+  else if (key === 'hive') { hz(120, 10, 20, mixc([.05, .055, .08], fog, .3), { mesa: 1 }); }
+  else { hz(86, 8, 18, mixc(rock, fog, .45), { mesa: 1, crest: 1 }); hz(114, 16, 24, mixc(rock, fog, .6), { crest: 1 }); hz(142, 22, 30, mixc(rock, fog, .75), {}); }
+  /* a far skyline of ruins, tree lines or stacks standing on the nearest ridge */
+  const cx = BW / 2, cz = BH / 2, ring = (n, R0, fn) => { for (let i = 0; i < n; i++) { const a = i / n * 6.2832 + rng() * .08, R = R0 + rng() * 6, x = cx + Math.cos(a) * (BW / 2 + R), z = cz + Math.sin(a) * (BH / 2 + R); fn(x, z, a); } };
+  if (key === 'base') ring(70, 62, (x, z) => { const h = 6 + rng() * 14, w = 2.4 + rng() * 3.6, col = mixc(shade(rock, .8), fog, .5 + rng() * .15); box(solid, x, h / 2 - .5, z, w, h, w * (.7 + rng() * .6), rng() * 3, col, [.9, 0], 0, rng); if (rng() < .45) box(solid, x + w * .6, h * .32, z, w * .6, h * .6, w * .6, rng() * 3, mixc(col, fog, .1), [.9, 0], 0, rng); });
+  if (key === 'marsh') ring(70, 60, (x, z) => { const h = 4 + rng() * 5; deadTree(solid, x, z, h, rng); });
+  if (key === 'jungle') ring(90, 58, (x, z) => { jungleTree(solid, x, z, 7 + rng() * 6, rng); });
+  if (key === 'ice') ring(40, 62, (x, z) => { const h = 3 + rng() * 7; tube(solid, [x, -.5, z], [x + (rng() - .5) * 1.4, h, z], 1.1 + rng() * .8, .1, 5, mixc([.78, .85, .95], fog, .3), [.4, 0], true); });
+}
 function surround(solid, decal, rng, H, key, th) {
   const rock = (th.poly && th.poly.wall && th.poly.wall.col) || [.3, .3, .3], out = (x, z) => Math.hypot(Math.max(-x, 0, x - BW), Math.max(-z, 0, z - BH));
   const skirt = [.035, .03, .028];
   for (const [x, z, w, d] of [[BW / 2, -.6, BW + 2.4, 1.2], [BW / 2, BH + .6, BW + 2.4, 1.2], [-.6, BH / 2, 1.2, BH], [BW + .6, BH / 2, 1.2, BH]]) box(solid, x, .15, z, w, .5, d, 0, skirt, [.9, 0], 0, rng);
-  for (let i = 0; i < 70; i++) {
-    const x = -30 + rng() * (BW + 60), z = -24 + rng() * (BH + 48), o = out(x, z); if (o < 3.5 || o > 30) continue;
+  for (let i = 0; i < 120; i++) {
+    const x = -42 + rng() * (BW + 84), z = -36 + rng() * (BH + 72), o = out(x, z); if (o < 3.5 || o > 42) continue;
     if ((Math.abs(x - BW / 2) < 17.5 && (Math.abs(z + 7) < 7 || Math.abs(z - BH - 7) < 7))) continue;
     const k = rng();
     if (key === 'jungle') { if (k < .55) jungleTree(solid, x, z, 5 + rng() * 3.5, rng); else fern(solid, x, H(x, z), z, rng); }
@@ -18244,6 +18284,7 @@ function surround(solid, decal, rng, H, key, th) {
     else if (key === 'forge') { if (k < .5) rubbleAt(solid, rng, H, x, z, rock, 1.6 + rng()); else cogDebris(solid, x, H(x, z) + .02, z, .25 + rng() * .3, rng); }
     else if (k < .35) pillar(solid, x, z, 3 + rng() * 3.5, .6, rock, rng); else rubbleAt(solid, rng, H, x, z, rock, 1.8 + rng() * 1.2);
   }
+  if (key !== 'hive') horizon(solid, mulberry(rng() * 1e6 | 0), H, key, th);
   if (key === 'forge') forgeSkyline(solid, rng, H);
   if (key === 'hive') { hiveSkyline(solid, rng, H); solid.quad([-700, -.05, -700], [-700, -.05, 700], [700, -.05, 700], [700, -.05, -700], [.03, .038, .055], [.9, 0], [0, -10, 0]); }
   void decal;
