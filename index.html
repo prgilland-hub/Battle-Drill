@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.27-1356';
+  const VERSION = '2026.11.27-1410';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -18887,6 +18887,65 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
     }
   }
 
+  /* ---- a turning 3D view of a whole unit (every model, with any attached leader) inside datasheets in the armies tab ---- */
+  const SQ = { cards: [], raf: 0, last: 0, ENV: { sun: [-.45, .62, .5], sunC: [1.5, 1.42, 1.3], ambT: [.34, .36, .42], ambB: [.2, .2, .22], fog: [.075, .08, .09], fogD: .0004, dust: 0 } };
+  function squadModels(u, faction) {
+    const fac = typeof miniFactionOf === 'function' ? miniFactionOf(Object.assign({}, u, { faction: u.faction || faction })) : faction, out = [], n = Math.max(1, Math.min(30, (u.models | 0) || u.baseModels || 1));
+    const leads = typeof leadersOf === 'function' ? leadersOf(u) : [];
+    leads.slice(0, 3).forEach((L, i) => out.push({ ds: L.ds || L.name, lead: true, i: out.length }));
+    const bodies = Math.max(1, n - leads.length * 0);
+    for (let i = 0; i < n; i++) out.push({ ds: u.ds || u.name, lead: false, i: out.length, bi: i });
+    return { list: out, fac, n };
+  }
+  function squadMesh(box, rec) {
+    const u = rec.u, { list, fac } = squadModels(u, rec.faction), total = list.length, mb = new BFX.MB(), key = String(u.id || u.name), pal = typeof miniPalOf === 'function' ? miniPalOf(u) : null, cols = palColours(pal);
+    const big = total === 1 && (u.kw || []).some(k => /monster|vehicle/i.test(k)), r = big ? 1.5 : .63, spots = miniPack(total, .8), k = r / .8, lo = total > 6;
+    const arch = MINI.on && typeof miniArchOf === 'function' ? miniArchOf(u.ds || u.name, fac) : null;
+    const poses = arch && (arch === 'blightlord' || (typeof POSE_FAMILIES !== 'undefined' && POSE_FAMILIES[arch])) ? miniPoses(arch, list.length + 1) : null;
+    let ext = 0, any = 0;
+    list.forEach((m, i) => {
+      const x = spots[i][0] * k, z = spots[i][1] * k, yaw = ((i * 47) % 31 - 15) * Math.PI / 180; ext = Math.max(ext, Math.hypot(x, z) + r);
+      const rf = (window.BDModels && BDModels.on()) ? BDModels.pick(m.ds, fac, key + ':' + i, m.lead ? 0 : i, total, false) : null;
+      if (rf) { BDModels.add(mb, rf, x, 0, z, yaw); any++; return; }
+      let a = m.lead ? (MINI.on ? miniArchOf(m.ds, fac) : null) : arch; if (!a) return;
+      const kk = m.lead ? a : (poses ? poses[(m.bi || 0) % poses.length] : a); if (!MINI_ARCH[kk]) return;
+      let fig; try { fig = figOf(kk, lo); } catch (e) { return; } addFig(mb, fig, cols, x, 0, z, r / .98, yaw); any++;
+    });
+    if (!any) return null;
+    const rd = ext + .5; for (let q = 0; q < 36; q++) { const a0 = q / 36 * 6.2832, a1 = (q + 1) / 36 * 6.2832, b = mb.n; mb.vtx([0, .004, 0], [0, 1, 0], [.17, .13, .09], [0, 0]); mb.vtx([Math.cos(a0) * rd, .004, Math.sin(a0) * rd], [0, 1, 0], [.14, .11, .08], [0, 0]); mb.vtx([Math.cos(a1) * rd, .004, Math.sin(a1) * rd], [0, 1, 0], [.14, .11, .08], [0, 0]); mb.I.push(b, b + 2, b + 1); }
+    return { mb, rd, big };
+  }
+  function squadFrame(now) {
+    SQ.raf = 0;
+    for (let i = SQ.cards.length - 1; i >= 0; i--) { const V = SQ.cards[i]; if (!V.box.isConnected) { try { const g = V.cv.getContext('webgl2'), x = g && g.getExtension('WEBGL_lose_context'); if (x) x.loseContext(); } catch (e) { } SQ.cards.splice(i, 1); } }
+    if (!SQ.cards.length) return;
+    if (document.hidden || now - SQ.last < 30) { SQ.raf = requestAnimationFrame(squadFrame); return; }
+    const dt = Math.min(.1, (now - (SQ.last || now)) / 1000); SQ.last = now;
+    for (const V of SQ.cards) { if (V.slot.offsetParent === null) continue; if (now > V.idle) V.cam.yaw += dt * .5; try { V.R.draw(V.cam, SQ.ENV); } catch (e) { } }
+    SQ.raf = requestAnimationFrame(squadFrame);
+  }
+  function squadMount(root) {
+    if (typeof MINI === 'undefined') return;
+    (root || document).querySelectorAll('.ds[data-sq]').forEach(box => {
+      if (box._sq) return; box._sq = 1; const rec = SQREG.m.get(+box.dataset.sq); if (!rec || SQ.cards.filter(v => v.box.isConnected).length >= 6) return;
+      const head = box.querySelector('.ds-head'); if (!head) return; let sc; try { sc = squadMesh(box, rec); } catch (e) { console.warn('squad 3D', e); return; } if (!sc) return;
+      const c2 = document.createElement('canvas'); c2.style.cssText = 'display:block;width:100%;height:100%;border-radius:inherit;touch-action:none;cursor:grab'; let R, cam;
+      try { R = new BFX.Renderer(c2); R.q.shadow = 512; R.q.dpr = Math.min(window.devicePixelRatio || 1, 1.5); R.makeShadow(); cam = new BFX.Cam(); R.upload(sc.mb, 'solid'); } catch (e) { console.warn('squad 3D unavailable', e); return; }
+      cam.target = [0, sc.big ? 1.6 : .6, 0]; cam.dist = Math.max(5, sc.rd * 3.3 + 1.5); cam.fov = .6; cam.yaw = .6; cam.pitch = .62;
+      let slot = head.querySelector('.ds-img'); if (!slot) { slot = document.createElement('div'); head.insertBefore(slot, head.firstChild); }
+      slot.className = 'ds-img mini ds-3dslot'; slot.style.cssText = 'display:block;aspect-ratio:1;height:auto;background:#16181c;border-radius:12px;overflow:hidden;border:2px solid rgba(255,255,255,.35)'; slot.innerHTML = ''; slot.appendChild(c2);
+      const V = { box, slot, cv: c2, R, cam, idle: 0 }; let d = null;
+      c2.addEventListener('pointerdown', e => { d = e.clientX; try { c2.setPointerCapture(e.pointerId); } catch (x) { } V.idle = performance.now() + 4000; });
+      c2.addEventListener('pointermove', e => { if (d == null) return; cam.yaw -= (e.clientX - d) * .012; d = e.clientX; V.idle = performance.now() + 4000; });
+      c2.addEventListener('pointerup', () => { d = null; });
+      SQ.cards.push(V); try { R.resize(); R.draw(cam, SQ.ENV); } catch (e) { } if (!SQ.raf) { SQ.last = 0; SQ.raf = requestAnimationFrame(squadFrame); }
+    });
+  }
+  { let pend = 0; const kick = () => { if (pend) return; pend = setTimeout(() => { pend = 0; try { squadMount(document); } catch (e) { console.warn(e); } }, 40); };
+    const start = () => new MutationObserver(kick).observe(document.body, { childList: true, subtree: true });
+    if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
+    window.addEventListener('bd-models-changed', () => { SQ.cards.length = 0; document.querySelectorAll('.ds[data-sq]').forEach(b => { b._sq = 0; }); kick(); }); }
+  window.BDSquad = { mount: squadMount };
   window.addEventListener('bd-models-changed', () => { try { if (BF3D.on) { sync(true); } } catch (e) { } });
   function arrow(mb, x, gy, z, fa, r) { const c = Math.cos(fa), s = Math.sin(fa), px = -s, pz = c, y = gy + .12, col = [1, .9, .45], q = (d, w) => [x + c * d + px * w, y, z + s * d + pz * w]; mb.tri(q(r + 1, 0), q(r + .2, .4), q(r + .2, -.4), col, [0, .6], [x, y - 5, z]); }
   function buildGhost() {
@@ -23291,6 +23350,7 @@ function xkwTip(k) {
   const T = { 'precision': 'Precision: attacks can be allocated to a Character in the target unit. Simulated.', 'indirect fire': 'Indirect Fire: can shoot targets that are not visible. Simulated.', 'one shot': 'One Shot: can only be used once per battle. Simulated.', 'pistol': 'Pistol: can be fired while in engagement range. Simulated.', 'close-quarters': 'Close-Quarters: can be fired while in engagement range without the penalty that other guns suffer. Simulated.', 'hazardous': 'Hazardous: roll hazard tests after using it. Simulated.', 'extra attacks': 'Extra Attacks: used in addition to the model\'s other melee weapon. Simulated.', 'psychic': 'Psychic: a tag that rules which affect psychic attacks look for (such as Powers of da Waaagh!). It has no effect of its own. Simulated.' };
   return T[l] || `${k}: not simulated yet.`;
 }
+const SQREG = { n: 0, m: new Map() };
 function datasheetCard(u, faction, opts) {
   opts = opts || {};
   const armyR = (opts.armyRules || []).map(r => { const on = !!RULE_SIM[String(r.name).toLowerCase().replace(/\s*\(aura\)\s*$/, '')]; return `<p><b>${escH(r.name)}</b> <span class="muted">(army rule)</span>: ${escH(r.text)}<span class="ds-sim ${on ? 'on' : 'off'}">${on ? 'simulated' : 'not simulated'}</span></p>`; }).join('');
@@ -23321,8 +23381,9 @@ function datasheetCard(u, faction, opts) {
     live = `<div class="ds-live">${escH(bits.join(' · '))}</div>`;
   }
   const kw = [...(u.kw || []), u.scouts ? `scouts ${u.scouts}"` : ''].filter(Boolean);
+  let sq = ''; if (!opts.live && !opts.narrow && !u.imgId && !u.imgData && typeof SQREG !== 'undefined') { const id = ++SQREG.n; SQREG.m.set(id, { u, faction }); SQREG.m.delete(id - 80); sq = ` data-sq="${id}"`; }
   const d3 = opts.live && (!u.imgId && !u.imgData) ? ` data-3d="1" data-ds3="${escH(u.ds || u.name)}" data-fac3="${escH(typeof miniFactionOf === 'function' ? miniFactionOf(u) : faction)}" data-key3="${escH(String(u.id))}"` : '';
-  return `<div class="ds${opts.narrow ? ' narrow' : ''}" style="--fc:${fc}"${d3}>
+  return `<div class="ds${opts.narrow ? ' narrow' : ''}" style="--fc:${fc}"${d3}${sq}>
     <div class="ds-head">${src ? `<div class="ds-img${!u.imgId && !u.imgData ? ' mini' : ''}" style="background-image:url('${src}')"></div>` : ''}
       <h3>${escH(u.name)}${u.pts ? ` <small style="font-size:.8rem;opacity:.85">${u.pts} pts${u.baseModels > 1 ? ' / ' + u.baseModels + ' models' : ''}</small>` : ''}${u.legends ? ' <small style="font-size:.7rem">[Legends]</small>' : ''}</h3>
       <div class="ds-stats">${statBoxes(u)}</div>
