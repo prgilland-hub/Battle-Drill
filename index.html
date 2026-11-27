@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.27-0030';
+  const VERSION = '2026.11.27-0154';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -2257,7 +2257,7 @@ html[data-look="cog"] .muted{color:var(--muted)}
         <div id="b-warn"></div>
         <div id="b-legal"></div>
         <label>Game type<select id="b-gtype"><option value="standard">Standard battle (your own armies)</option><option value="cp">Combat Patrol (pre-set patrols, 44" by 30" board)</option></select></label>
-        <div id="b-hot-l" hidden><div class="muted" style="font-size:.85rem;margin-bottom:4px">Who plays the second side?</div><div class="seg" id="b-opp" style="margin-bottom:6px"><button type="button" data-opp="ai" class="on">The AI</button><button type="button" data-opp="hot">Another player, on this device</button></div><input type="checkbox" id="b-hot" hidden><div class="muted" id="b-opp-note" style="font-size:.88rem;margin-bottom:8px"></div></div>
+        <div id="b-hot-l" hidden><div class="muted" style="font-size:.85rem;margin-bottom:4px">Who plays the second side?</div><div class="seg" id="b-opp" style="margin-bottom:6px"><button type="button" data-opp="ai" class="on">The AI</button><button type="button" data-opp="hot">Another player, on this device</button><button type="button" data-opp="online">Another player, online</button></div><div class="row" id="b-join-row" style="margin:0 0 8px"><button type="button" class="btn" id="b-join">Join a friend's online game</button></div><input type="checkbox" id="b-hot" hidden><div class="muted" id="b-opp-note" style="font-size:.88rem;margin-bottom:8px"></div></div>
         <label id="b-army-p-l">Your army (Imperial Forces)<select id="b-army-p"></select></label>
         <label id="b-army-a-l">AI army (Hostile Cogitator)<select id="b-army-a"></select></label>
         <label id="b-disp-p-l">Your Force Disposition<select id="b-disp-p"><option value="auto">From my army's detachment</option><option value="take and hold">Take and Hold</option><option value="purge the foe">Purge the Foe</option><option value="disruption">Disruption</option><option value="reconnaissance">Reconnaissance</option><option value="priority assets">Priority Assets</option></select></label>
@@ -6463,6 +6463,8 @@ function chooseDisposition(b, av) {
   });
 }
 async function beginGame() {
+  if (ONL.want && $('#b-hot') && $('#b-hot').checked) { onlHostStart(); return; }
+  ONL.on = false; ONL.started = false;
   if (cpMenu) {
     const pb = findBuild($('#b-army-p').value) || CP_BUILDS[0], av = $('#b-army-a').value, ab = av === 'cp-random' ? CP_BUILDS[Math.floor(Math.random() * CP_BUILDS.length)] : (findBuild(av) || CP_BUILDS[0]);
     NEXT_B = { p: pb, a: ab }; NEXT_CP = {}; NEXT_FD = null;
@@ -6768,8 +6770,9 @@ function hotOverlay(title, sub, label) {
   });
 }
 /* hand the device to the other player: cover screen first, then swap so they are "you" */
-async function hotPass(why) {
+async function hotPass(why, key) {
   if (!G || !G.hot) return;
+  if (ONL.on) return onlinePass(why, key);
   const nxt = hotName('ai'), bits = { turn: `Battle round ${G.round}. The board is hidden until you press the button.`, setup: 'The board is hidden until you press the button, so nobody sees the other player\'s choices.', react: `${escH(hotName('player'))} has finished. You can react now: ${escH(G.hotWhat || 'a stratagem')}. The board is hidden until you press the button.`, fight: G.hotWhat === 'Counter-offensive' ? `${escH(hotName('player'))} is about to fight again. You can use Counter-offensive (2 CP) to fight first. The board is hidden until you press the button.` : `Fight phase: it is your turn to choose which unit fights next. The board is hidden until you press the button.`, back: `Your reactions are done. ${escH(nxt)} carries on with the turn.` };
   G.busy = true; render();
   const colr = hotColour('ai'), cc = colr === 'Blue' ? '#6f9fe6' : '#e0685b';
@@ -6779,18 +6782,277 @@ async function hotPass(why) {
 }
 
 /* the other player's reactions during your turn (Overwatch, Rapid Ingress, Heroic Intervention, Smokescreen): the device is passed, they act as "you", then it is passed back */
-async function hotReact(can, run, what) {
+async function hotReact(key) {
+  const R = REACTS[key];
   if (!G || !G.hot || G.stage !== 'battle') return;
-  let ok = false; try { ok = !!can(); } catch (e) { console.error(e); }
+  let ok = false; try { ok = !!R.can(); } catch (e) { console.error(e); }
   if (!ok) return;
-  G.hotWhat = what; await hotPass('react'); G.busy = true;
-  try { await run(); } catch (e) { console.error(e); }
+  G.hotWhat = R.what;
+  if (ONL.on) { await onlinePass('react', key); return; }   /* online: the other device reacts and sends the game back; this stack stops */
+  await hotPass('react'); G.busy = true;
+  try { await R.run(); } catch (e) { console.error(e); }
   if (!G || G.stage !== 'battle') return;
   await hotPass('back'); G.busy = true;
 }
 const hotCanMoveReact = () => (canStrat('ai', 'overwatch', 1) && aliveSide('ai').some(u => !isEngaged(u) && !has(u, 'titanic') && u.ranged.length && !G.strat.ai.units.has(u.id) && aliveSide('player').some(e => visible(u, e) && !isEngaged(e) && u.ranged.some(w => edge(u, e) <= Math.min(w.range, 24))))) || (G.round >= 2 && reserves('ai').length > 0 && canStrat('ai', 'ingress', 1));
 const hotCanHeroic = () => [1, 2].some(c => canStrat('ai', 'heroic', c) && aliveSide('ai').some(u => !isEngaged(u) && !G.strat.ai.units.has(u.id) && aliveSide('player').some(e => c === 1 ? (e.charged && edge(u, e) <= 12) : edge(u, e) <= 6)));
 const hotCanSmoke = () => canStrat('ai', 'smoke', 1) && aliveSide('ai').some(u => u.placed && !u.reserve && has(u, 'smoke') && canStrat('ai', 'smoke', 1, u) && aliveSide('player').some(e => e.placed && !e.reserve && e.ranged && e.ranged.length && visible(e, u) && e.ranged.some(w => edge(e, u) <= w.range)));
+/* ============ ONLINE TWO-PLAYER (two devices, peer to peer, no server) ============
+   Each device runs the whole game. Whoever's turn it is plays; at every hand-over (and every reaction) the full game state is sent
+   to the other device, which swaps the labels (the same swap as two people at one screen) and carries on from the matching resume point.
+   The link is a WebRTC data channel set up by swapping two short codes, so nothing is hosted anywhere. */
+const ONL_PROTO = 1;
+const ONL = { on: false, role: null, pc: null, dc: null, link: 'off', seq: 0, cid: 0, rx: {}, q: Promise.resolve(), sent: null, started: false, want: false, oppName: 'Your opponent', status: '', hello: null };
+const onlB64 = bytes => { let s = ''; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)); return btoa(s); };
+const onlUnB64 = t => { const s = atob(t), a = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) a[i] = s.charCodeAt(i); return a; };
+async function onlZip(str) {
+  const bytes = new TextEncoder().encode(str);
+  if (typeof CompressionStream === 'undefined') return { z: 0, d: onlB64(bytes) };
+  const out = await new Response(new Blob([bytes]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer();
+  return { z: 1, d: onlB64(new Uint8Array(out)) };
+}
+async function onlUnzip(o) {
+  const bytes = onlUnB64(o.d); if (!o.z) return new TextDecoder().decode(bytes);
+  return new TextDecoder().decode(await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer());
+}
+/* ---- the game state as one JSON-able bundle that keeps shared references (units are listed in many places) ---- */
+const SNAP_SKIP = new Set(['mkUnit', 'prompt', '_nameRe', '_nameMap']);
+function snapPack() {
+  const ids = new Map(), nodes = [];
+  const enc = v => {
+    if (v === undefined || typeof v === 'function' || typeof v === 'symbol' || v instanceof RegExp) return { u: 1 };
+    if (v === null || typeof v === 'boolean' || typeof v === 'string') return v;
+    if (typeof v === 'number') return Number.isFinite(v) ? v : { n: String(v) };
+    if (typeof Node !== 'undefined' && v instanceof Node) return { u: 1 };
+    if (ids.has(v)) return { r: ids.get(v) };
+    const i = nodes.length; ids.set(v, i); nodes.push(null);
+    if (v instanceof Set) nodes[i] = { t: 's', p: [...v].map(enc) };
+    else if (v instanceof Map) nodes[i] = { t: 'm', p: [...v].map(([k, x]) => [enc(k), enc(x)]) };
+    else if (Array.isArray(v)) nodes[i] = { t: 'a', p: v.map(enc) };
+    else { const p = {}; for (const k of Object.keys(v)) { if (SNAP_SKIP.has(k)) continue; const e = enc(v[k]); if (!(e && e.u)) p[k] = e; } nodes[i] = { t: 'o', p }; }
+    return { r: i };
+  };
+  const root = enc({ G, OBJ, TERRAIN, BW, BH });
+  return { root: root.r, nodes };
+}
+function snapUnpack(pk) {
+  const objs = pk.nodes.map(n => n.t === 'a' ? [] : n.t === 's' ? new Set() : n.t === 'm' ? new Map() : {});
+  const dec = e => (e === null || typeof e !== 'object') ? e : e.r !== undefined ? objs[e.r] : e.u ? undefined : e.n !== undefined ? Number(e.n) : e;
+  pk.nodes.forEach((n, i) => {
+    const o = objs[i];
+    if (n.t === 'a') n.p.forEach(x => o.push(dec(x)));
+    else if (n.t === 's') n.p.forEach(x => o.add(dec(x)));
+    else if (n.t === 'm') n.p.forEach(([k, x]) => o.set(dec(k), dec(x)));
+    else for (const k of Object.keys(n.p)) o[k] = dec(n.p[k]);
+  });
+  return objs[pk.root];
+}
+function snapLoad(pk) {
+  const R = snapUnpack(pk);
+  G = R.G; OBJ = R.OBJ; TERRAIN = R.TERRAIN; setBoardSize(R.BW, R.BH);
+  G.mkUnit = MK_UNIT || null; G.prompt = null; G._nameRe = null; G.busy = false;
+}
+/* ---- the link: a WebRTC data channel, set up by swapping two codes ---- */
+const ONL_ICE = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }, { urls: 'stun:global.stun.twilio.com:3478' }] };
+function onlClose() { try { if (ONL.dc) { ONL.dc.onclose = null; ONL.dc.close(); } } catch (e) { } try { if (ONL.pc) { ONL.pc.onconnectionstatechange = null; ONL.pc.close(); } } catch (e) { } ONL.dc = null; ONL.pc = null; ONL.link = 'off'; }
+function onlNewPeer() {
+  onlClose();
+  const pc = new RTCPeerConnection(ONL_ICE); ONL.pc = pc;
+  pc.onconnectionstatechange = () => { if (ONL.pc !== pc) return; if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected' || pc.connectionState === 'closed') { ONL.link = 'lost'; onlLinkChanged(); } };
+  return pc;
+}
+function onlWire(dc) {
+  ONL.dc = dc;
+  dc.onopen = () => { ONL.link = 'open'; onlLinkChanged(); onlOpened(); };
+  dc.onclose = () => { if (ONL.dc !== dc) return; ONL.link = 'lost'; onlLinkChanged(); };
+  dc.onmessage = e => { ONL.q = ONL.q.then(() => onlGot(e.data)).catch(err => console.error(err)); };
+}
+const onlIceDone = pc => new Promise(res => { if (pc.iceGatheringState === 'complete') return res(); const f = () => { if (pc.iceGatheringState === 'complete') { pc.removeEventListener('icegatheringstatechange', f); res(); } }; pc.addEventListener('icegatheringstatechange', f); setTimeout(res, 7000); });
+async function onlEncode(d) { const z = await onlZip(JSON.stringify({ type: d.type, sdp: d.sdp })); return `BD${ONL_PROTO}:${z.z}:${z.d}`; }
+async function onlDecode(code) {
+  const m = /BD(\d+):([01]):([A-Za-z0-9+/=]+)/.exec(String(code || '').replace(/\s+/g, ''));
+  if (!m) throw new Error("That doesn't look like a Battle Drill code. Copy the whole thing, starting with BD.");
+  if (+m[1] !== ONL_PROTO) throw new Error('That code is from a different version of the app. Both of you should update first.');
+  return JSON.parse(await onlUnzip({ z: +m[2], d: m[3] }));
+}
+async function onlMakeOffer() { const pc = onlNewPeer(); onlWire(pc.createDataChannel('bd', { ordered: true })); await pc.setLocalDescription(await pc.createOffer()); await onlIceDone(pc); return onlEncode(pc.localDescription); }
+async function onlAcceptOffer(code) { const d = await onlDecode(code), pc = onlNewPeer(); pc.ondatachannel = e => onlWire(e.channel); await pc.setRemoteDescription(d); await pc.setLocalDescription(await pc.createAnswer()); await onlIceDone(pc); return onlEncode(pc.localDescription); }
+async function onlAcceptAnswer(code) { const d = await onlDecode(code); if (!ONL.pc) throw new Error('Make a new invitation code first.'); await ONL.pc.setRemoteDescription(d); }
+/* ---- messages (large ones are gzipped and cut into pieces) ---- */
+function onlSend(o) { if (!ONL.dc || ONL.dc.readyState !== 'open') return false; try { ONL.dc.send(JSON.stringify(o)); return true; } catch (e) { return false; } }
+async function onlPost(obj) {
+  const s = JSON.stringify(obj);
+  if (s.length < 9000) return onlSend({ t: 'm', s });
+  const z = await onlZip(s), id = ++ONL.cid, n = Math.ceil(z.d.length / 12000);
+  for (let i = 0; i < n; i++) {
+    while (ONL.dc && ONL.dc.bufferedAmount > 1 << 20) await new Promise(r => setTimeout(r, 30));
+    if (!onlSend({ t: 'c', id, i, n, z: z.z, d: z.d.slice(i * 12000, (i + 1) * 12000) })) return false;
+  }
+  return true;
+}
+async function onlGot(data) {
+  let m; try { m = JSON.parse(data); } catch (e) { return; }
+  if (m.t === 'm') return onlDispatch(JSON.parse(m.s));
+  if (m.t === 'c') {
+    const b = ONL.rx[m.id] = ONL.rx[m.id] || { parts: [], n: m.n, z: m.z, got: 0 }; if (!b.parts[m.i]) { b.parts[m.i] = m.d; b.got++; }
+    if (b.got === b.n) { delete ONL.rx[m.id]; return onlDispatch(JSON.parse(await onlUnzip({ z: b.z, d: b.parts.join('') }))); }
+  }
+}
+async function onlDispatch(m) {
+  if (m.t === 'hello') { ONL.hello = m; return onlGuestHello(m); }
+  if (m.t === 'ready') return onlHostBegin(m);
+  if (m.t === 'start') { ONL.on = true; ONL.started = true; setupOpen = false; battleStarted = true; ONL.oppName = m.host || 'Your opponent'; closeModal(); onlWaitShow(`${ONL.oppName} is setting up the battle.`, 'The game appears here as soon as it is your turn to act.'); return; }
+  if (m.t === 'status') { ONL.status = m.text || ''; onlWaitRefresh(); return; }
+  if (m.t === 'ack') { if (ONL.sent && ONL.sent.seq === m.seq) ONL.sent.acked = true; return; }
+  if (m.t === 'bye') { ONL.on = false; onlWaitHide(); onlClose(); flash(`${ONL.oppName} left the game.`); try { render(); } catch (e) { } return; }
+  if (m.t === 'state') return onlOnState(m);
+}
+function onlLinkChanged() { try { onlWaitRefresh(); } catch (e) { } }
+function onlOpened() {
+  if (ONL.started && ONL.sent && !ONL.sent.acked) onlPost(ONL.sent.msg);
+  else if (!ONL.started && ONL.role === 'host') onlPost({ t: 'hello', proto: ONL_PROTO, mode: cpMenu ? 'cp' : 'standard', host: onlMyName(), hostArmy: ($('#b-army-p') && ($('#b-army-p').selectedOptions[0] || {}).textContent) || '' });
+  try { if (ONL.started) onlWaitRefresh(); } catch (e) { }
+}
+const onlMyName = () => { const b = findBuild($('#b-army-p') && $('#b-army-p').value); return (b && b.name) || 'Player 1'; };
+/* ---- passing the game to the other device ---- */
+async function onlinePass(why, key) {
+  if (!G || !ONL.on) return new Promise(() => { });
+  const msg = { t: 'state', why, key: key || '', seq: ++ONL.seq, pack: snapPack() };
+  ONL.sent = { seq: msg.seq, msg, acked: false };
+  const opp = hotName('ai');
+  onlWaitShow(`Waiting for ${opp}.`, why === 'react' ? `${opp} can respond now: ${G.hotWhat || 'a stratagem'}.` : why === 'setup' ? 'They are choosing in secret.' : 'It is their turn.');
+  if (!(await onlPost(msg))) onlWaitRefresh();
+  return new Promise(() => { });   /* this device's call stack stops here: the other device carries on and sends the state back */
+}
+async function onlSendOver() {
+  if (!ONL.on || !G) return;
+  const msg = { t: 'state', why: 'over', key: '', seq: ++ONL.seq, pack: snapPack() };
+  ONL.sent = { seq: msg.seq, msg, acked: false }; await onlPost(msg);
+}
+async function onlOnState(m) {
+  onlPost({ t: 'ack', seq: m.seq });
+  snapLoad(m.pack); setupOpen = false; battleStarted = true; onlWaitHide();
+  if (m.why === 'over') { render(); return; }
+  hotSwapState(); G.busy = false; render();
+  onlRun(m);   /* detached: a reaction can wait for the person for a long time, and must not block the next message */
+}
+function onlRun(m) {
+  (async () => {
+    try {
+      if (m.why === 'react') {
+        const R = REACTS[m.key]; G.busy = true; render();
+        try { await R.run(); } catch (e) { console.error(e); }
+        if (!G || G.stage !== 'battle') { onlSendOver(); return; }
+        await onlinePass('back', R.next); return;
+      }
+      if (m.why === 'back') G.busy = true;
+      const f = RESUME[m.key]; if (f) f();
+    } catch (e) { console.error(e); }
+  })();
+}
+const REACTS = {
+  move: { can: () => hotCanMoveReact(), run: () => playerEndOfMovementReactions(), what: 'Fire Overwatch or Rapid Ingress', next: 'afterMove' },
+  smoke: { can: () => hotCanSmoke(), run: () => smokeScreenAsk(), what: 'Smokescreen', next: 'afterSmoke' },
+  heroic: { can: () => hotCanHeroic(), run: () => playerHeroic(), what: 'Heroic Intervention', next: 'afterHeroic' }
+};
+const RESUME = { render: () => render(), deploy: () => continueDeploy(), scouts: () => scoutsHotRun(true), beginTurn: () => beginTurn(), fight: () => advanceFight(), afterMove: () => afterMoveReact(), afterSmoke: () => afterSmokeReact(), afterHeroic: () => afterHeroicReact() };
+function onlStatus() {
+  if (!ONL.on || !G || !G.hot || G.stage !== 'battle') return;
+  onlPost({ t: 'status', text: `Round ${G.round}, ${hotName(G.active)}'s ${G.phase} phase. VP: ${hotName('player')} ${vpTotal('player')}, ${hotName('ai')} ${vpTotal('ai')}.` });
+}
+/* ---- the cover screen while the other person plays ---- */
+function onlWaitShow(title, sub) {
+  ONL.waitTitle = title; ONL.waitSub = sub; ONL.status = '';
+  let d = document.getElementById('onl-wait');
+  if (!d) {
+    d = document.createElement('div'); d.id = 'onl-wait';
+    d.style.cssText = 'position:fixed;inset:0;z-index:94;background:#0b0f0a;color:#d8e8c8;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;font-family:inherit';
+    document.body.appendChild(d);
+  }
+  onlWaitRefresh();
+}
+function onlWaitRefresh() {
+  const d = document.getElementById('onl-wait'); if (!d) return;
+  const lost = ONL.link === 'lost' || ONL.link === 'off';
+  d.innerHTML = `<div style="font-size:.85rem;letter-spacing:.2em;text-transform:uppercase;color:#7a9a6a">Online game</div><h1 style="margin:10px 0 6px;font-size:2rem">${escH(ONL.waitTitle || 'Waiting')}</h1><p style="max-width:34em;margin:0 0 10px;color:#a9c19a">${escH(ONL.waitSub || '')}</p><p id="onl-st" style="max-width:34em;margin:0 0 18px;color:#c9dbb8;min-height:1.3em">${escH(ONL.status || '')}</p>${lost ? `<p style="color:#e0a05b;max-width:34em">The connection to ${escH(ONL.oppName)} was lost. Use Reconnect and swap codes again. Nothing is lost: the game picks up where it stopped.</p><button class="btn primary" id="onl-rc" style="margin:4px">Reconnect</button>` : `<p class="muted" style="font-size:.85rem">Connected to ${escH(ONL.oppName)}.</p>`}<button class="btn" id="onl-leave" style="margin:4px">Leave the game</button>`;
+  const rc = d.querySelector('#onl-rc'); if (rc) rc.onclick = onlReconnect;
+  d.querySelector('#onl-leave').onclick = onlLeave;
+}
+function onlWaitHide() { const d = document.getElementById('onl-wait'); if (d) d.remove(); }
+function onlLeave() { onlPost({ t: 'bye' }); setTimeout(onlClose, 200); ONL.on = false; ONL.started = false; onlWaitHide(); try { render(); } catch (e) { } }
+/* ---- lobby screens ---- */
+const onlTA = 'width:100%;min-height:78px;font:12px/1.3 monospace;background:#101510;color:#cfe0bf;border:1px solid #3b4a33;border-radius:6px;padding:6px;box-sizing:border-box';
+const onlCopy = async (id, btn) => { const t = document.getElementById(id); try { await navigator.clipboard.writeText(t.value); btn.textContent = 'Copied'; } catch (e) { t.select(); document.execCommand && document.execCommand('copy'); btn.textContent = 'Copied'; } };
+async function onlHostStart() {
+  ONL.role = 'host'; if (!ONL.started) { ONL.on = false; ONL.hello = null; }
+  openModal(`<h2 style="margin:0 0 6px">Host an online game</h2><p class="muted" id="onl-m" style="margin:0 0 8px">Making your invitation code...</p><div id="onl-b"></div>`);
+  try { const code = await onlMakeOffer(); onlHostScreen(code); } catch (e) { $('#onl-m').textContent = 'Could not start: ' + e.message; }
+}
+function onlHostScreen(code) {
+  $('#onl-m').innerHTML = `<b>1.</b> Send this code to your friend (a text message is fine).`;
+  $('#onl-b').innerHTML = `<textarea id="onl-code" readonly style="${onlTA}">${escH(code)}</textarea><div class="row" style="gap:6px;margin:6px 0 12px"><button class="btn" id="onl-copy">Copy code</button></div><p style="margin:0 0 6px"><b>2.</b> When they send you their reply code, paste it here.</p><textarea id="onl-reply" placeholder="Paste the reply code" style="${onlTA}"></textarea><div class="row" style="gap:6px;margin:6px 0"><button class="btn primary" id="onl-go">Connect</button><button class="btn" id="onl-x">Cancel</button></div><p class="muted" id="onl-s" style="font-size:.85rem;margin:6px 0 0"></p>`;
+  $('#onl-copy').onclick = e => onlCopy('onl-code', e.target);
+  $('#onl-x').onclick = () => { onlClose(); closeModal(); };
+  $('#onl-go').onclick = async () => { try { $('#onl-s').textContent = 'Connecting...'; await onlAcceptAnswer($('#onl-reply').value); setTimeout(() => { const s = $('#onl-s'); if (s && ONL.link !== 'open') s.textContent = 'Still connecting. If this takes more than a minute, the two networks may not allow a direct link; try again on the same wifi or a different network.'; }, 20000); } catch (e) { $('#onl-s').textContent = e.message; } };
+}
+async function onlGuestStart() {
+  ONL.role = 'guest'; if (!ONL.started) { ONL.on = false; ONL.hello = null; }
+  openModal(`<h2 style="margin:0 0 6px">Join an online game</h2><p style="margin:0 0 6px"><b>1.</b> Paste the code your friend sent you.</p><textarea id="onl-in" placeholder="Paste the invitation code" style="${onlTA}"></textarea><div class="row" style="gap:6px;margin:6px 0"><button class="btn primary" id="onl-mk">Make my reply code</button><button class="btn" id="onl-x">Cancel</button></div><div id="onl-b"></div><p class="muted" id="onl-s" style="font-size:.85rem;margin:6px 0 0"></p>`);
+  $('#onl-x').onclick = () => { onlClose(); closeModal(); };
+  $('#onl-mk').onclick = async () => {
+    try {
+      $('#onl-s').textContent = 'Making your reply code...';
+      const code = await onlAcceptOffer($('#onl-in').value);
+      $('#onl-b').innerHTML = `<p style="margin:10px 0 6px"><b>2.</b> Send this reply code back to your friend. The game connects by itself once they paste it.</p><textarea id="onl-code" readonly style="${onlTA}">${escH(code)}</textarea><div class="row" style="gap:6px;margin:6px 0"><button class="btn" id="onl-copy">Copy code</button></div>`;
+      $('#onl-copy').onclick = e => onlCopy('onl-code', e.target); $('#onl-s').textContent = 'Waiting for your friend to connect...';
+    } catch (e) { $('#onl-s').textContent = e.message; }
+  };
+}
+/* the guest picks an army once connected, so it comes from their own library */
+function onlGuestHello(h) {
+  if (h.proto !== ONL_PROTO) { openModal('<h2>Different versions</h2><p>You and your friend are on different versions of the app. Both of you should update (Settings, Check for update) and try again.</p><button class="btn" onclick="closeModal()">OK</button>'); return; }
+  ONL.oppName = h.host || 'Your opponent';
+  const cp = h.mode === 'cp', saved = cpMenu; cpMenu = cp;
+  let opts; try { opts = cp ? cpBuildOptions(CP_BUILDS[0].id, false) : buildOptions(defaultBuildId(0)); } finally { cpMenu = saved; }
+  openModal(`<h2 style="margin:0 0 6px">Connected</h2><p class="muted" style="margin:0 0 8px">${cp ? 'Combat Patrol' : 'Standard battle'}. ${h.hostArmy ? escH(h.hostArmy) + ' is their ' + (cp ? 'patrol' : 'army') + '.' : ''} Pick yours.</p><label style="display:block;margin:6px 0">Your ${cp ? 'patrol' : 'army'}<select id="onl-army" style="width:100%">${opts}</select></label><div id="onl-d"></div><div class="row" style="gap:6px;margin:10px 0"><button class="btn primary" id="onl-ready">I'm ready</button><button class="btn" id="onl-x">Cancel</button></div><p class="muted" id="onl-s" style="font-size:.85rem"></p>`);
+  const fill = () => {
+    const b = findBuild($('#onl-army').value), av = (!cp && b) ? availDisps(b) : [];
+    $('#onl-d').innerHTML = av.length > 1 ? `<label style="display:block;margin:6px 0">Your Force Disposition<select id="onl-disp" style="width:100%">${av.map(k => `<option value="${k}">${escH(fdName(k))}</option>`).join('')}</select></label>` : '';
+  };
+  $('#onl-army').onchange = fill; fill();
+  $('#onl-x').onclick = () => { onlPost({ t: 'bye' }); onlClose(); closeModal(); };
+  $('#onl-ready').onclick = async () => {
+    const id = $('#onl-army').value, b = findBuild(id); if (!b) return;
+    $('#onl-s').textContent = 'Waiting for your friend to start the battle...'; $('#onl-ready').disabled = true;
+    onlPost({ t: 'ready', cpId: cp ? id : null, build: cp ? null : JSON.parse(JSON.stringify(b)), disp: ($('#onl-disp') && $('#onl-disp').value) || null, name: b.name });
+  };
+}
+/* the host builds the game from both armies and sends the guest to the cover screen */
+async function onlHostBegin(info) {
+  if (ONL.started) return;
+  const cp = cpMenu;
+  try {
+    let pb, ab;
+    if (cp) { pb = findBuild($('#b-army-p').value) || CP_BUILDS[0]; ab = CP_BUILDS.find(b => b.id === info.cpId) || CP_BUILDS[0]; NEXT_B = { p: pb, a: ab }; NEXT_CP = {}; NEXT_FD = null; }
+    else {
+      pb = findBuild($('#b-army-p').value); ab = info.build; for (const b of [pb, ab]) if (b) normDets(b);
+      let fp = null; const sel = $('#b-disp-p');
+      if (sel && sel.value && sel.value !== 'auto') fp = sel.value; else { const av = availDisps(pb); if (av.length > 1) { closeModal(); fp = await chooseDisposition(pb, av); } }
+      NEXT_FD = { player: fp, ai: info.disp || null }; NEXT_B = { p: pb, a: ab };
+    }
+    ONL.on = true; ONL.started = true; ONL.oppName = info.name || (ab && ab.name) || 'Your opponent'; NEXT_HOT = true;
+    closeModal(); setupOpen = false; battleStarted = true;
+    try { newGame(); } finally { NEXT_B = null; NEXT_CP = null; NEXT_FD = null; NEXT_HOT = false; }
+    onlPost({ t: 'start', host: G.hot.names[0] });
+  } catch (e) { console.error(e); ONL.on = false; ONL.started = false; flash('Could not start the online game: ' + e.message); }
+}
+function onlReconnect() {
+  if (ONL.role === 'host') {
+    openModal(`<h2 style="margin:0 0 6px">Reconnect</h2><p class="muted" id="onl-m">Making a new code...</p><div id="onl-b"></div>`);
+    onlMakeOffer().then(onlHostScreen).catch(e => { $('#onl-m').textContent = e.message; });
+  } else onlGuestStart();
+}
+
 /* ---- thrown dice for the flat view, and the roll-off shown with a red die and a blue die ---- */
 const CUBE_PIPS = { 1: [5], 2: [1, 9], 3: [1, 5, 9], 4: [1, 3, 7, 9], 5: [1, 3, 5, 7, 9], 6: [1, 3, 4, 6, 7, 9] };
 const CUBE_ROT = { 1: [0, 0], 6: [0, 180], 3: [0, -90], 4: [0, 90], 2: [-90, 0], 5: [90, 0] };
@@ -6862,7 +7124,7 @@ async function rollOffRoles() {
   try { await rollOffShow(a, b, 'Roll-off: Attacker and Defender'); } catch (e) { console.error(e); }
   g0.rolling = false; if (G !== g0 || G.stage === 'over') return;
   G.roll = { you: a, ai: b };
-  if (G.hot) { log(`Roll-off for Attacker and Defender: you ${a}, AI ${b}. You choose.`, 'sys'); render(); if (a < b) hotPass('setup'); return; }
+  if (G.hot) { log(`Roll-off for Attacker and Defender: you ${a}, AI ${b}. You choose.`, 'sys'); render(); if (a < b) hotPass('setup', 'render'); return; }
   if (a > b) { log(`Roll-off for Attacker and Defender: you ${a}, AI ${b}. You choose.`, 'sys'); }
   else {
     const pick = Math.random() < .5 ? 'attacker' : 'defender';
@@ -6890,7 +7152,7 @@ async function confirmSecondaries() {
     S.fixed = S.pick.map(secInst);
   }
   if (G.hot) {
-    if (!G.hotSecDone) { G.hotSecDone = 1; log('A player has chosen their secondary missions in secret.', 'sys'); await hotPass('setup'); return; }
+    if (!G.hotSecDone) { G.hotSecDone = 1; log('A player has chosen their secondary missions in secret.', 'sys'); await hotPass('setup', 'render'); return; }
     const d = (s2, x) => x.mode === 'fixed' ? 'Fixed (' + x.fixed.map(c => c.name).join(' and ') + ')' : 'Tactical';
     log(`Secondary missions revealed: ${hotName('player')} uses ${d('player', S)}; ${hotName('ai')} uses ${d('ai', G.sec.ai)}.`, 'sys');
     nextStep(); return;
@@ -6919,7 +7181,7 @@ async function confirmFormations() {
   }
   fixDedicated('player');
   if (G.hot) {
-    if (!G.hotFormDone) { G.hotFormDone = 1; log('A player has declared their battle formations in secret.', 'sys'); await hotPass('setup'); return; }
+    if (!G.hotFormDone) { G.hotFormDone = 1; log('A player has declared their battle formations in secret.', 'sys'); await hotPass('setup', 'render'); return; }
     const r1 = reserves('player'), r2 = reserves('ai');
     log(`Battle formations revealed. ${hotName('player')} reserves: ${r1.length ? r1.map(u => u.name).join(', ') : 'none'}. ${hotName('ai')} reserves: ${r2.length ? r2.map(u => u.name).join(', ') : 'none'}.`, 'sys');
     nextStep(); return;
@@ -6952,7 +7214,7 @@ async function continueDeploy() {
     if (!p && !a) { log('Both armies are deployed.', 'sys'); nextStep(); return; }
     if (G.deployTurn === 'player' && !p) G.deployTurn = 'ai';
     if (G.deployTurn === 'ai' && !a) G.deployTurn = 'player';
-    if (G.deployTurn === 'ai' && G.hot) { await hotPass('setup'); if (G.gen !== gen) return; continue; }
+    if (G.deployTurn === 'ai' && G.hot) { await hotPass('setup', 'deploy'); if (G.gen !== gen) return; continue; }
     if (G.deployTurn === 'ai') {
       G.busy = true; render(); await sleep(450); if (G.gen !== gen) return;
       const u = toDeploy('ai')[0];
@@ -6999,7 +7261,7 @@ async function rollFirstTurn() {
   try { await rollOffShow(a, b, 'Roll-off: first turn'); } catch (e) { console.error(e); }
   g0.rolling = false; if (G !== g0 || G.stage === 'over') return;
   G.roll = { you: a, ai: b };
-  if (G.hot) { log(`Roll-off for the first turn: you ${a}, AI ${b}. You choose.`, 'sys'); render(); if (a < b) hotPass('setup'); return; }
+  if (G.hot) { log(`Roll-off for the first turn: you ${a}, AI ${b}. You choose.`, 'sys'); render(); if (a < b) hotPass('setup', 'render'); return; }
   if (a > b) log(`Roll-off for the first turn: you ${a}, AI ${b}. You choose.`, 'sys');
   else { G.first = 'ai'; log(`Roll-off for the first turn: you ${a}, AI ${b}. The AI takes the first turn.`, 'sys'); }
   render();
@@ -7007,17 +7269,22 @@ async function rollFirstTurn() {
 function chooseFirst(side) { G.first = side; log(side === 'player' ? 'You take the first turn.' : 'You let the AI go first.', 'player'); render(); }
 function scoutUnits(s) { return aliveSide(s).filter(u => u.scouts > 0 && !u.scouted); }
 function scoutOk(u, x, y) { return Math.hypot(x - u.x, y - u.y) <= u.scouts + 1e-6 && posOk(u, x, y, false) && !nearEnemy(u, x, y, 8); }
+async function scoutsHotRun(afterPass) {   /* two people: each in turn moves their Scouts; re-entrant so the other device can resume it */
+  while (true) {
+    if (!afterPass) {
+      if (G.scoutI >= 2) break;
+      const s = G.scoutI++ === 0 ? G.first : other(G.first);
+      if (s === 'ai') { if (!scoutUnits('ai').length) continue; await hotPass('setup', 'scouts'); }
+    }
+    afterPass = false;
+    if (scoutUnits('player').length) { G.scoutPhase = true; render(); await new Promise(res => { G.scoutDone = res; }); G.scoutPhase = false; }
+  }
+  log('Scout moves are finished.', 'sys'); render();
+}
 async function startScouts() {
   const order = [G.first, other(G.first)];
   if (!scoutUnits('player').length && !scoutUnits('ai').length) { log('No units have Scouts, so there are no scout moves.', 'sys'); render(); return; }
-  if (G.hot) {
-    for (let i = 0; i < 2; i++) {
-      const s = i === 0 ? G.first : other(G.first);
-      if (s === 'ai') { if (!scoutUnits('ai').length) continue; await hotPass('setup'); }
-      if (scoutUnits('player').length) { G.scoutPhase = true; render(); await new Promise(res => { G.scoutDone = res; }); G.scoutPhase = false; }
-    }
-    log('Scout moves are finished.', 'sys'); render(); return;
-  }
+  if (G.hot) { G.scoutI = 0; await scoutsHotRun(false); return; }
   for (const s of order) {
     if (s === 'ai') {
       for (const u of scoutUnits('ai')) {
@@ -7039,7 +7306,7 @@ async function startScouts() {
 async function startBattle() {
   G.stage = 'battle'; G.round = 1; G.active = G.first; smStartBattle();
   try { await tsScryer(); await tsUnearthly(); } catch (e) { }
-  if (G.hot && G.active === 'ai') { log(`Battle round 1 begins. ${hotName('ai')} goes first.`, 'sys'); await hotPass('turn'); }
+  if (G.hot && G.active === 'ai') { log(`Battle round 1 begins. ${hotName('ai')} goes first.`, 'sys'); await hotPass('turn', 'beginTurn'); }
   else log(`Battle round 1 begins. ${G.first === 'player' ? 'You go' : 'The AI goes'} first. <i>${FLAVOUR[Math.floor(Math.random() * FLAVOUR.length)]}</i>`, 'sys');
   beginTurn();
 }
@@ -7160,11 +7427,20 @@ function endPlayerPhaseNow() {
   if (G.phase === 'command') { doReanimation('player'); dgEndCommand('player'); smEndCommand('player'); scorePrimary('player'); setPhase('movement'); render(); return; }
   if (G.phase === 'movement') { dgEndMovement('player'); tsEndMovement('player'); }
   if (G.phase === 'movement') aliveSide('player').forEach(u => { if (!u.moved && !u.arrived) u.stayed = true; });
-  if (G.phase === 'movement') { G.busy = true; render(); embarkEnd('ai', 'embark-mount').then(() => G.hot ? hotReact(hotCanMoveReact, playerEndOfMovementReactions, 'Fire Overwatch or Rapid Ingress') : aiOverwatch().then(() => aiIngress())).then(async () => { G.busy = false; if (G.stage !== 'battle') return; setPhase('shooting'); if (G.hot) { G.busy = true; render(); await hotReact(hotCanSmoke, smokeScreenAsk, 'Smokescreen'); G.busy = false; if (G.stage !== 'battle') return; } else aiSmokeScreen(); tsShootStart('player').then(() => { render(); checkEnd(); }); }); return; }
+  if (G.phase === 'movement') { G.busy = true; render(); embarkEnd('ai', 'embark-mount').then(() => G.hot ? hotReact('move') : aiOverwatch().then(() => aiIngress())).then(afterMoveReact); return; }
   if (G.phase === 'shooting') { setPhase('charge'); dgMireAI(); render(); return; }
-  if (G.phase === 'charge') { G.busy = true; render(); (G.hot ? hotReact(hotCanHeroic, playerHeroic, 'Heroic Intervention') : aiHeroic()).then(() => { G.busy = false; if (G.stage !== 'battle') return; setPhase('fight'); startFight(null); render(); }); return; }
+  if (G.phase === 'charge') { G.busy = true; render(); (G.hot ? hotReact('heroic') : aiHeroic()).then(afterHeroicReact); return; }
   if (G.phase === 'fight') { G.busy = true; render(); reactMoves('fightend').then(() => { G.busy = false; if (G.stage === 'battle') endTurn(); }); }
 }
+async function afterMoveReact() {
+  G.busy = false; if (G.stage !== 'battle') return; setPhase('shooting');
+  if (G.hot) { G.busy = true; render(); await hotReact('smoke'); } else aiSmokeScreen();
+  afterSmokeReact();
+}
+function afterSmokeReact() { G.busy = false; if (G.stage !== 'battle') return; tsShootStart('player').then(() => { render(); checkEnd(); }); }
+function afterHeroicReact() { G.busy = false; if (G.stage !== 'battle') return; setPhase('fight'); startFight(null); render(); }
+{ const _sp = setPhase; setPhase = function (ph) { const r = _sp.apply(this, arguments); try { onlStatus(); } catch (e) { } return r; }; }
+{ const _fin = finish; finish = function () { const r = _fin.apply(this, arguments); if (ONL.on && G && G.stage === 'over' && !G.onlOverSent) { G.onlOverSent = 1; onlSendOver(); } return r; }; }
 function aircraftReturn(side) {
   for (const u of aliveSide(side)) if (isAircraft(u)) { u.placed = false; u.reserve = true; u.x = -50; u.y = -50; u.arrived = false; log(`${u.name} returns to strategic reserves.`, side); }
 }
@@ -7275,7 +7551,7 @@ async function endTurnTail() {
     log(`Battle round ${G.round} begins. <i>${FLAVOUR[Math.floor(Math.random() * FLAVOUR.length)]}</i>`, 'sys');
   }
   G.active = other(G.active);
-  if (G.hot && G.active === 'ai') await hotPass('turn');
+  if (G.hot && G.active === 'ai') await hotPass('turn', 'beginTurn');
   beginTurn();
 }
 function checkEnd() {
@@ -7688,7 +7964,7 @@ async function advanceFight() {
         if (G.stage !== 'battle' || G.gen !== gen) return;
         if (r === 'done') { F.turn = 'ai'; continue; }
       }
-      if (G.hot) { await hotPass('fight'); if (G.stage !== 'battle' || G.gen !== gen) return; continue; }
+      if (G.hot) { await hotPass('fight', 'fight'); if (G.stage !== 'battle' || G.gen !== gen) return; continue; }
       render(); await sleep(500);
       if (G.stage !== 'battle' || G.gen !== gen) return;
       const pk = aiPickFight(fightPool('ai'));
@@ -7697,7 +7973,7 @@ async function advanceFight() {
     }
     if (G.hot && p === 'player') {
       const candO = fightLeft().filter(u => u.side === 'ai');
-      if (candO.length && !fightPool('ai').length && canStrat('ai', 'counter', 2) && F.cAsk !== fightLeft().length) { F.cAsk = fightLeft().length; G.hotWhat = 'Counter-offensive'; await hotPass('fight'); if (G.stage !== 'battle' || G.gen !== gen) return; continue; }
+      if (candO.length && !fightPool('ai').length && canStrat('ai', 'counter', 2) && F.cAsk !== fightLeft().length) { F.cAsk = fightLeft().length; G.hotWhat = 'Counter-offensive'; await hotPass('fight', 'fight'); if (G.stage !== 'battle' || G.gen !== gen) return; continue; }
     } else if (p === 'player' && await aiCounter()) { F.turn = 'player'; continue; }
     F.awaiting = true; render(); return;
   }
@@ -13074,7 +13350,8 @@ function linkNames(html) {
 }
 $('#b-new').addEventListener('click', async () => { setupOpen = false; battleStarted = true; await beginGame(); const nx = $('#b-map'); if (nx && nx.getBoundingClientRect && nx.scrollIntoView) { const r = nx.getBoundingClientRect(); if (r.top < 0 || r.top > window.innerHeight * 0.6) nx.scrollIntoView({ block: 'start' }); } });
 $('#b-gtype').addEventListener('change', () => { cpMenu = $('#b-gtype').value === 'cp'; refreshArmyUI(); });
-$$('#b-opp button').forEach(b => b.addEventListener('click', () => { $('#b-hot').checked = b.dataset.opp === 'hot'; oppRefresh(); }));
+$$('#b-opp button').forEach(b => b.addEventListener('click', () => { $('#b-hot').checked = b.dataset.opp === 'hot' || b.dataset.opp === 'online'; ONL.want = b.dataset.opp === 'online'; oppRefresh(); }));
+$('#b-join').addEventListener('click', () => onlGuestStart());
 $('#b-army-p').addEventListener('change', () => { renderBattleLegal(); renderArmyLines(); fillDispSelects(); }); $('#b-army-a').addEventListener('change', () => { renderBattleLegal(); renderArmyLines(); fillDispSelects(); });
 $('#b-guide').addEventListener('click', () => $('#b-guide').classList.toggle('open'));
 { const tr = $('#dice-tray'), mpp = $('#b-map'); if (tr && mpp) { const ph = $('#b-fs'); mpp.appendChild(tr); }
@@ -16474,15 +16751,16 @@ function renderArmyLines() {
   if (box._html !== html) { box._html = html; box.innerHTML = html; }
 }
 function oppRefresh() {
-  const hot = !!($('#b-hot') && $('#b-hot').checked);
-  $$('#b-opp button').forEach(b => b.classList.toggle('on', (b.dataset.opp === 'hot') === hot));
+  const onl = !!(ONL.want && $('#b-hot') && $('#b-hot').checked), hot = !!($('#b-hot') && $('#b-hot').checked);
+  $$('#b-opp button').forEach(b => b.classList.toggle('on', b.dataset.opp === 'online' ? onl : b.dataset.opp === 'hot' ? hot && !onl : !hot));
+  { const la = $('#b-army-a-l'); if (la) la.style.display = onl ? 'none' : ''; const ld = $('#b-disp-a-l'); if (ld) ld.style.display = (onl || cpMenu) ? 'none' : ''; }
   const setLbl = (l, t) => { if (l && l.firstChild && l.firstChild.nodeType === 3) l.firstChild.nodeValue = t; };
   setLbl($('#b-army-p-l'), hot ? (cpMenu ? "Player 1's patrol" : "Player 1's army") : cpMenu ? 'Your patrol' : 'Your army (Imperial Forces)');
   setLbl($('#b-army-a-l'), hot ? (cpMenu ? "Player 2's patrol" : "Player 2's army") : cpMenu ? 'AI patrol' : 'AI army (Hostile Cogitator)');
-  const n = $('#b-opp-note'); if (n) n.textContent = hot ? 'Two people share this screen and take turns. A cover screen hides the board whenever the device is passed, so battle formations stay secret. ' + (cpMenu ? 'Player 2 takes the second patrol below (Random picks one for them).' : 'Player 2 takes the second army below. Force Dispositions and secondary missions are also chosen in secret.') + ' No AI plays.' : 'The AI plays the second ' + (cpMenu ? 'patrol' : 'army') + ', deploys it, makes every decision for it and takes its turns.';
-  const it = $('#b-intro'); if (it) it.textContent = hot ? 'Pick ' + (cpMenu ? 'a patrol' : 'an army') + ' for each player, choose how you want to roll dice, then start. Player 1 sets up first; the app tells you when to pass the device.' : "Pick your army and the AI's, choose how you want to roll dice, then start. A step-by-step walkthrough of the battle setup follows.";
+  const n = $('#b-opp-note'); if (n) n.textContent = onl ? 'You and a friend play on two devices. You pick your army here; your friend picks theirs on their own device after you swap two short codes. No server and no account are needed.' : hot ? 'Two people share this screen and take turns. A cover screen hides the board whenever the device is passed, so battle formations stay secret. ' + (cpMenu ? 'Player 2 takes the second patrol below (Random picks one for them).' : 'Player 2 takes the second army below. Force Dispositions and secondary missions are also chosen in secret.') + ' No AI plays.' : 'The AI plays the second ' + (cpMenu ? 'patrol' : 'army') + ', deploys it, makes every decision for it and takes its turns.';
+  const it = $('#b-intro'); if (it) it.textContent = onl ? 'Pick your ' + (cpMenu ? 'patrol' : 'army') + ', choose how you want to roll dice, then make an invitation code for your friend. They join from their own device.' : hot ? 'Pick ' + (cpMenu ? 'a patrol' : 'an army') + ' for each player, choose how you want to roll dice, then start. Player 1 sets up first; the app tells you when to pass the device.' : "Pick your army and the AI's, choose how you want to roll dice, then start. A step-by-step walkthrough of the battle setup follows.";
   setLbl($('#b-disp-p-l'), hot ? "Player 1's Force Disposition" : 'Your Force Disposition'); setLbl($('#b-disp-a-l'), hot ? "Player 2's Force Disposition" : 'AI Force Disposition');
-  const nw = $('#b-new .sub'); if (nw) nw.textContent = hot ? 'Start a two-player game on this device' : 'Start a new game with these armies';
+  const nw = $('#b-new .sub'); if (nw) nw.textContent = onl ? 'Make an invitation code for your friend' : hot ? 'Start a two-player game on this device' : 'Start a new game with these armies';
 }
 function refreshArmyUI() {
   $('#a-store').textContent = storeNote() + (Store.recovered ? ` Recovered ${plural(Store.recovered, 'army')} saved in this browser.`.replace('armys', 'armies') : '');
