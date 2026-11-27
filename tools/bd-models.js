@@ -369,6 +369,7 @@ window.BDModels = BDModels; window.MODELIMP = MODELIMP;
   'use strict';
   let cv = null, R = null, cam = null, raf = 0, last = 0, idle = 0, ext = new WeakMap(), cur = null;
   const ENV = { sun: [-.45, .62, .5], sunC: [1.5, 1.42, 1.3], ambT: [.34, .36, .42], ambB: [.2, .2, .22], fog: [.075, .08, .09], fogD: .0004, dust: 0 };
+  const ENV0 = JSON.parse(JSON.stringify(ENV)), ENVF = { sun: [-.45, .62, .5], sunC: [0, 0, 0], ambT: [1.9, 1.9, 1.9], ambB: [1.9, 1.9, 1.9], fog: [.075, .08, .09], fogD: 0, dust: 0 }; let flatLight = false;
   function ensureGL() {
     if (R) return true;
     try {
@@ -409,7 +410,8 @@ window.BDModels = BDModels; window.MODELIMP = MODELIMP;
       if (!imgs.length) return 'vertex-colour copy (no texture)' + (fig.parts.length ? ', ' + Math.round(fig.parts.reduce((a, q) => a + q.T.length / 3, 0) / 1000) + 'k tris' : '');
       const cv = document.createElement('canvas'); cv.width = cv.height = 16; const g = cv.getContext('2d', { willReadFrequently: true }); let r = 0, gg = 0, b = 0, n = 0, dims = [];
       for (const im of imgs) { g.clearRect(0, 0, 16, 16); g.drawImage(im, 0, 0, 16, 16); const d = g.getImageData(0, 0, 16, 16).data; for (let i = 0; i < d.length; i += 4) { r += d[i]; gg += d[i + 1]; b += d[i + 2]; n++; } dims.push(im.width + 'x' + im.height); }
-      return 'textured copy, ' + imgs.length + ' texture' + (imgs.length > 1 ? 's' : '') + ' (' + dims.join(', ') + '), average colour rgb(' + Math.round(r / n) + ',' + Math.round(gg / n) + ',' + Math.round(b / n) + '), ' + Math.round(fig.parts.reduce((a, q) => a + q.T.length / 3, 0) / 1000) + 'k tris';
+      let th = ''; try { const big = imgs.slice().sort((a, b) => b.width - a.width)[0], t = document.createElement('canvas'); t.width = t.height = 96; t.getContext('2d').drawImage(big, 0, 0, 96, 96); th = '<img src="' + t.toDataURL('image/jpeg', .8) + '" width="96" height="96" style="display:block;margin:4px auto;border:1px solid #555">'; } catch (e) { }
+      return th + 'textured copy, ' + imgs.length + ' texture' + (imgs.length > 1 ? 's' : '') + ' (' + dims.join(', ') + '), average colour rgb(' + Math.round(r / n) + ',' + Math.round(gg / n) + ',' + Math.round(b / n) + '), ' + Math.round(fig.parts.reduce((a, q) => a + q.T.length / 3, 0) / 1000) + 'k tris';
     } catch (e) { return 'diagnostic failed: ' + e.message; }
   }
   function mount() {
@@ -424,7 +426,8 @@ window.BDModels = BDModels; window.MODELIMP = MODELIMP;
     if (cv.parentNode !== slot) slot.appendChild(cv);
     let bar = document.getElementById('bdp-bar');
     if (!bar) { bar = document.createElement('div'); bar.id = 'bdp-bar'; bar.style.cssText = 'display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:10px;font-size:12px;opacity:.85;margin-bottom:8px'; slot.after(bar); }
-    bar.innerHTML = (vars.length > 1 ? '<button class="btn" id="bdp-p" type="button">‹</button>' : '') + '<span>' + m.name.replace(/</g, '&lt;') + (vars.length > 1 ? ' · ' + (cur.vi + 1) + ' of ' + vars.length : '') + ' · drag to turn, scroll to zoom</span>' + (vars.length > 1 ? '<button class="btn" id="bdp-n" type="button">›</button>' : '') + '<div style="flex-basis:100%;font-size:10px;opacity:.7">' + diagOf(shown) + (shown === fig && m.hi && BDModels.get('hiPrev', '1') === '1' ? ' · loading the richer copy…' : '') + '</div>';
+    bar.innerHTML = (vars.length > 1 ? '<button class="btn" id="bdp-p" type="button">‹</button>' : '') + '<span>' + m.name.replace(/</g, '&lt;') + (vars.length > 1 ? ' · ' + (cur.vi + 1) + ' of ' + vars.length : '') + ' · drag to turn, scroll to zoom</span>' + (vars.length > 1 ? '<button class="btn" id="bdp-n" type="button">›</button>' : '') + '<button class="btn" id="bdp-f" type="button" style="font-size:11px">' + (flatLight ? 'Normal light' : 'Flat light') + '</button><div style="flex-basis:100%;font-size:10px;opacity:.7">' + diagOf(shown) + (shown === fig && m.hi && BDModels.get('hiPrev', '1') === '1' ? ' · loading the richer copy…' : '') + '</div>';
+    const fb = bar.querySelector('#bdp-f'); if (fb) fb.onclick = () => { flatLight = !flatLight; Object.assign(ENV, JSON.parse(JSON.stringify(flatLight ? ENVF : ENV0))); try { R.draw(cam, ENV); } catch (e) { } mount(); };
     const go = d => () => { cur.vi += d; cur.fig = null; mount(); }; const p = bar.querySelector('#bdp-p'), n = bar.querySelector('#bdp-n'); if (p) p.onclick = go(-1); if (n) n.onclick = go(1);
     R.resize(); try { R.draw(cam, ENV); } catch (e) { } if (!raf) { last = 0; raf = requestAnimationFrame(frame); }
   }
