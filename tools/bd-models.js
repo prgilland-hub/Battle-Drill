@@ -236,11 +236,14 @@ const BDModels = (function () {
     const f0 = fetchFig(m) || cache.get(m.key) || null; if (f0 && !figOf.has(f0)) figOf.set(f0, m); return f0; }
   function add(mb, fig, x, y, z, yaw) {
     const cy = Math.cos(yaw), sy = Math.sin(yaw);
+    /* the texture colours are screen (sRGB) values but the renderer lights in linear light, like the built-in figures: convert once and keep both copies, so the models keep their painted colours instead of washing out pale */
+    const lin = typeof BF_LIN !== 'undefined' && BF_LIN.on;
     for (const g of fig.parts) {
       const n = g.V.length / 3, base = mb.n;
+      const C = lin ? (g.CL || (g.CL = Float32Array.from(g.C, v => Math.pow(v < 0 ? 0 : v, 2.2)))) : g.C;
       for (let j = 0; j < n; j++) {
         const vx = g.V[j * 3], vz = g.V[j * 3 + 2], nx = g.N[j * 3], nz = g.N[j * 3 + 2];
-        mb.P.push(vx * cy + vz * sy + x, g.V[j * 3 + 1] + y, -vx * sy + vz * cy + z); mb.N.push(nx * cy + nz * sy, g.N[j * 3 + 1], -nx * sy + nz * cy); mb.C.push(g.C[j * 3], g.C[j * 3 + 1], g.C[j * 3 + 2]); mb.M.push(.16, 0);
+        mb.P.push(vx * cy + vz * sy + x, g.V[j * 3 + 1] + y, -vx * sy + vz * cy + z); mb.N.push(nx * cy + nz * sy, g.N[j * 3 + 1], -nx * sy + nz * cy); mb.C.push(C[j * 3], C[j * 3 + 1], C[j * 3 + 2]); mb.M.push(.16, 0);
       }
       for (let j = 0; j < g.T.length; j++) mb.I.push(g.T[j] + base);
     }
