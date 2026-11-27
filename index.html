@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.27-0003';
+  const VERSION = '2026.11.27-0030';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -2257,11 +2257,11 @@ html[data-look="cog"] .muted{color:var(--muted)}
         <div id="b-warn"></div>
         <div id="b-legal"></div>
         <label>Game type<select id="b-gtype"><option value="standard">Standard battle (your own armies)</option><option value="cp">Combat Patrol (pre-set patrols, 44" by 30" board)</option></select></label>
-        <div id="b-hot-l" hidden><div class="muted" style="font-size:.85rem;margin-bottom:4px">Who plays the second patrol?</div><div class="seg" id="b-opp" style="margin-bottom:6px"><button type="button" data-opp="ai" class="on">The AI</button><button type="button" data-opp="hot">Another player, on this device</button></div><input type="checkbox" id="b-hot" hidden><div class="muted" id="b-opp-note" style="font-size:.88rem;margin-bottom:8px"></div></div>
+        <div id="b-hot-l" hidden><div class="muted" style="font-size:.85rem;margin-bottom:4px">Who plays the second side?</div><div class="seg" id="b-opp" style="margin-bottom:6px"><button type="button" data-opp="ai" class="on">The AI</button><button type="button" data-opp="hot">Another player, on this device</button></div><input type="checkbox" id="b-hot" hidden><div class="muted" id="b-opp-note" style="font-size:.88rem;margin-bottom:8px"></div></div>
         <label id="b-army-p-l">Your army (Imperial Forces)<select id="b-army-p"></select></label>
         <label id="b-army-a-l">AI army (Hostile Cogitator)<select id="b-army-a"></select></label>
-        <label>Your Force Disposition<select id="b-disp-p"><option value="auto">From my army's detachment</option><option value="take and hold">Take and Hold</option><option value="purge the foe">Purge the Foe</option><option value="disruption">Disruption</option><option value="reconnaissance">Reconnaissance</option><option value="priority assets">Priority Assets</option></select></label>
-        <label>AI Force Disposition<select id="b-disp-a"><option value="auto">From the AI army's detachment</option><option value="take and hold">Take and Hold</option><option value="purge the foe">Purge the Foe</option><option value="disruption">Disruption</option><option value="reconnaissance">Reconnaissance</option><option value="priority assets">Priority Assets</option></select></label>
+        <label id="b-disp-p-l">Your Force Disposition<select id="b-disp-p"><option value="auto">From my army's detachment</option><option value="take and hold">Take and Hold</option><option value="purge the foe">Purge the Foe</option><option value="disruption">Disruption</option><option value="reconnaissance">Reconnaissance</option><option value="priority assets">Priority Assets</option></select></label>
+        <label id="b-disp-a-l">AI Force Disposition<select id="b-disp-a"><option value="auto">From the AI army's detachment</option><option value="take and hold">Take and Hold</option><option value="purge the foe">Purge the Foe</option><option value="disruption">Disruption</option><option value="reconnaissance">Reconnaissance</option><option value="priority assets">Priority Assets</option></select></label>
         <label>Battlefield layout<select id="b-deploy"><option value="random">Random (A, B or C)</option><option value="A">Layout A</option><option value="B">Layout B</option><option value="C">Layout C</option></select></label>
         <div id="b-opts-form"><div class="setup opts-body" id="b-optsbody">
 
@@ -6478,7 +6478,15 @@ async function beginGame() {
       const av = availDisps(b); if (av.length > 1) return human ? await chooseDisposition(b, av) : av[Math.floor(Math.random() * av.length)];
       return null;
     };
-    const fp = await pick($('#b-disp-p'), pb, true), fa = await pick($('#b-disp-a'), ab, false);
+    const hotOn = !!($('#b-hot') && $('#b-hot').checked), n1 = pb && pb.name || 'Player 1', n2 = ab && ab.name || 'Player 2';
+    const fp = await pick($('#b-disp-p'), pb, true);
+    let fa;
+    if (hotOn && (!($('#b-disp-a') && $('#b-disp-a').value && $('#b-disp-a').value !== 'auto')) && availDisps(ab).length > 1) {
+      /* two people: the second player picks in secret, so cover the first player's choice, then hand back */
+      if (availDisps(pb).length > 1) await hotOverlay(escH(n2), 'Player 1 has chosen a Force Disposition in secret. Take the device and choose yours.', 'I am ' + escH(n2));
+      fa = await pick($('#b-disp-a'), ab, true);
+      await hotOverlay(escH(n1), 'Both Force Dispositions are chosen. Pass the device back to Player 1: the missions are revealed when the battle begins.', 'I am ' + escH(n1));
+    } else fa = await pick($('#b-disp-a'), ab, false);
     NEXT_FD = { player: fp, ai: fa };
   } catch (e) { NEXT_FD = null; }
   try { newGame(); } finally { NEXT_FD = null; }
@@ -6635,7 +6643,7 @@ function newGame() {
     strat: freshStrat(), units: [...pu, ...au], log: [], sel: null, mode: null, fight: null, busy: false, msg: '', info: null,
     claims: new Set(), pri: null, fd: null, priRound: { player: {}, ai: {} }, lostLast: { player: 0, ai: 0 }, ctrl0: {}, gen: (G ? G.gen + 1 : 1), prompt: null, turnKilled: [], shockFails: [], deployTurn: null, pb, ab, roll: null, lastCharge: null,
     rules: { player: impliedRules(pb), ai: impliedRules(ab) }, oath: { player: null, ai: null }, waaagh: { player: { used: false, until: 0 }, ai: { used: false, until: 0 } }, orkRound: 0, miracle: { player: [], ai: [] }, righteous: { player: [], ai: [] }, vows: { player: null, ai: null }, quarry: { player: null, ai: null }, judged: { player: null, ai: null }, asKilledBy: { player: [], ai: [] }, asHold: false, righteousPending: false, hyper: { player: null, ai: null }, imp: { player: null, ai: null }, impUsed: { player: [], ai: [] }, marks: { player: null, ai: null }, stalk: { player: null, ai: null }, vow: { player: null, ai: null }, singular: { player: null, ai: null }, protean: { player: false, ai: false }, btQ: [], btRevive: [], doctrine: { player: null, ai: null }, docUsed: { player: [], ai: [] }, discount: { player: 0, ai: 0 }, revenants: [], offers: [], declined: new Set() };
-  G.hotFormDone = 0; G.hot = (cpOn && ((NEXT_HOT === true) || ($('#b-hot') && $('#b-hot').checked))) ? { names: [pb.name, ab.name], flip: false } : null;
+  G.hotFormDone = 0; G.hot = ((NEXT_HOT === true) || ($('#b-hot') && $('#b-hot').checked)) ? { names: pb.name === ab.name ? [pb.name + ' (P1)', ab.name + ' (P2)'] : [pb.name, ab.name], flip: false } : null;
   G.mkUnit = mk; G.cpMode = cpOn; G.cpL = cpOn ? lay.L : null; dgSetup(); smSetup();
   if (cpOn) { G.fd = { player: 'combat patrol', ai: 'combat patrol' }; G.pri = { player: pb.primary, ai: ab.primary }; log(`Combat Patrol: your <b>${pb.name}</b> against the AI's <b>${ab.name}</b>. Your primary mission is <b>${G.pri.player}</b>; the AI's is <b>${G.pri.ai}</b>.`, 'sys'); }
   else { const fp = fdP, fa = fdA; G.fd = { player: fp, ai: fa }; G.pri = { player: PRI_MATRIX[FD_ORDER.indexOf(fp)][FD_ORDER.indexOf(fa)], ai: PRI_MATRIX[FD_ORDER.indexOf(fa)][FD_ORDER.indexOf(fp)] };
@@ -6747,7 +6755,7 @@ function hotTheme() { const r = document.documentElement; r.classList.toggle('ho
 function hotView() {
   hotTheme();
   let top = false;
-  try { if (G && G.roles) { const z = zoneOf('player'), ys = (z.pts || []).map(p => p[1]); top = ys.length && ys.reduce((a, b) => a + b, 0) / ys.length < BH / 2; } } catch (e) { }
+  try { if (G && G.roles) { const z = zoneOf('player'), ys = (z.pts || []).map(p => p[1]); top = ys.length ? ys.reduce((a, b) => a + b, 0) / ys.length < BH / 2 : (z.cy0 !== undefined ? z.cy0 : z.y + (z.h || 0) / 2) < BH / 2; } } catch (e) { }
   if (typeof BF3D !== 'undefined' && BF3D) { BF3D.trayFlip = !!top; if (BF3D.cam) { BF3D.cam.yaw = top ? Math.PI : 0; BF3D.dirty = true; if (typeof kick === 'function') kick(); } BF3D.hotSeen = true; }
 }
 function hotOverlay(title, sub, label) {
@@ -6875,11 +6883,17 @@ function chooseSecMode(mode) {
   S.mode = mode; S.pick = [];
   render();
 }
-function confirmSecondaries() {
+async function confirmSecondaries() {
   const S = G.sec.player;
   if (S.mode === 'fixed') {
     if (S.pick.length !== 2) { flash('Pick exactly two fixed missions.'); return; }
     S.fixed = S.pick.map(secInst);
+  }
+  if (G.hot) {
+    if (!G.hotSecDone) { G.hotSecDone = 1; log('A player has chosen their secondary missions in secret.', 'sys'); await hotPass('setup'); return; }
+    const d = (s2, x) => x.mode === 'fixed' ? 'Fixed (' + x.fixed.map(c => c.name).join(' and ') + ')' : 'Tactical';
+    log(`Secondary missions revealed: ${hotName('player')} uses ${d('player', S)}; ${hotName('ai')} uses ${d('ai', G.sec.ai)}.`, 'sys');
+    nextStep(); return;
   }
   G.sec.ai.mode = 'tactical';
   log(`Secondary missions revealed: you use ${S.mode === 'fixed' ? 'Fixed (' + S.fixed.map(c => c.name).join(' and ') + ')' : 'Tactical'}; the AI uses Tactical.`, 'sys'); G.sec.ai.deck = shuffle(SECONDARIES.map(c => c.id));
@@ -8741,8 +8755,8 @@ function renderSide() {
       else if (S.mode === 'fixed') {
         prompt = `Pick two fixed missions (${S.pick.length} of 2 chosen). Hover a mission to see what it asks for.`;
         for (const c of SECONDARIES) acts.push(btn(`${S.pick.includes(c.id) ? '✓ ' : ''}${c.name}`, () => { S.pick = S.pick.includes(c.id) ? S.pick.filter(x => x !== c.id) : S.pick.concat(c.id).slice(-2); render(); }, false, false, `${c.name}\n${c.text}\nFixed: stays active all battle and is scored whenever its conditions are met, up to 20 VP.`));
-        acts.push(btn('Reveal choices', confirmSecondaries, true, S.pick.length !== 2)); acts.push(btn('Back', () => chooseSecMode(null)));
-      } else { prompt = 'Tactical: you draw two cards at the start of each of your Command phases. Any of these can come up:' + deck(SECONDARIES, 'Tactical deck'); acts.push(btn('Reveal choices', confirmSecondaries, true)); acts.push(btn('Back', () => chooseSecMode(null))); }
+        acts.push(btn(G.hot && !G.hotSecDone ? 'Lock in choices' : 'Reveal choices', confirmSecondaries, true, S.pick.length !== 2)); acts.push(btn('Back', () => chooseSecMode(null)));
+      } else { prompt = 'Tactical: you draw two cards at the start of each of your Command phases. Any of these can come up:' + deck(SECONDARIES, 'Tactical deck'); acts.push(btn(G.hot && !G.hotSecDone ? 'Lock in choices' : 'Reveal choices', confirmSecondaries, true)); acts.push(btn('Back', () => chooseSecMode(null))); }
     }
     if (G.step === 'formations') {
       prompt = `Choose units to start in reserves (up to ${maxReserves('player')}). Click a name to toggle it.${inArmy('player').some(x => forcedReserve(x)) ? ' Aircraft (and Drop Pod style transports) always start in reserves and do not count toward that limit.' : ''}${inArmy('player').some(x => tcfg(x)) ? ' Use Load transports to put units inside your transports.' : ''}${G.units.some(x => x.alive && x.side === 'player' && x.embarkedIn) ? ' Embarked: ' + G.units.filter(x => x.alive && x.side === 'player' && x.embarkedIn).map(x => x.name).join(', ') + '.' : ''}`;
@@ -8908,7 +8922,7 @@ function renderCards() {
   const acts = (G.acts || []).filter(a => a.side === 'player').map(a => { const u = G.units.find(x => x.id === a.uid); return `<li>${escH(u ? u.name : 'A unit')}: ${escH(actLabel(a))}</li>`; }).join('');
   $('#b-cards').innerHTML = `${priBlock}<h3>Your secondaries <span class="muted">(${S.mode}, ${G.vp.player.sec} VP)</span></h3>${myCards.length ? myCards.map(c => card(c, true)).join('') : '<p class="muted">No cards in hand yet.</p>'}
     ${acts ? `<h4>Actions in progress</h4><ul style="margin:2px 0 6px 16px;padding:0">${acts}</ul>` : ''}
-    <details><summary>AI secondaries (${A2.hand.length} in hand, ${G.vp.ai.sec} VP)</summary>${A2.hand.map(c => card(c, false)).join('') || '<p class="muted">None right now.</p>'}</details>`;
+    <details><summary>${G.hot ? escH(hotName('ai')) : 'AI'} secondaries (${A2.hand.length} in hand, ${G.vp.ai.sec} VP)</summary>${A2.hand.map(c => card(c, false)).join('') || '<p class="muted">None right now.</p>'}</details>`;
   $$('#b-cards [data-swap]').forEach(el => el.addEventListener('click', () => redrawCard(S.hand.find(c => c.id === el.dataset.swap))));
   $$('#b-cards [data-discard]').forEach(el => el.addEventListener('click', discardForCp));
   $$('#b-cards [data-beacon]').forEach(el => el.addEventListener('change', () => { const c = secCards(S).find(x => x.id === 'beacon'); if (c) { c.beacon = +el.value; const u = G.units.find(x => x.id === c.beacon); log(`You pick ${u ? u.name : 'a unit'} as the beacon.`, 'player'); } }));
@@ -16460,13 +16474,14 @@ function renderArmyLines() {
   if (box._html !== html) { box._html = html; box.innerHTML = html; }
 }
 function oppRefresh() {
-  const hot = !!(cpMenu && $('#b-hot') && $('#b-hot').checked);
+  const hot = !!($('#b-hot') && $('#b-hot').checked);
   $$('#b-opp button').forEach(b => b.classList.toggle('on', (b.dataset.opp === 'hot') === hot));
   const setLbl = (l, t) => { if (l && l.firstChild && l.firstChild.nodeType === 3) l.firstChild.nodeValue = t; };
-  setLbl($('#b-army-p-l'), hot ? "Player 1's patrol" : cpMenu ? 'Your patrol' : 'Your army (Imperial Forces)');
-  setLbl($('#b-army-a-l'), hot ? "Player 2's patrol" : cpMenu ? 'AI patrol' : 'AI army (Hostile Cogitator)');
-  const n = $('#b-opp-note'); if (n) n.textContent = hot ? 'Two people share this screen and take turns. A cover screen hides the board whenever the device is passed, so battle formations stay secret. Player 2 takes the second patrol below (Random picks one for them). No AI plays.' : 'The AI plays the second patrol, deploys it, makes every decision for it and takes its turns.';
-  const it = $('#b-intro'); if (it) it.textContent = hot ? 'Pick a patrol for each player, choose how you want to roll dice, then start. Player 1 sets up first; the app tells you when to pass the device.' : "Pick your army and the AI's, choose how you want to roll dice, then start. A step-by-step walkthrough of the battle setup follows.";
+  setLbl($('#b-army-p-l'), hot ? (cpMenu ? "Player 1's patrol" : "Player 1's army") : cpMenu ? 'Your patrol' : 'Your army (Imperial Forces)');
+  setLbl($('#b-army-a-l'), hot ? (cpMenu ? "Player 2's patrol" : "Player 2's army") : cpMenu ? 'AI patrol' : 'AI army (Hostile Cogitator)');
+  const n = $('#b-opp-note'); if (n) n.textContent = hot ? 'Two people share this screen and take turns. A cover screen hides the board whenever the device is passed, so battle formations stay secret. ' + (cpMenu ? 'Player 2 takes the second patrol below (Random picks one for them).' : 'Player 2 takes the second army below. Force Dispositions and secondary missions are also chosen in secret.') + ' No AI plays.' : 'The AI plays the second ' + (cpMenu ? 'patrol' : 'army') + ', deploys it, makes every decision for it and takes its turns.';
+  const it = $('#b-intro'); if (it) it.textContent = hot ? 'Pick ' + (cpMenu ? 'a patrol' : 'an army') + ' for each player, choose how you want to roll dice, then start. Player 1 sets up first; the app tells you when to pass the device.' : "Pick your army and the AI's, choose how you want to roll dice, then start. A step-by-step walkthrough of the battle setup follows.";
+  setLbl($('#b-disp-p-l'), hot ? "Player 1's Force Disposition" : 'Your Force Disposition'); setLbl($('#b-disp-a-l'), hot ? "Player 2's Force Disposition" : 'AI Force Disposition');
   const nw = $('#b-new .sub'); if (nw) nw.textContent = hot ? 'Start a two-player game on this device' : 'Start a new game with these armies';
 }
 function refreshArmyUI() {
@@ -16505,7 +16520,7 @@ function refreshArmyUI() {
     $('#b-army-a').innerHTML = buildOptions(findBuild(av) && !CP_BUILDS.some(b => b.id === av) ? av : defaultBuildId(1));
   }
   for (const id of ['#b-disp-p', '#b-disp-a']) { const l = $(id) && $(id).closest('label'); if (l) { l.hidden = cpMenu; l.style.display = cpMenu ? 'none' : ''; } }
-  { const hl = $('#b-hot-l'); if (hl) hl.hidden = !cpMenu; if (!cpMenu && $('#b-hot')) $('#b-hot').checked = false; oppRefresh(); }
+  { const hl = $('#b-hot-l'); if (hl) hl.hidden = false; oppRefresh(); }
   { const gt = $('#b-gtype'); if (gt) gt.value = cpMenu ? 'cp' : 'standard'; }
   const un = $('#a-unhide'); if (un && un.addEventListener) un.addEventListener('click', async () => { hiddenSamples = []; await saveHidden(); refreshArmyUI(); });
   fillDispSelects();
