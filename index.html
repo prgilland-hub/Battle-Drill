@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.27-1123';
+  const VERSION = '2026.11.27-1127';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -17566,7 +17566,7 @@ void main(){
     if(fa<.999){ float fn=fract(52.9829189*fract(dot(gl_FragCoord.xy,vec2(.06711056,.00583715)))); if(fn>fa) discard; } }
   float gls=floor(vM.x*.5+.001), wx=vM.x-2.*gls;
   vec3 n=normalize(vN); vec3 c=vC;
-  vec3 tcol=pow(texture(uTx,vUV).rgb,vec3(2.2)); if(uUseTx>.5) c=tcol;
+  vec3 tcol=pow(texture(uTx,vUV).rgb,vec3(2.2)); if(uUseTx>.5) c=tcol*.56;
   n=normalize(n+(vec3(vn(vW*9.),vn(vW*9.+7.),vn(vW*9.+13.))-.5)*.38*wx);
   if(abs(wx-.8125)<.004 && abs(n.y)<.6){ vec3 t=normalize(cross(n,vec3(0.,1.,0.))); float ph=dot(vW,t)*24.; n=normalize(n+t*cos(ph)*.55); c*=.84+.16*sin(ph);
     float st=vn(vec3(dot(vW,t)*5.,vW.y*.35,3.)); c=mix(c,c*vec3(.7,.46,.34),smoothstep(.58,.82,st)*clamp(1.-vW.y*.25,0.,1.));
