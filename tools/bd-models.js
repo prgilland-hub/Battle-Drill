@@ -249,6 +249,7 @@ const BDModels = (function () {
   /* datasheet name (+faction) -> which stored models may stand in for it */
   const DG = f => /death guard/i.test(f || ''), ANY = () => true;
   const RULES = [
+    [/exalted sorcerer.*disc/, ANY, /^exalted sorcerers? on disc(?! of tzeentch)/],
     [/^plague marines?\b|^plague marine squad/, DG, /^(plague marine|pleague marine|kill team - plague|death guard kill team)/],
     [/^poxwalkers?/, ANY, /^poxwalkers/], [/^blightlord/, ANY, /^blightlord terminator/], [/^deathshroud/, ANY, /^deathshroud/],
     [/^(death guard )?rhino/, DG, /^(death guard rhino|dg rino|rhino)/], [/predator/, DG, /predator/], [/land ?raider/, DG, /landraider/], [/defiler/, DG, /defiler/], [/helbrute/, DG, /helbrute/],

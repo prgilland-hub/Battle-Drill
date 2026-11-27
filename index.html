@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.27-1216';
+  const VERSION = '2026.11.27-1232';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -473,6 +473,7 @@ const BDModels = (function () {
   /* datasheet name (+faction) -> which stored models may stand in for it */
   const DG = f => /death guard/i.test(f || ''), ANY = () => true;
   const RULES = [
+    [/exalted sorcerer.*disc/, ANY, /^exalted sorcerers? on disc(?! of tzeentch)/],
     [/^plague marines?\b|^plague marine squad/, DG, /^(plague marine|pleague marine|kill team - plague|death guard kill team)/],
     [/^poxwalkers?/, ANY, /^poxwalkers/], [/^blightlord/, ANY, /^blightlord terminator/], [/^deathshroud/, ANY, /^deathshroud/],
     [/^(death guard )?rhino/, DG, /^(death guard rhino|dg rino|rhino)/], [/predator/, DG, /predator/], [/land ?raider/, DG, /landraider/], [/defiler/, DG, /defiler/], [/helbrute/, DG, /helbrute/],
