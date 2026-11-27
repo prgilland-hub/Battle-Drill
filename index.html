@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.27-1040';
+  const VERSION = '2026.11.27-1054';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -459,10 +459,10 @@ const BDModels = (function () {
   function add(mb, fig, x, y, z, yaw) {
     const cy = Math.cos(yaw), sy = Math.sin(yaw);
     /* the texture colours are screen (sRGB) values but the renderer lights in linear light, like the built-in figures: convert once and keep both copies, so the models keep their painted colours instead of washing out pale */
-    const lin = typeof BF_LIN !== 'undefined' && BF_LIN.on;
+    const gm = typeof BF_LIN !== 'undefined' && BF_LIN.on ? (BF_LIN.g || 2.2) : 1;
     for (const g of fig.parts) {
       const n = g.V.length / 3, base = mb.n;
-      const C = lin ? (g.CL || (g.CL = Float32Array.from(g.C, v => Math.pow(v < 0 ? 0 : v, 2.2)))) : g.C;
+      const C = gm !== 1 ? (g.CLg === gm ? g.CL : (g.CLg = gm, g.CL = Float32Array.from(g.C, v => Math.pow(v < 0 ? 0 : v, gm)))) : g.C;
       for (let j = 0; j < n; j++) {
         const vx = g.V[j * 3], vz = g.V[j * 3 + 2], nx = g.N[j * 3], nz = g.N[j * 3 + 2];
         mb.P.push(vx * cy + vz * sy + x, g.V[j * 3 + 1] + y, -vx * sy + vz * cy + z); mb.N.push(nx * cy + nz * sy, g.N[j * 3 + 1], -nx * sy + nz * cy); mb.C.push(C[j * 3], C[j * 3 + 1], C[j * 3 + 2]); mb.M.push(.16, 0);
@@ -2441,6 +2441,8 @@ Unit: Big Walker | models 1 | M 8 | T 10 | Sv 2 | Inv 5 | W 12 | Ld 6 | OC 4 | s
       <h3>Look</h3>
       <div class="set-row"><div><b>Cogitator interface</b><span class="muted">The green-phosphor data-slate look across the whole app. Turn it off to go back to the classic light and dark look.</span></div><button type="button" class="chip-btn" id="look-toggle" aria-pressed="true" data-tip="Cogitator interface on or off."><span class="ico" aria-hidden="true">🖥️</span><span class="lbl">Cogitator</span></button></div>
       <div class="set-row"><div><b>Atmosphere</b><span class="muted">Grimdark look: grain, vignette, riveted panels and a scarred battlefield.</span></div><button type="button" class="chip-btn" id="atmo-toggle" aria-pressed="true" data-tip="Grimdark look: grain, vignette, riveted panels and a scarred battlefield."><span class="ico" aria-hidden="true">🌫️</span><span class="lbl">Atmosphere</span></button></div>
+      <div class="set-row"><div><b>Imported 3D model colour</b><span class="muted">If your imported models look washed out or pale, turn this up. It changes how their texture colours are lit, in the 3D battle, the datasheet preview and the army builder.</span></div><select id="set-modelcol"><option value="off">Off (original)</option><option value="medium">Medium</option><option value="full">Full</option></select></div>
+      <div class="set-row"><div><b>3D true-colour lighting</b><span class="muted">Neutral lighting on the 3D table so painted colours read true. Off gives the moody tinted lighting of each map theme.</span></div><label class="set-check"><input type="checkbox" id="set-truecol" checked> <span>On</span></label></div>
     </div>
     <div class="set-sec" id="set-board">
       <h3>Battlefield</h3>
@@ -17339,10 +17341,20 @@ function pmeOpenRoster(key) {
 }
 
 /* true-colour lighting: the themes tint the whole table (green marsh, orange desert); this keeps the mood but lets painted colours read as painted */
-const BF_LIN = { on: false };   /* imported-model colours treated as screen (sRGB) values and lit in linear light; off keeps the original look until you have compared them */
-try { BF_LIN.on = localStorage.getItem('bd.linmodels') === 'on'; } catch (e) { }
+const BF_LIN = { on: false, g: 2.2 };   /* imported-model colours: their texture colours are screen (sRGB) values; lighting wants linear light. Off keeps the original look; Medium and Full darken and enrich pale models. */
+try { const v = localStorage.getItem('bd.linmodels'); BF_LIN.on = v === 'medium' || v === 'full' || v === 'on'; BF_LIN.g = v === 'medium' ? 1.6 : 2.2; } catch (e) { }
 const BF_NEU = { on: true };
 try { BF_NEU.on = localStorage.getItem('bd.truecolour') !== 'off'; } catch (e) { }
+const bfModelColourVal = () => !BF_LIN.on ? 'off' : BF_LIN.g < 2 ? 'medium' : 'full';
+function bfSetModelColour(v) {
+  BF_LIN.on = v === 'medium' || v === 'full'; BF_LIN.g = v === 'medium' ? 1.6 : 2.2;
+  try { localStorage.setItem('bd.linmodels', v); } catch (e) { }
+  try { if (typeof BF3D !== 'undefined') BF3D.dirty = true; window.dispatchEvent(new Event('bd-colour-changed')); window.dispatchEvent(new Event('bd-models-changed')); } catch (e) { }
+}
+function bfSetTrueColour(on) {
+  BF_NEU.on = !!on; try { localStorage.setItem('bd.truecolour', BF_NEU.on ? 'on' : 'off'); } catch (e) { }
+  try { if (typeof BF3D !== 'undefined') BF3D.dirty = true; window.dispatchEvent(new Event('bd-colour-changed')); window.dispatchEvent(new Event('bd-models-changed')); } catch (e) { }
+}
 function bfNeuEnv(env) {
   const lum = c => .3 * c[0] + .59 * c[1] + .11 * c[2], des = (c, k, g) => { const l = lum(c); return c.map(v => Math.max(0, (l + (v - l) * (1 - k)) * g)); };
   return Object.assign({}, env, { sunC: des(env.sunC, .62, 1.04), ambT: des(env.ambT, .72, 1.7), ambB: des(env.ambB, .72, 1.6), fog: des(env.fog, .45, 1.15), fogD: (env.fogD || .008) * .72 });
@@ -18428,9 +18440,13 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
     bar.innerHTML = '<button type="button" id="b-3dmore" aria-expanded="false" title="3D view options and controls">View options \u25BE</button><div id="b-3dpanel"><select id="b-3dtheme" aria-label="Terrain theme"><option value="auto">Theme: auto</option><option value="desert">Desert ruins</option><option value="base">Hive base</option><option value="marsh">Rot marsh</option><option value="ice">Frozen hive</option><option value="forge">Forge world</option><option value="jungle">Death world</option><option value="hive">Hive city</option></select><button type="button" data-o="zones" aria-pressed="true" title="Show or hide the deployment zones">Zones</button><button type="button" data-o="objs" aria-pressed="true" title="Show or hide the objective markers">Objectives</button><button type="button" data-o="dice" aria-pressed="true" title="Show or hide the dice trays">Dice trays</button><button type="button" data-o="guides" aria-pressed="true" title="Show or hide the placement guides: 8 inch rings and the 6 inch edge band">Guides</button><button type="button" data-o="badges" aria-pressed="true" title="Health pips and status markers over each unit">Unit badges</button><button type="button" data-o="fx" aria-pressed="true" title="Tracers, muzzle flashes, impacts and damage numbers when attacks resolve">Combat effects</button><button type="button" id="b-3dsight" aria-pressed="true" title="Show or hide sight lines, with the distance to every enemy">Sight lines</button><select id="b-3dq" aria-label="Graphics quality" title="Graphics quality"><option value="low">Quality: low</option><option value="std">Quality: standard</option><option value="high">Quality: high</option><option value="auto">Quality: auto</option></select><button type="button" id="b-3dfps" title="Show frame time, resolution and draw load">Stats</button><button type="button" id="b-3dchk" title="List which 3D model each unit on the board matched">Model check</button><button type="button" id="b-3dhi" title="Use the high-detail copy of each model on the board (needs models imported with a high-detail copy)">High detail</button><button type="button" id="b-3dtop" title="Top-down view">Top</button><button type="button" id="b-3dtab" title="Tabletop view">Table</button><span id="b-3dnote">Drag = select units · Alt-drag = turn models · right-drag = orbit · WASD move · Q/E turn view · Z/X zoom · right-click or 1 = datasheet</span></div>';
     bar.querySelector('#b-3dmore').addEventListener('click', () => { const o = bar.classList.toggle('open'); bar.querySelector('#b-3dmore').setAttribute('aria-expanded', String(o)); });
     holder.appendChild(bar);
-    { const pn = bar.querySelector('#b-3dpanel'); if (pn) { const tb = document.createElement('button'); tb.type = 'button'; tb.textContent = 'True colour'; tb.title = 'Neutral lighting so painted colours read true. Turn off for the moody themed lighting.'; tb.setAttribute('aria-pressed', String(BF_NEU.on)); tb.addEventListener('click', () => { BF_NEU.on = !BF_NEU.on; try { localStorage.setItem('bd.truecolour', BF_NEU.on ? 'on' : 'off'); } catch (e) { } tb.setAttribute('aria-pressed', String(BF_NEU.on)); BF3D.dirty = true; if (BF3D.figCache) BF3D.figCache = null; sync(true); }); pn.appendChild(tb);
-      const lb = document.createElement('button'); lb.type = 'button'; lb.textContent = 'Model colour fix'; lb.title = 'Imported models: treat their texture colours as screen colours and light them in linear light. If your models look washed out or pale, turn this on.'; lb.setAttribute('aria-pressed', String(BF_LIN.on));
-      lb.addEventListener('click', () => { BF_LIN.on = !BF_LIN.on; try { localStorage.setItem('bd.linmodels', BF_LIN.on ? 'on' : 'off'); } catch (e) { } lb.setAttribute('aria-pressed', String(BF_LIN.on)); BF3D.dirty = true; try { window.dispatchEvent(new Event('bd-models-changed')); } catch (e) { } sync(true); }); pn.appendChild(lb); } }
+    { const pn = bar.querySelector('#b-3dpanel'); if (pn) {
+      const tb = document.createElement('button'); tb.type = 'button'; tb.textContent = 'True colour'; tb.title = 'Neutral lighting so painted colours read true. Turn off for the moody themed lighting.';
+      const lb = document.createElement('button'); lb.type = 'button'; lb.title = 'Imported models: if they look washed out or pale, turn this up. Off, Medium or Full.';
+      const upd = () => { tb.setAttribute('aria-pressed', String(BF_NEU.on)); lb.textContent = 'Model colour: ' + bfModelColourVal(); lb.setAttribute('aria-pressed', String(BF_LIN.on)); const a = document.getElementById('set-modelcol'), c = document.getElementById('set-truecol'); if (a) a.value = bfModelColourVal(); if (c) c.checked = BF_NEU.on; };
+      tb.addEventListener('click', () => { bfSetTrueColour(!BF_NEU.on); try { sync(true); } catch (e) { } });
+      lb.addEventListener('click', () => { const v = bfModelColourVal(); bfSetModelColour(v === 'off' ? 'medium' : v === 'medium' ? 'full' : 'off'); try { sync(true); } catch (e) { } });
+      upd(); window.addEventListener('bd-colour-changed', upd); pn.appendChild(tb); pn.appendChild(lb); } }
     bar.querySelectorAll('[data-o]').forEach(b => b.addEventListener('click', () => { BF3D.opt[b.dataset.o] = !BF3D.opt[b.dataset.o]; try { localStorage.setItem(OPT_KEY, JSON.stringify(BF3D.opt)); } catch (e) { } applyOpts(); if (b.dataset.o === 'guides') buildGhost(); }));
     bar.querySelector('#b-3dsight').addEventListener('click', () => { const cb = document.getElementById('b-sight'); if (cb) { cb.checked = !cb.checked; cb.dispatchEvent(new Event('change')); } });
     bar.querySelector('#b-3dtheme').addEventListener('change', e => { BF3D.theme = e.target.value; BF3D.tsig = ''; sync(true); });
@@ -25683,6 +25699,12 @@ async function keepAwake() {
 })();
 
 /* Settings: a button in the sidebar footer that opens a page (not part of the reorderable menu) */
+(function initColourSettings() {
+  const a = $('#set-modelcol'), c = $('#set-truecol');
+  if (a) { a.value = bfModelColourVal(); a.addEventListener('change', e => bfSetModelColour(e.target.value)); }
+  if (c) { c.checked = BF_NEU.on; c.addEventListener('change', e => bfSetTrueColour(e.target.checked)); }
+  window.addEventListener('bd-colour-changed', () => { if (a) a.value = bfModelColourVal(); if (c) c.checked = BF_NEU.on; });
+})();
 (function initModelSettings() { const c = $('#set-models'), sn = $('#set-snap'); if (c) { c.checked = MODELS.on; c.addEventListener('change', e => setModelsOn(e.target.checked)); } if (sn) { sn.value = MODELS.snap ? 'snap' : 'flag'; sn.addEventListener('change', e => setSnapMode(e.target.value === 'snap')); } const am = $('#set-aimodels'); if (am) { am.checked = MODELS.aiModels; am.addEventListener('change', e => { MODELS.aiModels = e.target.checked; try { localStorage.setItem('battleDrill.aiModels', e.target.checked ? 'on' : 'off'); } catch (x) { } }); } const cl = $('#set-close'); if (cl) { cl.value = MODELS.manualClose ? 'manual' : 'auto'; cl.addEventListener('change', e => { MODELS.manualClose = e.target.value === 'manual'; try { localStorage.setItem('battleDrill.manualClose', e.target.value); } catch (x) { } }); } })();
 function openSettings() {
   if (typeof sbMobile === 'function' && sbMobile()) sbDrawer(false);
