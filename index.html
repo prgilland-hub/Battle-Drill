@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.27-0211';
+  const VERSION = '2026.11.27-1018';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -813,6 +813,10 @@ input[type=checkbox]{accent-color:var(--brass);width:17px;height:17px}
 .reach{fill:var(--brass-soft);stroke:var(--brass);stroke-width:.14;stroke-dasharray:.6 .35}
 .tok{stroke:var(--field);stroke-width:.18}
 .mb{stroke-width:.12}.mb.player{fill:rgba(76,128,214,.34);stroke:var(--you)}.mb.ai{fill:rgba(214,84,72,.34);stroke:var(--them)}
+.tk-sh{fill:#000;opacity:.34;pointer-events:none}.tk-rim{stroke:#070b07;stroke-width:.07}
+.tk-face{stroke:rgba(0,0,0,.35);stroke-width:.05}.tk-face.player{fill:#16346e}.tk-face.ai{fill:#5e1a14}
+.tk-gl{fill:#f6f3e8;stroke:rgba(0,0,0,.5);stroke-width:.09;pointer-events:none}.tk-gl .tk-cut{fill:#12171a;stroke:none}
+.ufoot.tkq:not(.ready):not(.sel){opacity:0}.ulab.tkq:not(.on){opacity:.55}.ulab.tkq.on{opacity:1}
 .mring{fill:none;stroke-width:.16;pointer-events:none}.mring.player{stroke:var(--you)}.mring.ai{stroke:var(--them)}
 .ufoot{fill:none;stroke-width:.14;stroke-dasharray:.5 .35;opacity:.5;pointer-events:none}.ufoot.player{stroke:var(--you)}.ufoot.ai{stroke:var(--them)}
 .ufoot.ready{stroke:var(--brass);opacity:.95;stroke-width:.2;stroke-dasharray:none}.ufoot.sel{stroke:var(--brass);opacity:1;stroke-width:.5;stroke-dasharray:none}
@@ -2269,6 +2273,7 @@ html[data-look="cog"] .muted{color:var(--muted)}
 
 
           <label class="check-line" style="flex-direction:row;color:var(--ink)"><input type="checkbox" id="b-moveblock" checked>Enemy units block movement, and ruins block non-Infantry (Fly can bypass both)</label>
+          <label class="check-line" style="flex-direction:row;color:var(--ink)"><input type="checkbox" id="b-clean" checked>Clean tabletop tokens: solid bases with a bold icon, instead of the miniature art</label>
           <label class="check-line" style="flex-direction:row;color:var(--ink)"><input type="checkbox" id="b-minis" checked>Draw 3D miniatures on unit tokens where available (so far: every Death Guard, Space Marine, Salamander, Black Templar and Tyranid datasheet, in army colours)</label>
         </div></div>
         <button class="btn primary" id="b-new">Initiate Engagement<span class="sub">Start a new game with these armies</span></button>
@@ -8818,7 +8823,7 @@ function sightHtml() {
 function drawSight() { const g = document.getElementById('sight-g'); if (g) g.innerHTML = sightHtml() + pendHtml(); }
 function renderBoard() {
   const s = [];
-  s.push(`<defs><filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation=".45"/></filter><pattern id="hatch" width="1" height="1" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="1" stroke="var(--ruin-edge)" stroke-width=".25"/></pattern></defs>`);
+  s.push(`<defs><filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation=".45"/></filter><pattern id="hatch" width="1" height="1" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="1" stroke="var(--ruin-edge)" stroke-width=".25"/></pattern>${TOK.on ? tokDefs() : ''}</defs>`);
   const grim = !!(document.documentElement && document.documentElement.dataset && document.documentElement.dataset.grim === 'on');
   s.push(`<rect class="b-bg" x="0" y="0" width="${BW}" height="${BH}"/>`);
   if (grim) {
@@ -12398,6 +12403,54 @@ function ensureSprite(archKey, side, pal) {
   finally { MINI.SZ = sz; }
   MODELS.sprDone[key] = id; return id;
 }
+/* ---- clean tabletop-style tokens: solid bases, a bold icon, a coloured rim, a soft shadow ---- */
+const TOK = { on: true };
+try { TOK.on = localStorage.getItem('battleDrill.clean') !== 'off'; } catch (e) { }
+const TOK_GLYPHS = {
+  inf: '<path d="M-.62 .6V-.02A.62.7 0 0 1 .62-.02V.6H.32V.3H-.32V.6Z"/><rect x="-.42" y="-.12" width=".84" height=".17" rx=".05" class="tk-cut"/>',
+  char: '<path d="M0-.85.26-.28.88-.2.42.22.54.84 0 .54-.54.84-.42.22-.88-.2-.26-.28Z"/>',
+  veh: '<rect x="-.9" y="-.58" width="1.8" height="1.16" rx=".2"/><rect x="-.9" y="-.58" width=".34" height="1.16" rx=".12" class="tk-cut"/><rect x=".56" y="-.58" width=".34" height="1.16" rx=".12" class="tk-cut"/><circle cx="-.08" cy="0" r=".34" class="tk-cut"/><rect x=".1" y="-.08" width=".9" height=".16" rx=".05"/>',
+  walk: '<path d="M-.5-.7H.5L.74.1H.38V.78H-.38V.1H-.74Z"/><rect x="-.18" y="-.5" width=".36" height=".34" rx=".06" class="tk-cut"/>',
+  mon: '<path d="M0-.95.2-.4.8-.62.54-.06.95.3.4.32.46.9 0 .5-.46.9-.4.32-.95.3-.54-.06-.8-.62-.2-.4Z"/><circle cx="0" cy=".02" r=".2" class="tk-cut"/>',
+  bike: '<path d="M.14-.9-.52.12H-.04L-.16.9.52-.14H.04Z"/>',
+  swarm: '<circle cx="0" cy="-.46" r=".3"/><circle cx="-.5" cy=".38" r=".3"/><circle cx=".5" cy=".38" r=".3"/>',
+  air: '<path d="M0-.95.2-.25.92.22V.42L.2.26.15.78.4.95V1H-.4V.95L-.15.78-.2.26-.92.42V.22L-.2-.25Z"/>'
+};
+function tokDefs() {
+  const g = (id, a, b) => `<radialGradient id="tkg-${id}" cx=".38" cy=".3" r=".9"><stop offset="0" stop-color="${a}"/><stop offset="1" stop-color="${b}"/></radialGradient>`;
+  return g('player', '#5c93ea', '#1f4592') + g('ai', '#ea6a5c', '#86251d') + g('gold', '#f2d27a', '#a87a1c') +
+    Object.entries(TOK_GLYPHS).map(([k, v]) => `<g id="tg-${k}" class="tk-gl">${v}</g>`).join('');
+}
+function tokKind(u, m) {
+  if (m && m.leader) return 'char';
+  if (has(u, 'aircraft')) return 'air';
+  if (has(u, 'vehicle')) return has(u, 'walker') ? 'walk' : 'veh';
+  if (has(u, 'monster')) return 'mon';
+  if (has(u, 'character') && u.mods && u.mods.length === 1) return 'char';
+  if (has(u, 'swarm')) return 'swarm';
+  if (has(u, 'mounted')) return 'bike';
+  return 'inf';
+}
+function tokModel(u, m, p, sh, side) {
+  const kind = tokKind(u, m), gold = kind === 'char' ? 'gold' : side, x = p.x, y = p.y, hull = !!(sh.hw || sh.hh);
+  const rim = `tkg-${gold}`, out = [];
+  if (!hull) {
+    const r = m.r;
+    out.push(`<circle class="tk-sh" cx="${(x + r * .12).toFixed(2)}" cy="${(y + r * .2).toFixed(2)}" r="${r.toFixed(2)}"/>`);
+    out.push(`<circle class="tk-rim" cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="${r.toFixed(2)}" fill="url(#${rim})"/>`);
+    out.push(`<circle class="tk-face ${side}" cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="${(r * .8).toFixed(2)}"/>`);
+    out.push(`<use href="#tg-${kind}" transform="translate(${x.toFixed(2)} ${y.toFixed(2)}) scale(${(r * .56).toFixed(3)})"/>`);
+  } else {
+    const rho = sh.rho, deg = (sh.rot * 180 / Math.PI).toFixed(1), tr = `translate(${sh.x.toFixed(2)} ${sh.y.toFixed(2)}) rotate(${deg})`, w = 2 * (sh.hw + rho), h = 2 * (sh.hh + rho);
+    out.push(`<rect class="tk-sh" x="${(-w / 2 + rho * .12).toFixed(2)}" y="${(-h / 2 + rho * .2).toFixed(2)}" width="${w.toFixed(2)}" height="${h.toFixed(2)}" rx="${rho.toFixed(2)}" transform="${tr}"/>`);
+    out.push(`<rect class="tk-rim" x="${(-w / 2).toFixed(2)}" y="${(-h / 2).toFixed(2)}" width="${w.toFixed(2)}" height="${h.toFixed(2)}" rx="${rho.toFixed(2)}" fill="url(#${rim})" transform="${tr}"/>`);
+    const k = .84, iw = w * k, ih = h * k;
+    out.push(`<rect class="tk-face ${side}" x="${(-iw / 2).toFixed(2)}" y="${(-ih / 2).toFixed(2)}" width="${iw.toFixed(2)}" height="${ih.toFixed(2)}" rx="${(rho * k).toFixed(2)}" transform="${tr}"/>`);
+    const gs = Math.min(w / 2, h / 2) * .62, gx = kind === 'veh' || kind === 'air' ? Math.min(w / 2 * .72, gs * 1.5) : gs;
+    out.push(`<use href="#tg-${kind}" transform="${tr} scale(${gx.toFixed(3)} ${(kind === 'veh' || kind === 'air' ? gs : gs).toFixed(3)})"/>`);
+  }
+  return out.join('');
+}
 function modelsGroupSvg(u, pos, opacity, rots) {
   const ms = u.mods, out = [], side = u.side, pal = miniPalOf(u);
   const arch = MINI.on ? miniArchOf(u.ds || u.name, miniFactionOf(u)) : null, larch = MINI.on && u.leader ? miniArchOf(u.leader.ds || u.leader.name, miniFactionOf(u)) : null;
@@ -12408,6 +12461,7 @@ function modelsGroupSvg(u, pos, opacity, rots) {
     const p = P(m), x = p.x.toFixed(2), y = p.y.toFixed(2), sh = shAt(m, p, rots && rots.has(m.id) ? rots.get(m.id) : undefined); let key = null;
     const lk = (!m.leader && u.looks && arch === 'plague_marine') ? pmxKey(u.looks[m.pose]) : null;
     const aKey = m.leader ? lArchOf(u, m, larch) : arch, fk = lk || (aKey ? (aKey === 'blightlord' || POSE_FAMILIES[aKey] ? poses[m.pose % poses.length] : aKey) : null), hullArch = fk && MINI_ARCH[fk] && MINI_ARCH[fk].hull, hsp = hullArch ? ensureSprite(fk, side, pal) : null, hmeta = hsp ? MODELS.sprMeta[hsp] : null;
+    if (TOK.on && !(upl && ms.length === 1)) { out.push(tokModel(u, m, p, sh, side)); out.push(woundRing(u, m, p, sh)); continue; }
     if (sh.hw || sh.hh) {   // an oval or a hull
       out.push(shapeEl(sh, `mb ${side} plain shape`));
       if (hmeta) { const Lw = (sh.hw + sh.rho) * 2, k = Lw / 2.6, iw = (hmeta.W / hmeta.pxPerUnit) * k; out.push(`<use href="#${hsp}" transform="translate(${sh.x.toFixed(2)} ${sh.y.toFixed(2)}) rotate(${(sh.rot * 180 / Math.PI).toFixed(1)}) scale(${iw.toFixed(3)}) translate(-.5 -.5)"/>`); }
@@ -12444,9 +12498,9 @@ function modelsSvg(u, cls, pos) {
   out.push(modelsGroupSvg(u, pos, ghost ? .26 : faded ? .55 : 1));
   if (ghost) return out.join('');
   const state = cls.includes(' sel') ? ' sel' : cls.includes('ready') ? ' ready' : '';
-  out.push(`<circle class="ufoot ${side}${state}" cx="${u.x.toFixed(2)}" cy="${u.y.toFixed(2)}" r="${(u.r + .2).toFixed(2)}"/>`);
+  out.push(`<circle class="ufoot ${side}${state}${TOK.on ? ' tkq' : ''}" cx="${u.x.toFixed(2)}" cy="${u.y.toFixed(2)}" r="${(u.r + .2).toFixed(2)}"/>`);
   const n = startModels(u) > 1 ? totalModels(u) + '/' + startModels(u) : u.cur + 'W', txt = `${u.tag || ''} ${n}`, w = Math.max(3.2, txt.length * .62 + 1), ly = u.y - u.r - 1.15;
-  out.push(`<g class="ulab ${side}"><rect x="${(u.x - w / 2).toFixed(2)}" y="${(ly - .75).toFixed(2)}" width="${w.toFixed(2)}" height="1.5" rx=".6"/><text x="${u.x.toFixed(2)}" y="${(ly + .32).toFixed(2)}" font-size=".95" text-anchor="middle">${escH(txt)}</text></g>`);
+  out.push(`<g class="ulab ${side}${TOK.on ? ' tkq' + (state ? ' on' : '') : ''}"><rect x="${(u.x - w / 2).toFixed(2)}" y="${(ly - .75).toFixed(2)}" width="${w.toFixed(2)}" height="1.5" rx=".6"/><text x="${u.x.toFixed(2)}" y="${(ly + .32).toFixed(2)}" font-size=".95" text-anchor="middle">${escH(txt)}</text></g>`);
   return out.join('');
 }
 
@@ -16595,6 +16649,7 @@ function miniSrc(u) {
     if (!PM_PENDING) MINI.cache.set(key, src); return src;
   } catch (e) { return null; }
 }
+if ($('#b-clean')) { $('#b-clean').checked = TOK.on; $('#b-clean').addEventListener('change', e => { TOK.on = e.target.checked; try { localStorage.setItem('battleDrill.clean', TOK.on ? 'on' : 'off'); } catch (err) { } if (G) render(); }); }
 if ($('#b-minis')) { $('#b-minis').checked = MINI.on; $('#b-minis').addEventListener('change', e => { MINI.on = e.target.checked; try { localStorage.setItem('battleDrill.minis', MINI.on ? 'on' : 'off'); } catch (err) { } if (G) render(); }); }
 
 
@@ -18398,6 +18453,11 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
     for (let i = 0; i < seg; i++) { const a = base + i * 2, b = base + ((i + 1) % seg) * 2; mb.I.push(a, a + 1, b + 1, a, b + 1, b); }
   }
   const SIDEC = { player: [.25, .5, 1], ai: [1, .28, .22] };
+  /* a model's base: with clean tokens it is a solid disc with a bright rim, like a tabletop token, instead of a thin ring */
+  function ringB(mb, x, y, z, r, col, seg) {
+    if (!TOK.on) { ring(mb, x, y, z, r * .96, r + .22, col, seg); return; }
+    ring(mb, x, y - .01, z, .02, r * .8, [col[0] * .38, col[1] * .38, col[2] * .38], seg); ring(mb, x, y, z, r * .8, r + .22, col, seg);
+  }
   function nearestFoe(u) { let best = null, bd = 1e9; for (const o of G.units) { if (!o.alive || !o.placed || o.side === u.side) continue; const d = Math.hypot(o.x - u.x, o.y - u.y); if (d < bd) { bd = d; best = o; } } return best; }
   const defFace = u => { const foe = nearestFoe(u); return foe ? Math.atan2(foe.y - u.y, foe.x - u.x) : (u.side === 'player' ? -1.5708 : 1.5708); };
   function buildDyn() {
@@ -18415,7 +18475,7 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
         const _rf = (window.BDModels && BDModels.on()) ? BDModels.pick(m.leader && u.leader ? ((leadersOf(u)[m.lid || 0] || u.leader).ds || (leadersOf(u)[m.lid || 0] || u.leader).name) : (u.ds || u.name), miniFactionOf(u), u.id + ':' + m.id, m.leader ? 0 : u.mods.indexOf(m) , m.leader ? 1 : u.mods.length, true) : null;
         if (_rf) { const hull0 = !!(sh.hw || sh.hh), gy0 = (H(p.x, p.y) + (p.e || 0)), fa0 = (m.face !== undefined ? m.face : (u.face !== undefined ? u.face : face)) + rv; BDModels.add(mb, _rf, p.x, gy0, p.y, hull0 ? 1.5708 - (sh.rot || 0) : 1.5708 - fa0); if (!hull0 && BF3D.rot && BF3D.rot.has(m)) arrow(mb, p.x, gy0, p.y, fa0, m.r);
           const rc = (S && mu === u && bad.has(m.id)) ? [1, .25, .2] : (S && mu === u && S.sel.has(m.id)) ? [1, .82, .3] : (SIDEC[side] || [1, 1, 1]);
-          if (!hull0) ring(mb, p.x, gy0 + .13, p.y, m.r * .96, m.r + .22, rc, 24); else ring(mb, p.x, gy0 + .13, p.y, Math.max(sh.hw, sh.hh || 0) + sh.rho * .9, Math.max(sh.hw, sh.hh || 0) + sh.rho + .2, SIDEC[side] || [1, 1, 1], 32); drawn++; continue; }
+          if (!hull0) ringB(mb, p.x, gy0 + .13, p.y, m.r, rc, 24); else ring(mb, p.x, gy0 + .13, p.y, Math.max(sh.hw, sh.hh || 0) + sh.rho * .9, Math.max(sh.hw, sh.hh || 0) + sh.rho + .2, SIDEC[side] || [1, 1, 1], 32); drawn++; continue; }
         if (!a) { generic(p, m, sh, side, S && mu === u && S.sel.has(m.id)); drawn++; continue; }
         const lk = (!m.leader && u.looks && arch === 'plague_marine') ? pmxKey(u.looks[m.pose]) : null, k = lk || ((a === 'blightlord' || POSE_FAMILIES[a]) ? poses[m.pose % poses.length] : a);
         if (!MINI_ARCH[k]) { generic(p, m, sh, side, S && mu === u && S.sel.has(m.id)); drawn++; continue; } const hull = !!(sh.hw || sh.hh), gy = (H(p.x, p.y) + (p.e || 0));
@@ -18424,7 +18484,7 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
         else { sc = m.r / .98; const fa = (m.face !== undefined ? m.face : (u.face !== undefined ? u.face : face)) + rv; yaw = 1.5708 - fa; if (BF3D.rot && BF3D.rot.has(m)) arrow(mb, p.x, gy, p.y, fa, m.r); }
         let fig; try { fig = figOf(k, lo || hull && false); } catch (e) { continue; }
         addFig(mb, fig, cols, p.x, gy, p.y, sc, yaw); drawn++;
-        if (!hull) ring(mb, p.x, gy + .05, p.y, m.r * .96, m.r + .22, (S && mu === u && bad.has(m.id)) ? [1, .25, .2] : (S && mu === u && S.sel.has(m.id)) ? [1, .82, .3] : (SIDEC[side] || [1, 1, 1]), 24);
+        if (!hull) ringB(mb, p.x, gy + .05, p.y, m.r, (S && mu === u && bad.has(m.id)) ? [1, .25, .2] : (S && mu === u && S.sel.has(m.id)) ? [1, .82, .3] : (SIDEC[side] || [1, 1, 1]), 24);
         else ring(mb, p.x, gy + .05, p.y, Math.max(sh.hw, sh.hh || 0) + sh.rho * .9, Math.max(sh.hw, sh.hh || 0) + sh.rho + .2, SIDEC[side] || [1, 1, 1], 32);
       }
       if (!drawn) occ.push({ x: u.x, y: u.y, r: u.r + .1 });
@@ -18631,7 +18691,7 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
         const big = (u.r || 1) > 3, a = P(u.x, u.y, big ? 5.4 : 3.6); if (!a) continue;
         const st = startModels(u), cur = st > 1 ? totalModels(u) : u.cur, tot = st > 1 ? st : (u.W || 1), fr = Math.max(0, Math.min(1, cur / tot));
         const hc = fr > .5 ? '#58e07a' : fr > .25 ? '#e8c25a' : '#ff5a4d', sc = !hotBlue(u.side) ? '#ff5a4d' : '#4ea0ff', isSel = sel === u;
-        ctx.globalAlpha = isSel ? 1 : .88;
+        ctx.globalAlpha = isSel ? 1 : (TOK.on ? .5 : .88);
         let w;
         if (st > 1 && st <= 12) { const pw = 7, gp = 2; w = st * pw + (st - 1) * gp; const x0 = a[0] - w / 2; ctx.fillStyle = 'rgba(8,10,12,.72)'; ctx.fillRect(x0 - 3, a[1] - 5, w + 6, 10); for (let i = 0; i < st; i++) { ctx.fillStyle = i < cur ? hc : 'rgba(255,255,255,.16)'; ctx.fillRect(x0 + i * (pw + gp), a[1] - 3, pw, 6); } }
         else { w = st > 1 ? 56 : 40; const x0 = a[0] - w / 2; ctx.fillStyle = 'rgba(8,10,12,.72)'; ctx.fillRect(x0 - 3, a[1] - 5, w + 6, 10); ctx.fillStyle = 'rgba(255,255,255,.16)'; ctx.fillRect(x0, a[1] - 3, w, 6); ctx.fillStyle = hc; ctx.fillRect(x0, a[1] - 3, w * fr, 6); }
