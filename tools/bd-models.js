@@ -149,15 +149,15 @@ const MODELIMP = (function () {
   const mul = (A, B) => { const r = new Array(12); for (let i = 0; i < 3; i++) { for (let j = 0; j < 3; j++) r[i * 4 + j] = A[i * 4] * B[j] + A[i * 4 + 1] * B[4 + j] + A[i * 4 + 2] * B[8 + j]; r[i * 4 + 3] = A[i * 4] * B[3] + A[i * 4 + 1] * B[7] + A[i * 4 + 2] * B[11] + A[i * 4 + 3]; } return r; };
   /* unit = { name, parts:[{m,t,p,x}] }; files: id -> async () => Blob (mesh text via .text()). Returns { name, parts:[{V,N,C,T}], h, r, tris } */
   async function build(unit, getMesh, getTex, opt) {
-    opt = opt || {}; build.err = ''; const parts = unit.parts, W = [], raw = [], rawM = [], rawT = [];
+    opt = opt || {}; build.err = ''; const parts = unit.parts, W = [], raw = [], rawM = [], rawT = [], skip = [];
     for (let i = 0; i < parts.length; i++) {
       const p = parts[i], L = mat(p.x), par = p.p; let M;
       if (par < 0) M = mat([0, 0, 0, 0, (p.x[4] || 0) - 180, 0, p.x[6], p.x[7], p.x[8]]); else M = mul(W[par], L); W.push(M);
     }
     let total = 0; const texs = {};
     for (let i = 0; i < parts.length; i++) {
-      const p = parts[i]; let txt; try { txt = await getMesh(p.m); } catch (e) { raw.push(null); if (!build.err) build.err = (e && e.name && e.name !== 'Error' ? e.name + ' ' : '') + (e && e.message || e); continue; }
-      const m = parseOBJ(txt); let tex = null; if (p.t) { if (!(p.t in texs)) { try { texs[p.t] = await decodeTex(await getTex(p.t), opt.texMax || 1024); } catch (e) { texs[p.t] = null; } } tex = texs[p.t]; }
+      const p = parts[i]; let txt; try { txt = await getMesh(p.m); } catch (e) { raw.push(null); const why = (e && e.name && e.name !== 'Error' ? e.name + ' ' : '') + (e && e.message || e); skip.push(String(p.m).slice(-40) + ': ' + why); if (!build.err) build.err = why; continue; }
+      const m = parseOBJ(txt); if (!m.P.length || !m.F.length) { raw.push(null); skip.push(String(p.m).slice(-40) + ': no triangles read'); continue; } let tex = null; if (p.t) { if (!(p.t in texs)) { try { texs[p.t] = await decodeTex(await getTex(p.t), opt.texMax || 1024); } catch (e) { texs[p.t] = null; } } tex = texs[p.t]; }
       const g = expand(m, tex, p.p < 0 ? [.2, .18, .15] : [.5, .5, .5]); raw.push(g); rawM[i] = opt.tex ? m : null; rawT[i] = tex; total += g.T.length / 3;
     }
     let dmn = [1e9, 1e9, 1e9], dmx = [-1e9, -1e9, -1e9];
@@ -178,6 +178,7 @@ const MODELIMP = (function () {
     }
     return { name: unit.name, parts: out, tris, bbox: [mnx, mny, mnz, mxx, mxy, mxz], big: diag > 5 }; };
     const res = mkPass(stdBudget, false);
+    res.np = parts.length; res.skip = skip;
     /* a second, richer copy for previews and (optionally) the battle: High about 4x, Maximum about 12x the standard triangles, capped so the library stays a sensible size */
     /* with textures kept, the richer copy is a textured one: the same triangle budget, but the model wears its real paint */
     if (opt.tex) {
@@ -351,7 +352,7 @@ const BDModels = (function () {
           const r = await MODELIMP.build(u, getMesh, getTex, opt); if (!r.parts.length) { bad++; (why[fac.name] = why[fac.name] || []).push(u.name + ': empty' + (MODELIMP.build.err ? ' (' + MODELIMP.build.err + ')' : '')); continue; }
           let hy = 0; for (const p of r.parts) for (let k = 1; k < p.V.length; k += 3) if (p.V[k] > hy) hy = p.V[k];
           const key = fac.name + '|' + i, rec = { key, faction: fac.name, name: u.name, big: r.big, tris: r.tris, parts: r.parts.map(p => ({ V: p.V, N: p.N, C: p.C, T: p.T })) };
-          const t = tx(d, ['figs', 'index'], 'readwrite'); t.objectStore('figs').put(rec); if (r.hi) t.objectStore('figs').put(r.hi.textured ? { key: key + '#hi', faction: fac.name, name: u.name, big: r.big, tris: r.hi.tris, textured: 1, texs: r.hi.texs, parts: r.hi.parts.map(p => ({ V: p.V, N: p.N, UV: p.UV, T: p.T, ti: p.ti })) } : { key: key + '#hi', faction: fac.name, name: u.name, big: r.big, tris: r.hi.tris, parts: r.hi.parts.map(p => ({ V: p.V, N: p.N, C: p.C, T: p.T })) }); t.objectStore('index').put({ key, faction: fac.name, name: u.name, h: hy, tris: r.tris, hi: r.hi ? r.hi.tris : 0, htx: r.hi && r.hi.textured ? 1 : 0 }); await done(t); ok++;
+          const t = tx(d, ['figs', 'index'], 'readwrite'); t.objectStore('figs').put(rec); if (r.hi) t.objectStore('figs').put(r.hi.textured ? { key: key + '#hi', faction: fac.name, name: u.name, big: r.big, tris: r.hi.tris, textured: 1, texs: r.hi.texs, parts: r.hi.parts.map(p => ({ V: p.V, N: p.N, UV: p.UV, T: p.T, ti: p.ti })) } : { key: key + '#hi', faction: fac.name, name: u.name, big: r.big, tris: r.hi.tris, parts: r.hi.parts.map(p => ({ V: p.V, N: p.N, C: p.C, T: p.T })) }); t.objectStore('index').put({ key, faction: fac.name, name: u.name, h: hy, tris: r.tris, hi: r.hi ? r.hi.tris : 0, htx: r.hi && r.hi.textured ? 1 : 0, np: r.np, skip: r.skip && r.skip.length ? r.skip.slice(0, 3) : 0 }); await done(t); ok++;
         } catch (e) { bad++; (why[fac.name] = why[fac.name] || []).push(u.name + ': ' + (e && e.message || e)); console.warn('model skipped', u.name, e); }
         if (i % 4 === 0) await new Promise(r => setTimeout(r, 0));
       }
@@ -404,7 +405,11 @@ window.BDModels = BDModels; window.MODELIMP = MODELIMP;
   }
   /* put the current model into the datasheet's picture slot */
   /* a one-line readout of what a figure is made of, so a pale model can be told apart from a pale texture */
-  function diagOf(fig) {
+  function diagOf(fig, ent) {
+    const sk = ent && ent.skip && ent.skip.length ? ' · SKIPPED PARTS at import: ' + ent.skip.join('; ') : '', pn = ent && ent.np ? ' · parts ' + fig.parts.length + ' of ' + ent.np : '';
+    return diagIn(fig) + pn + sk;
+  }
+  function diagIn(fig) {
     try {
       const imgs = [...new Set(fig.parts.filter(q => q.img).map(q => q.img))];
       if (!imgs.length) return 'vertex-colour copy (no texture)' + (fig.parts.length ? ', ' + Math.round(fig.parts.reduce((a, q) => a + q.T.length / 3, 0) / 1000) + 'k tris' : '');
@@ -426,7 +431,7 @@ window.BDModels = BDModels; window.MODELIMP = MODELIMP;
     if (cv.parentNode !== slot) slot.appendChild(cv);
     let bar = document.getElementById('bdp-bar');
     if (!bar) { bar = document.createElement('div'); bar.id = 'bdp-bar'; bar.style.cssText = 'display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:10px;font-size:12px;opacity:.85;margin-bottom:8px'; slot.after(bar); }
-    bar.innerHTML = (vars.length > 1 ? '<button class="btn" id="bdp-p" type="button">‹</button>' : '') + '<span>' + m.name.replace(/</g, '&lt;') + (vars.length > 1 ? ' · ' + (cur.vi + 1) + ' of ' + vars.length : '') + ' · drag to turn, scroll to zoom</span>' + (vars.length > 1 ? '<button class="btn" id="bdp-n" type="button">›</button>' : '') + '<button class="btn" id="bdp-f" type="button" style="font-size:11px">' + (flatLight ? 'Normal light' : 'Flat light') + '</button><div style="flex-basis:100%;font-size:10px;opacity:.7">' + diagOf(shown) + (shown === fig && m.hi && BDModels.get('hiPrev', '1') === '1' ? ' · loading the richer copy…' : '') + '</div>';
+    bar.innerHTML = (vars.length > 1 ? '<button class="btn" id="bdp-p" type="button">‹</button>' : '') + '<span>' + m.name.replace(/</g, '&lt;') + (vars.length > 1 ? ' · ' + (cur.vi + 1) + ' of ' + vars.length : '') + ' · drag to turn, scroll to zoom</span>' + (vars.length > 1 ? '<button class="btn" id="bdp-n" type="button">›</button>' : '') + '<button class="btn" id="bdp-f" type="button" style="font-size:11px">' + (flatLight ? 'Normal light' : 'Flat light') + '</button><div style="flex-basis:100%;font-size:10px;opacity:.7">' + diagOf(shown, m) + (shown === fig && m.hi && BDModels.get('hiPrev', '1') === '1' ? ' · loading the richer copy…' : '') + '</div>';
     const fb = bar.querySelector('#bdp-f'); if (fb) fb.onclick = () => { flatLight = !flatLight; Object.assign(ENV, JSON.parse(JSON.stringify(flatLight ? ENVF : ENV0))); try { R.draw(cam, ENV); } catch (e) { } mount(); };
     const go = d => () => { cur.vi += d; cur.fig = null; mount(); }; const p = bar.querySelector('#bdp-p'), n = bar.querySelector('#bdp-n'); if (p) p.onclick = go(-1); if (n) n.onclick = go(1);
     R.resize(); try { R.draw(cam, ENV); } catch (e) { } if (raf) cancelAnimationFrame(raf); last = 0; raf = requestAnimationFrame(frame);
