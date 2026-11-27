@@ -81,6 +81,63 @@ const MODELIMP = (function () {
     if (flip < 0) for (let i = 0; i < T.length; i += 3) { const t = T[i + 1]; T[i + 1] = T[i + 2]; T[i + 2] = t; }
     return N;
   }
+  /* ---- textured copies: keep each model's real texture and UVs instead of baking the paint into vertex colours ---- */
+  function expandUV(m) {
+    const key = new Map(), X = [], UV = [], tris = [], nt = m.T.length / 2 + 1;
+    for (let i = 0; i < m.F.length; i += 6) for (let k = 0; k < 3; k++) {
+      const v = m.F[i + k * 2], t = m.F[i + k * 2 + 1], kk = v * nt + (t + 1); let id = key.get(kk);
+      if (id === undefined) { id = X.length / 3; key.set(kk, id); X.push(m.P[v * 3], m.P[v * 3 + 1], m.P[v * 3 + 2]); if (t >= 0) UV.push(m.T[t * 2], 1 - m.T[t * 2 + 1]); else UV.push(0, 0); }
+      tris.push(id);
+    }
+    return { X: Float32Array.from(X), UV: Float32Array.from(UV), T: Int32Array.from(tris) };
+  }
+  /* vertex clustering that keeps different parts of the texture apart, so painted detail is not smeared across UV islands */
+  function clusterUV(g, cell, org) {
+    const n = g.X.length / 3, map = new Map(), id = new Int32Array(n); let m = 0; const SX = [], SU = [], CN = [];
+    for (let i = 0; i < n; i++) {
+      const ix = Math.floor((g.X[i * 3] - org[0]) / cell), iy = Math.floor((g.X[i * 3 + 1] - org[1]) / cell), iz = Math.floor((g.X[i * 3 + 2] - org[2]) / cell);
+      const iu = Math.max(0, Math.min(31, Math.floor((g.UV[i * 2] - Math.floor(g.UV[i * 2])) * 32))), iv = Math.max(0, Math.min(31, Math.floor((g.UV[i * 2 + 1] - Math.floor(g.UV[i * 2 + 1])) * 32)));
+      const k = (((ix * 4096 + iy) * 4096 + iz) * 32 + iu) * 32 + iv; let c = map.get(k); if (c === undefined) { c = m++; map.set(k, c); SX.push(0, 0, 0); SU.push(0, 0); CN.push(0); }
+      id[i] = c; SX[c * 3] += g.X[i * 3]; SX[c * 3 + 1] += g.X[i * 3 + 1]; SX[c * 3 + 2] += g.X[i * 3 + 2]; SU[c * 2] += g.UV[i * 2]; SU[c * 2 + 1] += g.UV[i * 2 + 1]; CN[c]++;
+    }
+    const seen = new Set(), T = [];
+    for (let i = 0; i < g.T.length; i += 3) {
+      const a = id[g.T[i]], b = id[g.T[i + 1]], c = id[g.T[i + 2]]; if (a === b || b === c || a === c) continue;
+      const lo = Math.min(a, b, c), hi = Math.max(a, b, c), mid = a + b + c - lo - hi, kk = (lo * 1048576 + mid) * 1048576 + hi; if (seen.has(kk)) continue; seen.add(kk); T.push(a, b, c);
+    }
+    const X = new Float32Array(m * 3), UV = new Float32Array(m * 2); for (let c = 0; c < m; c++) { for (let k = 0; k < 3; k++) X[c * 3 + k] = SX[c * 3 + k] / CN[c]; UV[c * 2] = SU[c * 2] / CN[c]; UV[c * 2 + 1] = SU[c * 2 + 1] / CN[c]; }
+    return { X, UV, T: Int32Array.from(T), tris: T.length / 3 };
+  }
+  function decimateUV(g, target) {
+    const tr = g.T.length / 3; if (tr <= target) return { X: g.X, UV: g.UV, T: g.T, tris: tr };
+    let mn = [1e9, 1e9, 1e9], mx = [-1e9, -1e9, -1e9]; for (let i = 0; i < g.X.length; i += 3) for (let k = 0; k < 3; k++) { mn[k] = Math.min(mn[k], g.X[i + k]); mx[k] = Math.max(mx[k], g.X[i + k]); }
+    const ext = Math.max(mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2], 1e-3); let lo = ext / 900, hi = ext / 2, best = null;
+    for (let it = 0; it < 12; it++) { const mid = Math.sqrt(lo * hi), r = clusterUV(g, mid, mn); if (r.tris > target) lo = mid; else { hi = mid; best = r; } }
+    return best || clusterUV(g, hi, mn);
+  }
+  /* smooth normals, welded by position so texture seams do not show as hard lines; flips an inside-out surface like finish() */
+  function finishW(g) {
+    const n = g.X.length / 3, X = g.X, T = g.T, w = new Map(), wid = new Int32Array(n); let nw = 0, mnx = 1e9, mxx = -1e9, mny = 1e9, mxy = -1e9, mnz = 1e9, mxz = -1e9;
+    for (let i = 0; i < n; i++) { mnx = Math.min(mnx, X[i * 3]); mxx = Math.max(mxx, X[i * 3]); mny = Math.min(mny, X[i * 3 + 1]); mxy = Math.max(mxy, X[i * 3 + 1]); mnz = Math.min(mnz, X[i * 3 + 2]); mxz = Math.max(mxz, X[i * 3 + 2]); }
+    const q = Math.max(mxx - mnx, mxy - mny, mxz - mnz, 1e-3) / 20000;
+    for (let i = 0; i < n; i++) { const k = (Math.round(X[i * 3] / q) * 65537 + Math.round(X[i * 3 + 1] / q)) * 65537 + Math.round(X[i * 3 + 2] / q); let c = w.get(k); if (c === undefined) { c = nw++; w.set(k, c); } wid[i] = c; }
+    const A = new Float32Array(nw * 3); let cx = 0, cy = 0, cz = 0; for (let i = 0; i < n; i++) { cx += X[i * 3]; cy += X[i * 3 + 1]; cz += X[i * 3 + 2]; } cx /= n; cy /= n; cz /= n; let sgn = 0;
+    for (let i = 0; i < T.length; i += 3) {
+      const a = T[i] * 3, b = T[i + 1] * 3, c = T[i + 2] * 3, ux = X[b] - X[a], uy = X[b + 1] - X[a + 1], uz = X[b + 2] - X[a + 2], vx = X[c] - X[a], vy = X[c + 1] - X[a + 1], vz = X[c + 2] - X[a + 2];
+      const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx; sgn += nx * ((X[a] + X[b] + X[c]) / 3 - cx) + ny * ((X[a + 1] + X[b + 1] + X[c + 1]) / 3 - cy) + nz * ((X[a + 2] + X[b + 2] + X[c + 2]) / 3 - cz);
+      for (const v of [T[i], T[i + 1], T[i + 2]]) { const o = wid[v] * 3; A[o] += nx; A[o + 1] += ny; A[o + 2] += nz; }
+    }
+    const flip = sgn < 0 ? -1 : 1, N = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) { const o = wid[i] * 3, l = Math.hypot(A[o], A[o + 1], A[o + 2]) || 1; N[i * 3] = A[o] * flip / l; N[i * 3 + 1] = A[o + 1] * flip / l; N[i * 3 + 2] = A[o + 2] * flip / l; }
+    if (flip < 0) for (let i = 0; i < T.length; i += 3) { const t = T[i + 1]; T[i + 1] = T[i + 2]; T[i + 2] = t; }
+    return N;
+  }
+  /* a decoded texture -> a JPEG blob small enough to keep in the library */
+  async function encodeTex(tx, flat) {
+    const w = tx ? tx.w : 4, h = tx ? tx.h : 4, cv = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(w, h) : Object.assign(document.createElement('canvas'), { width: w, height: h }), g = cv.getContext('2d');
+    if (tx) g.putImageData(new ImageData(new Uint8ClampedArray(tx.d.buffer, tx.d.byteOffset, tx.d.length), w, h), 0, 0); else { g.fillStyle = 'rgb(' + flat.map(v => Math.round(v * 255)).join(',') + ')'; g.fillRect(0, 0, w, h); }
+    return cv.convertToBlob ? await cv.convertToBlob({ type: 'image/jpeg', quality: .9 }) : await new Promise(r => cv.toBlob(r, 'image/jpeg', .9));
+  }
   /* Unity-style transform: scale, then rotate about Z, X, Y (degrees), then move */
   function mat(x) {
     const d = Math.PI / 180, cx = Math.cos(x[3] * d), sx = Math.sin(x[3] * d), cy = Math.cos(x[4] * d), sy = Math.sin(x[4] * d), cz = Math.cos(x[5] * d), sz = Math.sin(x[5] * d);
@@ -92,7 +149,7 @@ const MODELIMP = (function () {
   const mul = (A, B) => { const r = new Array(12); for (let i = 0; i < 3; i++) { for (let j = 0; j < 3; j++) r[i * 4 + j] = A[i * 4] * B[j] + A[i * 4 + 1] * B[4 + j] + A[i * 4 + 2] * B[8 + j]; r[i * 4 + 3] = A[i * 4] * B[3] + A[i * 4 + 1] * B[7] + A[i * 4 + 2] * B[11] + A[i * 4 + 3]; } return r; };
   /* unit = { name, parts:[{m,t,p,x}] }; files: id -> async () => Blob (mesh text via .text()). Returns { name, parts:[{V,N,C,T}], h, r, tris } */
   async function build(unit, getMesh, getTex, opt) {
-    opt = opt || {}; build.err = ''; const parts = unit.parts, W = [], raw = [];
+    opt = opt || {}; build.err = ''; const parts = unit.parts, W = [], raw = [], rawM = [], rawT = [];
     for (let i = 0; i < parts.length; i++) {
       const p = parts[i], L = mat(p.x), par = p.p; let M;
       if (par < 0) M = mat([0, 0, 0, 0, (p.x[4] || 0) - 180, 0, p.x[6], p.x[7], p.x[8]]); else M = mul(W[par], L); W.push(M);
@@ -101,7 +158,7 @@ const MODELIMP = (function () {
     for (let i = 0; i < parts.length; i++) {
       const p = parts[i]; let txt; try { txt = await getMesh(p.m); } catch (e) { raw.push(null); if (!build.err) build.err = (e && e.name && e.name !== 'Error' ? e.name + ' ' : '') + (e && e.message || e); continue; }
       const m = parseOBJ(txt); let tex = null; if (p.t) { if (!(p.t in texs)) { try { texs[p.t] = await decodeTex(await getTex(p.t), opt.texMax || 1024); } catch (e) { texs[p.t] = null; } } tex = texs[p.t]; }
-      const g = expand(m, tex, p.p < 0 ? [.2, .18, .15] : [.5, .5, .5]); raw.push(g); total += g.T.length / 3;
+      const g = expand(m, tex, p.p < 0 ? [.2, .18, .15] : [.5, .5, .5]); raw.push(g); rawM[i] = opt.tex ? m : null; rawT[i] = tex; total += g.T.length / 3;
     }
     let dmn = [1e9, 1e9, 1e9], dmx = [-1e9, -1e9, -1e9];
     for (let i = 0; i < parts.length; i++) { const g = raw[i]; if (!g) continue; const M = W[i], st = Math.max(1, Math.floor(g.X.length / 3 / 400)); for (let k = 0; k < g.X.length; k += 3 * st) { const x = g.X[k], y = g.X[k + 1], z = g.X[k + 2], q = [M[0] * x + M[1] * y + M[2] * z + M[3], M[4] * x + M[5] * y + M[6] * z + M[7], M[8] * x + M[9] * y + M[10] * z + M[11]]; for (let j = 0; j < 3; j++) { dmn[j] = Math.min(dmn[j], q[j]); dmx[j] = Math.max(dmx[j], q[j]); } } }
@@ -122,10 +179,22 @@ const MODELIMP = (function () {
     return { name: unit.name, parts: out, tris, bbox: [mnx, mny, mnz, mxx, mxy, mxz], big: diag > 5 }; };
     const res = mkPass(stdBudget, false);
     /* a second, richer copy for previews and (optionally) the battle: High about 4x, Maximum about 12x the standard triangles, capped so the library stays a sensible size */
+    /* with textures kept, the richer copy is a textured one: the same triangle budget, but the model wears its real paint */
+    if (opt.tex) {
+      const hb = opt.hi === 'max' ? (diag > 5 ? 250000 : 120000) : (diag > 5 ? 100000 : 40000), out = [], tl = [], tmap = new Map(); let tris = 0;
+      for (let i = 0; i < parts.length; i++) {
+        const m = rawM[i]; if (!m) continue; const g = expandUV(m), tr = g.T.length / 3, share = Math.max(400, Math.round(hb * tr / Math.max(1, total)));
+        const d = decimateUV(g, share), M = W[i], V = new Float32Array(d.X.length);
+        for (let k = 0; k < d.X.length; k += 3) { const x = d.X[k], y = d.X[k + 1], z = d.X[k + 2]; V[k] = M[0] * x + M[1] * y + M[2] * z + M[3]; V[k + 1] = M[4] * x + M[5] * y + M[6] * z + M[7]; V[k + 2] = M[8] * x + M[9] * y + M[10] * z + M[11]; }
+        const gg = { X: V, T: Int32Array.from(d.T) }, N = finishW(gg), tk = rawT[i] ? parts[i].t : (parts[i].p < 0 ? '#flat-base' : '#flat'); let ti = tmap.get(tk); if (ti === undefined) { ti = tl.length; tmap.set(tk, ti); tl.push(rawT[i] ? { tex: rawT[i] } : { flat: parts[i].p < 0 ? [.2, .18, .15] : [.5, .5, .5] }); }
+        out.push({ V, N, UV: d.UV, T: Uint32Array.from(gg.T), ti }); tris += gg.T.length / 3;
+      }
+      if (out.length) { const blobs = []; for (const t of tl) blobs.push(await encodeTex(t.tex, t.flat)); res.hi = { tris, parts: out, texs: blobs, textured: true, bbox: res.bbox, big: res.big }; }
+    } else
     if (opt.hi === 'hi' || opt.hi === 'max') { const hb = opt.hi === 'max' ? (diag > 5 ? 250000 : 120000) : (diag > 5 ? 100000 : 40000); if (hb > stdBudget * 1.5) res.hi = mkPass(hb, true); }
     return res;
   }
-  return { parseOBJ, decodeTex, expand, decimate, build, mat };
+  return { parseOBJ, decodeTex, expand, decimate, build, mat, expandUV, decimateUV, finishW, encodeTex };
 })();
 
 /* ===== BDModels: local model library (IndexedDB), folder import, and lookup for the 3D board ===== */
@@ -150,7 +219,7 @@ const BDModels = (function () {
       C[i] = rr + m; C[i + 1] = gg + m; C[i + 2] = bb + m;
     }
   }
-  function prep(rec) {
+  function prep(rec, imgs) {
     const fix = get('khfix', '1') === '1' && KHORNE.test(String(rec.name || '')), mir = get('mirror', '1') === '1', turn = (+get('yaw', '0')) * Math.PI / 180, c = Math.cos(turn), s = Math.sin(turn);
     return { name: rec.name, parts: rec.parts.map(p => {
       const V = new Float32Array(p.V), N = new Float32Array(p.N), T = new Uint32Array(p.T);
@@ -159,6 +228,7 @@ const BDModels = (function () {
         V[i] = x * c + z * s; V[i + 2] = -x * s + z * c; N[i] = nx * c + nz * s; N[i + 2] = -nx * s + nz * c;
       }
       if (mir) for (let i = 0; i < T.length; i += 3) { const t = T[i + 1]; T[i + 1] = T[i + 2]; T[i + 2] = t; }
+      if (imgs) return { V, N, UV: p.UV, T, img: imgs[p.ti] };
       const C = new Float32Array(p.C.length); for (let i = 0; i < C.length; i++) C[i] = p.C[i] / 255;
       if (fix) recolour(C);
       return { V, N, C, T };
@@ -169,7 +239,7 @@ const BDModels = (function () {
   function fetchFig(m, hi) {
     const k = hi ? m.key + '#hi' : m.key;
     if (cache.has(k)) return cache.get(k); if (loading.has(k)) return null; loading.add(k);
-    idbOpen().then(async d => { const rec = await rq(tx(d, 'figs').objectStore('figs').get(k)); d.close(); if (!rec) console.warn('[BDModels] indexed but not stored:', k, m.name); if (rec) { if (hi) { hiOrder.push(k); while (hiOrder.length > 40) cache.delete(hiOrder.shift()); } else if (cache.size > 350) cache.delete(cache.keys().next().value); const fg = prep(rec); figOf.set(fg, m); cache.set(k, fg); } loading.delete(k); ping(); }).catch(e => { loading.delete(k); console.warn('[BDModels] could not load', m.name, e); });
+    idbOpen().then(async d => { const rec = await rq(tx(d, 'figs').objectStore('figs').get(k)); d.close(); if (!rec) console.warn('[BDModels] indexed but not stored:', k, m.name); if (rec) { if (hi) { hiOrder.push(k); while (hiOrder.length > 40) cache.delete(hiOrder.shift()); } else if (cache.size > 350) cache.delete(cache.keys().next().value); const imgs = rec.texs ? await Promise.all(rec.texs.map(b => createImageBitmap(b, { premultiplyAlpha: 'none', colorSpaceConversion: 'none' }))) : null; const fg = prep(rec, imgs); figOf.set(fg, m); cache.set(k, fg); } loading.delete(k); ping(); }).catch(e => { loading.delete(k); console.warn('[BDModels] could not load', m.name, e); });
     return null;
   }
   /* the richer copy of a model you already hold (previews): it arrives a moment later and the preview refreshes */
@@ -239,6 +309,12 @@ const BDModels = (function () {
     /* the texture colours are screen (sRGB) values but the renderer lights in linear light, like the built-in figures: convert once and keep both copies, so the models keep their painted colours instead of washing out pale */
     const gm = typeof BF_LIN !== 'undefined' && BF_LIN.on ? (BF_LIN.g || 2.2) : 1;
     for (const g of fig.parts) {
+      if (g.img) {
+        const TX = mb.tx || (mb.tx = new Map()); let b = TX.get(g.img); if (!b) { b = { P: [], N: [], UV: [], M: [], I: [], n: 0 }; TX.set(g.img, b); }
+        const nn = g.V.length / 3, bs0 = b.n;
+        for (let j = 0; j < nn; j++) { const vx = g.V[j * 3], vz = g.V[j * 3 + 2], nx = g.N[j * 3], nz = g.N[j * 3 + 2]; b.P.push(vx * cy + vz * sy + x, g.V[j * 3 + 1] + y, -vx * sy + vz * cy + z); b.N.push(nx * cy + nz * sy, g.N[j * 3 + 1], -nx * sy + nz * cy); b.UV.push(g.UV[j * 2], g.UV[j * 2 + 1]); b.M.push(.16, 0); }
+        for (let j = 0; j < g.T.length; j++) b.I.push(g.T[j] + bs0); b.n += nn; continue;
+      }
       const n = g.V.length / 3, base = mb.n;
       const C = gm !== 1 ? (g.CLg === gm ? g.CL : (g.CLg = gm, g.CL = Float32Array.from(g.C, v => Math.pow(v < 0 ? 0 : v, gm)))) : g.C;
       for (let j = 0; j < n; j++) {
@@ -275,7 +351,7 @@ const BDModels = (function () {
           const r = await MODELIMP.build(u, getMesh, getTex, opt); if (!r.parts.length) { bad++; (why[fac.name] = why[fac.name] || []).push(u.name + ': empty' + (MODELIMP.build.err ? ' (' + MODELIMP.build.err + ')' : '')); continue; }
           let hy = 0; for (const p of r.parts) for (let k = 1; k < p.V.length; k += 3) if (p.V[k] > hy) hy = p.V[k];
           const key = fac.name + '|' + i, rec = { key, faction: fac.name, name: u.name, big: r.big, tris: r.tris, parts: r.parts.map(p => ({ V: p.V, N: p.N, C: p.C, T: p.T })) };
-          const t = tx(d, ['figs', 'index'], 'readwrite'); t.objectStore('figs').put(rec); if (r.hi) t.objectStore('figs').put({ key: key + '#hi', faction: fac.name, name: u.name, big: r.big, tris: r.hi.tris, parts: r.hi.parts.map(p => ({ V: p.V, N: p.N, C: p.C, T: p.T })) }); t.objectStore('index').put({ key, faction: fac.name, name: u.name, h: hy, tris: r.tris, hi: r.hi ? r.hi.tris : 0 }); await done(t); ok++;
+          const t = tx(d, ['figs', 'index'], 'readwrite'); t.objectStore('figs').put(rec); if (r.hi) t.objectStore('figs').put(r.hi.textured ? { key: key + '#hi', faction: fac.name, name: u.name, big: r.big, tris: r.hi.tris, textured: 1, texs: r.hi.texs, parts: r.hi.parts.map(p => ({ V: p.V, N: p.N, UV: p.UV, T: p.T, ti: p.ti })) } : { key: key + '#hi', faction: fac.name, name: u.name, big: r.big, tris: r.hi.tris, parts: r.hi.parts.map(p => ({ V: p.V, N: p.N, C: p.C, T: p.T })) }); t.objectStore('index').put({ key, faction: fac.name, name: u.name, h: hy, tris: r.tris, hi: r.hi ? r.hi.tris : 0, htx: r.hi && r.hi.textured ? 1 : 0 }); await done(t); ok++;
         } catch (e) { bad++; (why[fac.name] = why[fac.name] || []).push(u.name + ': ' + (e && e.message || e)); console.warn('model skipped', u.name, e); }
         if (i % 4 === 0) await new Promise(r => setTimeout(r, 0));
       }
@@ -284,7 +360,7 @@ const BDModels = (function () {
   }
   async function clearAll() { const d = await idbOpen(); const t = tx(d, ['figs', 'index'], 'readwrite'); t.objectStore('figs').clear(); t.objectStore('index').clear(); await done(t); d.close(); index = []; cache.clear(); poolCache.clear(); ping(); }
   const factions = () => { const c = {}; for (const m of index) c[m.faction] = (c[m.faction] || 0) + 1; return c; };
-  return { debug: (ds, fac) => { const t = toks(ds).filter(w => w.length > 3)[0] || toks(ds)[0] || '', hits = index.filter(f => toks(f.name).some(w => w === t || w.includes(t))); const mine = index.filter(f => String(f.faction).toLowerCase() === String(fac).toLowerCase()); return 'faction has ' + mine.length + ' models' + (mine.length ? ' (tallest ' + Math.max(...mine.map(f => f.h)).toFixed(2) + ')' : '') + '; name hits for "' + t + '": ' + (hits.length ? hits.slice(0, 3).map(f => f.faction + ': ' + f.name + ' h=' + f.h.toFixed(2)).join(' | ') : 'none'); }, variants: (ds, fac) => pool(ds, fac) || [], fig: m => fetchFig(m) || cache.get(m.key) || null, why: (ds, fac) => { const p = pool(ds, fac); return p ? p.map(f => f.faction + ': ' + f.name) : 'no match among ' + index.length + ' models'; }, load, pick, add, scan, importFactions, clearAll, factions, on: () => index.length > 0 && get('on', '1') === '1', count: () => index.length, get, set, reprep: async () => { cache.clear(); hiOrder.length = 0; poolCache.clear(); ping(); }, upgrade, frame, hiCount: () => index.filter(m => m.hi).length, hiTris: () => index.reduce((n, m) => n + (m.hi || 0), 0) };
+  return { debug: (ds, fac) => { const t = toks(ds).filter(w => w.length > 3)[0] || toks(ds)[0] || '', hits = index.filter(f => toks(f.name).some(w => w === t || w.includes(t))); const mine = index.filter(f => String(f.faction).toLowerCase() === String(fac).toLowerCase()); return 'faction has ' + mine.length + ' models' + (mine.length ? ' (tallest ' + Math.max(...mine.map(f => f.h)).toFixed(2) + ')' : '') + '; name hits for "' + t + '": ' + (hits.length ? hits.slice(0, 3).map(f => f.faction + ': ' + f.name + ' h=' + f.h.toFixed(2)).join(' | ') : 'none'); }, variants: (ds, fac) => pool(ds, fac) || [], fig: m => fetchFig(m) || cache.get(m.key) || null, why: (ds, fac) => { const p = pool(ds, fac); return p ? p.map(f => f.faction + ': ' + f.name) : 'no match among ' + index.length + ' models'; }, load, pick, add, scan, importFactions, clearAll, factions, on: () => index.length > 0 && get('on', '1') === '1', count: () => index.length, get, set, reprep: async () => { cache.clear(); hiOrder.length = 0; poolCache.clear(); ping(); }, upgrade, frame, hiCount: () => index.filter(m => m.hi).length, texCount: () => index.filter(m => m.htx).length, hiTris: () => index.reduce((n, m) => n + (m.hi || 0), 0) };
 })();
 window.BDModels = BDModels; window.MODELIMP = MODELIMP;
 

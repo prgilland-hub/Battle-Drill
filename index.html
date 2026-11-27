@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.27-1054';
+  const VERSION = '2026.11.27-1108';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -130,7 +130,7 @@
     const css = document.createElement('style'); css.textContent = '#bdl-b{position:fixed;left:8px;bottom:8px;z-index:99999;width:30px;height:30px;border-radius:50%;border:1px solid #888;background:#222;color:#ddd;font:16px/1 sans-serif;cursor:pointer;opacity:.45}#bdl-b:hover{opacity:1}#bdl-p{position:fixed;left:8px;bottom:46px;z-index:99999;width:300px;background:#1d1d1d;color:#eee;border:1px solid #666;border-radius:8px;padding:12px;font:13px/1.4 sans-serif;display:none}#bdl-p input,#bdl-p button{font:inherit;margin:3px 0}#bdl-p input[type=password],#bdl-p input[type=text]{width:100%;box-sizing:border-box}#bdl-p button{padding:4px 8px;cursor:pointer}#bdl-p h4{margin:8px 0 2px;font-size:12px;color:#aaa;text-transform:uppercase}#bdl-s{color:#9c9;min-height:1.2em}';
     document.head.appendChild(css);
     const b = document.createElement('button'); b.id = 'bdl-b'; b.title = 'Desktop settings'; b.textContent = '⚙'; const p = document.createElement('div'); p.id = 'bdl-p';
-    p.innerHTML = '<h4>App and updates</h4><p class="muted">Battle Drill desktop v' + VERSION + '</p><button id="bdl-u">Check for update</button><div id="bdl-s"></div><h4>Coach</h4><p class="muted">Your Anthropic API key and model, kept on this computer only.</p><input type="password" id="bdl-k" placeholder="sk-ant-…" autocomplete="off"><input type="text" id="bdl-m" placeholder="model"><button id="bdl-ks">Save key and model</button><h4>Backup</h4><p class="muted">Armies, saved games and settings, as one file.</p><button id="bdl-ex">Back up everything</button> <button id="bdl-im">Restore backup</button><h4>3D models</h4><div id="bdl-ms" style="color:#aaa"></div><button id="bdl-mi">Import models folder…</button><div id="bdl-mf" style="max-height:200px;overflow:auto"></div> <button id="bdl-mx">Remove</button><label style=\"display:block;margin:5px 0\"><input type="checkbox" id="bdl-mo"> Use my models on the 3D board</label><label style=\"display:block;margin:5px 0\"><input type="checkbox" id="bdl-mm"> Mirror left/right</label><label style=\"display:block;margin:5px 0\"><input type="checkbox" id="bdl-mk"> Turn cold blue Khorne models blood red</label><label style=\"display:block;margin:5px 0\">Turn all models <select id="bdl-my"><option value="0">0°</option><option value="90">90°</option><option value="180">180°</option><option value="270">270°</option></select></label><label style=\"display:block;margin:5px 0\">Detail on import <select id="bdl-mq"><option value="1">Standard (about 10k triangles per model)</option><option value="2.5">Higher (about 25k)</option><option value="full">Full, no simplifying (very large)</option></select></label><label style=\"display:block;margin:5px 0\">Also keep a high-detail copy <select id="bdl-mh"><option value="">No</option><option value="hi">High (about 40k triangles, 100k for big models)</option><option value="max">Maximum (about 120k, 250k for big models)</option></select></label><div style="color:#999;font-size:.85em;margin:2px 0 6px">The high-detail copy is used in the datasheet previews. Re-import your models after changing either setting. Maximum uses a lot of disk space (roughly 3 MB per model).</div><label style=\"display:block;margin:5px 0\"><input type="checkbox" id="bdl-mb"> Use the high-detail models in battles</label><div id="bdl-mhs" style="color:#999;font-size:.85em"></div><h4>Window</h4><button id="bdl-f">Toggle full screen</button>';
+    p.innerHTML = '<h4>App and updates</h4><p class="muted">Battle Drill desktop v' + VERSION + '</p><button id="bdl-u">Check for update</button><div id="bdl-s"></div><h4>Coach</h4><p class="muted">Your Anthropic API key and model, kept on this computer only.</p><input type="password" id="bdl-k" placeholder="sk-ant-…" autocomplete="off"><input type="text" id="bdl-m" placeholder="model"><button id="bdl-ks">Save key and model</button><h4>Backup</h4><p class="muted">Armies, saved games and settings, as one file.</p><button id="bdl-ex">Back up everything</button> <button id="bdl-im">Restore backup</button><h4>3D models</h4><div id="bdl-ms" style="color:#aaa"></div><button id="bdl-mi">Import models folder…</button><div id="bdl-mf" style="max-height:200px;overflow:auto"></div> <button id="bdl-mx">Remove</button><label style=\"display:block;margin:5px 0\"><input type="checkbox" id="bdl-mo"> Use my models on the 3D board</label><label style=\"display:block;margin:5px 0\"><input type="checkbox" id="bdl-mm"> Mirror left/right</label><label style=\"display:block;margin:5px 0\"><input type="checkbox" id="bdl-mk"> Turn cold blue Khorne models blood red</label><label style=\"display:block;margin:5px 0\">Turn all models <select id="bdl-my"><option value="0">0°</option><option value="90">90°</option><option value="180">180°</option><option value="270">270°</option></select></label><label style=\"display:block;margin:5px 0\">Detail on import <select id="bdl-mq"><option value="1">Standard (about 10k triangles per model)</option><option value="2.5">Higher (about 25k)</option><option value="full">Full, no simplifying (very large)</option></select></label><label style=\"display:block;margin:5px 0\">Also keep a high-detail copy <select id="bdl-mh"><option value="">No</option><option value="hi">High (about 40k triangles, 100k for big models)</option><option value="max">Maximum (about 120k, 250k for big models)</option></select></label><div style="color:#999;font-size:.85em;margin:2px 0 6px">The high-detail copy is used in the datasheet previews. Re-import your models after changing either setting. Maximum uses a lot of disk space (roughly 3 MB per model).</div><label style=\"display:block;margin:5px 0\">Keep the paint (textures) in the high-detail copy <select id="bdl-mt"><option value="">No (colours baked into the mesh)</option><option value="1024">Yes, 1024 px textures (about 0.3 MB per model)</option><option value="2048">Yes, 2048 px textures (sharper, about 1.2 MB per model)</option></select></label><div style="color:#999;font-size:.85em;margin:2px 0 6px">Models with their real paint look far closer to how they do in Tabletop Simulator. Re-import after changing it. Only the high-detail copy carries textures, so it also uses the high-detail triangle count.</div><label style=\"display:block;margin:5px 0\"><input type="checkbox" id="bdl-mb"> Use the high-detail models in battles</label><div id="bdl-mhs" style="color:#999;font-size:.85em"></div><h4>Window</h4><button id="bdl-f">Toggle full screen</button>';
     const host = document.querySelector('#tab-settings .settings');
     if (host) {
       /* inside the app's Settings page: one section per heading, in the app's own look, no floating button */
@@ -155,14 +155,15 @@
     $('bdl-im').onclick = () => { const i = document.createElement('input'); i.type = 'file'; i.accept = '.json'; i.onchange = async () => { try { await restore(JSON.parse(await i.files[0].text())); say('Restored. Reloading…'); setTimeout(() => location.reload(), 800); } catch (e) { say('Restore failed: ' + e.message); } }; i.click(); };
     const M = () => window.BDModels, mstat = () => { const m = M(); $('bdl-ms').textContent = m && m.count() ? m.count() + ' models loaded: ' + Object.entries(m.factions()).sort().map(([k, v]) => k + ' ' + v).join(', ') + '.' : 'No models imported yet.'; try { hstat(); } catch (e) { } };
     const mfx = () => { try { document.dispatchEvent(new Event('bd-models-changed')); window.dispatchEvent(new Event('bd-models-changed')); } catch (e) { } };
-    setTimeout(async () => { if (M()) { await M().load(); mstat(); $('bdl-mo').checked = M().get('on', '1') === '1'; $('bdl-mm').checked = M().get('mirror', '1') === '1'; $('bdl-mk').checked = M().get('khfix', '1') === '1'; $('bdl-my').value = M().get('yaw', '0'); $('bdl-mq').value = M().get('q', '1'); $('bdl-mh').value = M().get('hiq', 'hi'); $('bdl-mb').checked = M().get('hiBattle', '1') === '1'; hstat(); mfx(); } }, 0);
+    setTimeout(async () => { if (M()) { await M().load(); mstat(); $('bdl-mo').checked = M().get('on', '1') === '1'; $('bdl-mm').checked = M().get('mirror', '1') === '1'; $('bdl-mk').checked = M().get('khfix', '1') === '1'; $('bdl-my').value = M().get('yaw', '0'); $('bdl-mq').value = M().get('q', '1'); $('bdl-mh').value = M().get('hiq', 'hi'); $('bdl-mt').value = M().get('tex', '1024'); $('bdl-mb').checked = M().get('hiBattle', '1') === '1'; hstat(); mfx(); } }, 0);
     $('bdl-mo').onchange = () => { M().set('on', $('bdl-mo').checked ? '1' : '0'); mfx(); };
     $('bdl-mk').onchange = async () => { M().set('khfix', $('bdl-mk').checked ? '1' : '0'); await M().reprep(); mfx(); };
     $('bdl-mm').onchange = async () => { M().set('mirror', $('bdl-mm').checked ? '1' : '0'); await M().reprep(); mfx(); };
     $('bdl-my').onchange = async () => { M().set('yaw', $('bdl-my').value); await M().reprep(); mfx(); };
-    const hstat = () => { const m = M(); if (!m) return; const n = m.hiCount ? m.hiCount() : 0; $('bdl-mhs').textContent = n ? n + ' models have a high-detail copy (about ' + Math.round(m.hiTris() / 1000) + 'k triangles in total).' : 'No high-detail copies yet. Pick a level above, then import your models again.'; };
+    const hstat = () => { const m = M(); if (!m) return; const n = m.hiCount ? m.hiCount() : 0; $('bdl-mhs').textContent = n ? n + ' models have a high-detail copy (about ' + Math.round(m.hiTris() / 1000) + 'k triangles in total)' + (m.texCount && m.texCount() ? ', ' + m.texCount() + ' of them with their real paint (textures).' : '.') : 'No high-detail copies yet. Pick a level above, then import your models again.'; };
     $('bdl-mq').onchange = () => M().set('q', $('bdl-mq').value);
     $('bdl-mh').onchange = () => M().set('hiq', $('bdl-mh').value);
+    $('bdl-mt').onchange = () => M().set('tex', $('bdl-mt').value);
     $('bdl-mb').onchange = () => { M().set('hiBattle', $('bdl-mb').checked ? '1' : '0'); mfx(); };
     $('bdl-mx').onclick = async () => { await M().clearAll(); mstat(); mfx(); say('Models removed.'); };
     $('bdl-mi').onclick = () => {
@@ -176,7 +177,7 @@
         $('bdl-fg').onclick = async () => {
           const names = cbs().filter(c => c.checked).map(c => sc.factions[+c.dataset.k].name); if (!names.length) return;
           const q = $('bdl-mq').value, t0 = Date.now(); $('bdl-fg').disabled = true;
-          try { const r = await M().importFactions(sc, names, q === 'full' ? { full: true, hi: $('bdl-mh').value } : { scale: +q, hi: $('bdl-mh').value }, t => { $('bdl-ms').textContent = t; }); box.textContent = ''; const fl = Object.entries(r.why || {}).flatMap(([f, l]) => l.map(x => f + ' - ' + x)); if (fl.length) { const dt = document.createElement('details'), sm = document.createElement('summary'), pr = document.createElement('pre'); sm.textContent = 'Show all ' + fl.length + ' skipped'; pr.style.cssText = 'white-space:pre-wrap;font-size:11px;max-height:220px;overflow:auto;user-select:text'; pr.textContent = fl.join('\n'); dt.append(sm, pr); box.appendChild(dt); } mstat(); mfx(); say('Imported ' + r.ok + ' models' + (r.bad ? ' (' + r.bad + ' skipped, e.g. ' + Object.values(r.why).flat().slice(0, 3).join('; ') + ')' : '') + ' in ' + Math.round((Date.now() - t0) / 1000) + ' s.'); }
+          try { const r = await M().importFactions(sc, names, Object.assign(q === 'full' ? { full: true, hi: $('bdl-mh').value } : { scale: +q, hi: $('bdl-mh').value }, +$('bdl-mt').value ? { tex: +$('bdl-mt').value, texMax: +$('bdl-mt').value } : {}), t => { $('bdl-ms').textContent = t; }); box.textContent = ''; const fl = Object.entries(r.why || {}).flatMap(([f, l]) => l.map(x => f + ' - ' + x)); if (fl.length) { const dt = document.createElement('details'), sm = document.createElement('summary'), pr = document.createElement('pre'); sm.textContent = 'Show all ' + fl.length + ' skipped'; pr.style.cssText = 'white-space:pre-wrap;font-size:11px;max-height:220px;overflow:auto;user-select:text'; pr.textContent = fl.join('\n'); dt.append(sm, pr); box.appendChild(dt); } mstat(); mfx(); say('Imported ' + r.ok + ' models' + (r.bad ? ' (' + r.bad + ' skipped, e.g. ' + Object.values(r.why).flat().slice(0, 3).join('; ') + ')' : '') + ' in ' + Math.round((Date.now() - t0) / 1000) + ' s.'); }
           catch (e) { say('Import failed: ' + ((e && e.message) || e)); mstat(); $('bdl-fg').disabled = false; }
         };
       }; i.click();
@@ -303,6 +304,63 @@ const MODELIMP = (function () {
     if (flip < 0) for (let i = 0; i < T.length; i += 3) { const t = T[i + 1]; T[i + 1] = T[i + 2]; T[i + 2] = t; }
     return N;
   }
+  /* ---- textured copies: keep each model's real texture and UVs instead of baking the paint into vertex colours ---- */
+  function expandUV(m) {
+    const key = new Map(), X = [], UV = [], tris = [], nt = m.T.length / 2 + 1;
+    for (let i = 0; i < m.F.length; i += 6) for (let k = 0; k < 3; k++) {
+      const v = m.F[i + k * 2], t = m.F[i + k * 2 + 1], kk = v * nt + (t + 1); let id = key.get(kk);
+      if (id === undefined) { id = X.length / 3; key.set(kk, id); X.push(m.P[v * 3], m.P[v * 3 + 1], m.P[v * 3 + 2]); if (t >= 0) UV.push(m.T[t * 2], 1 - m.T[t * 2 + 1]); else UV.push(0, 0); }
+      tris.push(id);
+    }
+    return { X: Float32Array.from(X), UV: Float32Array.from(UV), T: Int32Array.from(tris) };
+  }
+  /* vertex clustering that keeps different parts of the texture apart, so painted detail is not smeared across UV islands */
+  function clusterUV(g, cell, org) {
+    const n = g.X.length / 3, map = new Map(), id = new Int32Array(n); let m = 0; const SX = [], SU = [], CN = [];
+    for (let i = 0; i < n; i++) {
+      const ix = Math.floor((g.X[i * 3] - org[0]) / cell), iy = Math.floor((g.X[i * 3 + 1] - org[1]) / cell), iz = Math.floor((g.X[i * 3 + 2] - org[2]) / cell);
+      const iu = Math.max(0, Math.min(31, Math.floor((g.UV[i * 2] - Math.floor(g.UV[i * 2])) * 32))), iv = Math.max(0, Math.min(31, Math.floor((g.UV[i * 2 + 1] - Math.floor(g.UV[i * 2 + 1])) * 32)));
+      const k = (((ix * 4096 + iy) * 4096 + iz) * 32 + iu) * 32 + iv; let c = map.get(k); if (c === undefined) { c = m++; map.set(k, c); SX.push(0, 0, 0); SU.push(0, 0); CN.push(0); }
+      id[i] = c; SX[c * 3] += g.X[i * 3]; SX[c * 3 + 1] += g.X[i * 3 + 1]; SX[c * 3 + 2] += g.X[i * 3 + 2]; SU[c * 2] += g.UV[i * 2]; SU[c * 2 + 1] += g.UV[i * 2 + 1]; CN[c]++;
+    }
+    const seen = new Set(), T = [];
+    for (let i = 0; i < g.T.length; i += 3) {
+      const a = id[g.T[i]], b = id[g.T[i + 1]], c = id[g.T[i + 2]]; if (a === b || b === c || a === c) continue;
+      const lo = Math.min(a, b, c), hi = Math.max(a, b, c), mid = a + b + c - lo - hi, kk = (lo * 1048576 + mid) * 1048576 + hi; if (seen.has(kk)) continue; seen.add(kk); T.push(a, b, c);
+    }
+    const X = new Float32Array(m * 3), UV = new Float32Array(m * 2); for (let c = 0; c < m; c++) { for (let k = 0; k < 3; k++) X[c * 3 + k] = SX[c * 3 + k] / CN[c]; UV[c * 2] = SU[c * 2] / CN[c]; UV[c * 2 + 1] = SU[c * 2 + 1] / CN[c]; }
+    return { X, UV, T: Int32Array.from(T), tris: T.length / 3 };
+  }
+  function decimateUV(g, target) {
+    const tr = g.T.length / 3; if (tr <= target) return { X: g.X, UV: g.UV, T: g.T, tris: tr };
+    let mn = [1e9, 1e9, 1e9], mx = [-1e9, -1e9, -1e9]; for (let i = 0; i < g.X.length; i += 3) for (let k = 0; k < 3; k++) { mn[k] = Math.min(mn[k], g.X[i + k]); mx[k] = Math.max(mx[k], g.X[i + k]); }
+    const ext = Math.max(mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2], 1e-3); let lo = ext / 900, hi = ext / 2, best = null;
+    for (let it = 0; it < 12; it++) { const mid = Math.sqrt(lo * hi), r = clusterUV(g, mid, mn); if (r.tris > target) lo = mid; else { hi = mid; best = r; } }
+    return best || clusterUV(g, hi, mn);
+  }
+  /* smooth normals, welded by position so texture seams do not show as hard lines; flips an inside-out surface like finish() */
+  function finishW(g) {
+    const n = g.X.length / 3, X = g.X, T = g.T, w = new Map(), wid = new Int32Array(n); let nw = 0, mnx = 1e9, mxx = -1e9, mny = 1e9, mxy = -1e9, mnz = 1e9, mxz = -1e9;
+    for (let i = 0; i < n; i++) { mnx = Math.min(mnx, X[i * 3]); mxx = Math.max(mxx, X[i * 3]); mny = Math.min(mny, X[i * 3 + 1]); mxy = Math.max(mxy, X[i * 3 + 1]); mnz = Math.min(mnz, X[i * 3 + 2]); mxz = Math.max(mxz, X[i * 3 + 2]); }
+    const q = Math.max(mxx - mnx, mxy - mny, mxz - mnz, 1e-3) / 20000;
+    for (let i = 0; i < n; i++) { const k = (Math.round(X[i * 3] / q) * 65537 + Math.round(X[i * 3 + 1] / q)) * 65537 + Math.round(X[i * 3 + 2] / q); let c = w.get(k); if (c === undefined) { c = nw++; w.set(k, c); } wid[i] = c; }
+    const A = new Float32Array(nw * 3); let cx = 0, cy = 0, cz = 0; for (let i = 0; i < n; i++) { cx += X[i * 3]; cy += X[i * 3 + 1]; cz += X[i * 3 + 2]; } cx /= n; cy /= n; cz /= n; let sgn = 0;
+    for (let i = 0; i < T.length; i += 3) {
+      const a = T[i] * 3, b = T[i + 1] * 3, c = T[i + 2] * 3, ux = X[b] - X[a], uy = X[b + 1] - X[a + 1], uz = X[b + 2] - X[a + 2], vx = X[c] - X[a], vy = X[c + 1] - X[a + 1], vz = X[c + 2] - X[a + 2];
+      const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx; sgn += nx * ((X[a] + X[b] + X[c]) / 3 - cx) + ny * ((X[a + 1] + X[b + 1] + X[c + 1]) / 3 - cy) + nz * ((X[a + 2] + X[b + 2] + X[c + 2]) / 3 - cz);
+      for (const v of [T[i], T[i + 1], T[i + 2]]) { const o = wid[v] * 3; A[o] += nx; A[o + 1] += ny; A[o + 2] += nz; }
+    }
+    const flip = sgn < 0 ? -1 : 1, N = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) { const o = wid[i] * 3, l = Math.hypot(A[o], A[o + 1], A[o + 2]) || 1; N[i * 3] = A[o] * flip / l; N[i * 3 + 1] = A[o + 1] * flip / l; N[i * 3 + 2] = A[o + 2] * flip / l; }
+    if (flip < 0) for (let i = 0; i < T.length; i += 3) { const t = T[i + 1]; T[i + 1] = T[i + 2]; T[i + 2] = t; }
+    return N;
+  }
+  /* a decoded texture -> a JPEG blob small enough to keep in the library */
+  async function encodeTex(tx, flat) {
+    const w = tx ? tx.w : 4, h = tx ? tx.h : 4, cv = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(w, h) : Object.assign(document.createElement('canvas'), { width: w, height: h }), g = cv.getContext('2d');
+    if (tx) g.putImageData(new ImageData(new Uint8ClampedArray(tx.d.buffer, tx.d.byteOffset, tx.d.length), w, h), 0, 0); else { g.fillStyle = 'rgb(' + flat.map(v => Math.round(v * 255)).join(',') + ')'; g.fillRect(0, 0, w, h); }
+    return cv.convertToBlob ? await cv.convertToBlob({ type: 'image/jpeg', quality: .9 }) : await new Promise(r => cv.toBlob(r, 'image/jpeg', .9));
+  }
   /* Unity-style transform: scale, then rotate about Z, X, Y (degrees), then move */
   function mat(x) {
     const d = Math.PI / 180, cx = Math.cos(x[3] * d), sx = Math.sin(x[3] * d), cy = Math.cos(x[4] * d), sy = Math.sin(x[4] * d), cz = Math.cos(x[5] * d), sz = Math.sin(x[5] * d);
@@ -314,7 +372,7 @@ const MODELIMP = (function () {
   const mul = (A, B) => { const r = new Array(12); for (let i = 0; i < 3; i++) { for (let j = 0; j < 3; j++) r[i * 4 + j] = A[i * 4] * B[j] + A[i * 4 + 1] * B[4 + j] + A[i * 4 + 2] * B[8 + j]; r[i * 4 + 3] = A[i * 4] * B[3] + A[i * 4 + 1] * B[7] + A[i * 4 + 2] * B[11] + A[i * 4 + 3]; } return r; };
   /* unit = { name, parts:[{m,t,p,x}] }; files: id -> async () => Blob (mesh text via .text()). Returns { name, parts:[{V,N,C,T}], h, r, tris } */
   async function build(unit, getMesh, getTex, opt) {
-    opt = opt || {}; build.err = ''; const parts = unit.parts, W = [], raw = [];
+    opt = opt || {}; build.err = ''; const parts = unit.parts, W = [], raw = [], rawM = [], rawT = [];
     for (let i = 0; i < parts.length; i++) {
       const p = parts[i], L = mat(p.x), par = p.p; let M;
       if (par < 0) M = mat([0, 0, 0, 0, (p.x[4] || 0) - 180, 0, p.x[6], p.x[7], p.x[8]]); else M = mul(W[par], L); W.push(M);
@@ -323,7 +381,7 @@ const MODELIMP = (function () {
     for (let i = 0; i < parts.length; i++) {
       const p = parts[i]; let txt; try { txt = await getMesh(p.m); } catch (e) { raw.push(null); if (!build.err) build.err = (e && e.name && e.name !== 'Error' ? e.name + ' ' : '') + (e && e.message || e); continue; }
       const m = parseOBJ(txt); let tex = null; if (p.t) { if (!(p.t in texs)) { try { texs[p.t] = await decodeTex(await getTex(p.t), opt.texMax || 1024); } catch (e) { texs[p.t] = null; } } tex = texs[p.t]; }
-      const g = expand(m, tex, p.p < 0 ? [.2, .18, .15] : [.5, .5, .5]); raw.push(g); total += g.T.length / 3;
+      const g = expand(m, tex, p.p < 0 ? [.2, .18, .15] : [.5, .5, .5]); raw.push(g); rawM[i] = opt.tex ? m : null; rawT[i] = tex; total += g.T.length / 3;
     }
     let dmn = [1e9, 1e9, 1e9], dmx = [-1e9, -1e9, -1e9];
     for (let i = 0; i < parts.length; i++) { const g = raw[i]; if (!g) continue; const M = W[i], st = Math.max(1, Math.floor(g.X.length / 3 / 400)); for (let k = 0; k < g.X.length; k += 3 * st) { const x = g.X[k], y = g.X[k + 1], z = g.X[k + 2], q = [M[0] * x + M[1] * y + M[2] * z + M[3], M[4] * x + M[5] * y + M[6] * z + M[7], M[8] * x + M[9] * y + M[10] * z + M[11]]; for (let j = 0; j < 3; j++) { dmn[j] = Math.min(dmn[j], q[j]); dmx[j] = Math.max(dmx[j], q[j]); } } }
@@ -344,10 +402,22 @@ const MODELIMP = (function () {
     return { name: unit.name, parts: out, tris, bbox: [mnx, mny, mnz, mxx, mxy, mxz], big: diag > 5 }; };
     const res = mkPass(stdBudget, false);
     /* a second, richer copy for previews and (optionally) the battle: High about 4x, Maximum about 12x the standard triangles, capped so the library stays a sensible size */
+    /* with textures kept, the richer copy is a textured one: the same triangle budget, but the model wears its real paint */
+    if (opt.tex) {
+      const hb = opt.hi === 'max' ? (diag > 5 ? 250000 : 120000) : (diag > 5 ? 100000 : 40000), out = [], tl = [], tmap = new Map(); let tris = 0;
+      for (let i = 0; i < parts.length; i++) {
+        const m = rawM[i]; if (!m) continue; const g = expandUV(m), tr = g.T.length / 3, share = Math.max(400, Math.round(hb * tr / Math.max(1, total)));
+        const d = decimateUV(g, share), M = W[i], V = new Float32Array(d.X.length);
+        for (let k = 0; k < d.X.length; k += 3) { const x = d.X[k], y = d.X[k + 1], z = d.X[k + 2]; V[k] = M[0] * x + M[1] * y + M[2] * z + M[3]; V[k + 1] = M[4] * x + M[5] * y + M[6] * z + M[7]; V[k + 2] = M[8] * x + M[9] * y + M[10] * z + M[11]; }
+        const gg = { X: V, T: Int32Array.from(d.T) }, N = finishW(gg), tk = rawT[i] ? parts[i].t : (parts[i].p < 0 ? '#flat-base' : '#flat'); let ti = tmap.get(tk); if (ti === undefined) { ti = tl.length; tmap.set(tk, ti); tl.push(rawT[i] ? { tex: rawT[i] } : { flat: parts[i].p < 0 ? [.2, .18, .15] : [.5, .5, .5] }); }
+        out.push({ V, N, UV: d.UV, T: Uint32Array.from(gg.T), ti }); tris += gg.T.length / 3;
+      }
+      if (out.length) { const blobs = []; for (const t of tl) blobs.push(await encodeTex(t.tex, t.flat)); res.hi = { tris, parts: out, texs: blobs, textured: true, bbox: res.bbox, big: res.big }; }
+    } else
     if (opt.hi === 'hi' || opt.hi === 'max') { const hb = opt.hi === 'max' ? (diag > 5 ? 250000 : 120000) : (diag > 5 ? 100000 : 40000); if (hb > stdBudget * 1.5) res.hi = mkPass(hb, true); }
     return res;
   }
-  return { parseOBJ, decodeTex, expand, decimate, build, mat };
+  return { parseOBJ, decodeTex, expand, decimate, build, mat, expandUV, decimateUV, finishW, encodeTex };
 })();
 
 /* ===== BDModels: local model library (IndexedDB), folder import, and lookup for the 3D board ===== */
@@ -372,7 +442,7 @@ const BDModels = (function () {
       C[i] = rr + m; C[i + 1] = gg + m; C[i + 2] = bb + m;
     }
   }
-  function prep(rec) {
+  function prep(rec, imgs) {
     const fix = get('khfix', '1') === '1' && KHORNE.test(String(rec.name || '')), mir = get('mirror', '1') === '1', turn = (+get('yaw', '0')) * Math.PI / 180, c = Math.cos(turn), s = Math.sin(turn);
     return { name: rec.name, parts: rec.parts.map(p => {
       const V = new Float32Array(p.V), N = new Float32Array(p.N), T = new Uint32Array(p.T);
@@ -381,6 +451,7 @@ const BDModels = (function () {
         V[i] = x * c + z * s; V[i + 2] = -x * s + z * c; N[i] = nx * c + nz * s; N[i + 2] = -nx * s + nz * c;
       }
       if (mir) for (let i = 0; i < T.length; i += 3) { const t = T[i + 1]; T[i + 1] = T[i + 2]; T[i + 2] = t; }
+      if (imgs) return { V, N, UV: p.UV, T, img: imgs[p.ti] };
       const C = new Float32Array(p.C.length); for (let i = 0; i < C.length; i++) C[i] = p.C[i] / 255;
       if (fix) recolour(C);
       return { V, N, C, T };
@@ -391,7 +462,7 @@ const BDModels = (function () {
   function fetchFig(m, hi) {
     const k = hi ? m.key + '#hi' : m.key;
     if (cache.has(k)) return cache.get(k); if (loading.has(k)) return null; loading.add(k);
-    idbOpen().then(async d => { const rec = await rq(tx(d, 'figs').objectStore('figs').get(k)); d.close(); if (!rec) console.warn('[BDModels] indexed but not stored:', k, m.name); if (rec) { if (hi) { hiOrder.push(k); while (hiOrder.length > 40) cache.delete(hiOrder.shift()); } else if (cache.size > 350) cache.delete(cache.keys().next().value); const fg = prep(rec); figOf.set(fg, m); cache.set(k, fg); } loading.delete(k); ping(); }).catch(e => { loading.delete(k); console.warn('[BDModels] could not load', m.name, e); });
+    idbOpen().then(async d => { const rec = await rq(tx(d, 'figs').objectStore('figs').get(k)); d.close(); if (!rec) console.warn('[BDModels] indexed but not stored:', k, m.name); if (rec) { if (hi) { hiOrder.push(k); while (hiOrder.length > 40) cache.delete(hiOrder.shift()); } else if (cache.size > 350) cache.delete(cache.keys().next().value); const imgs = rec.texs ? await Promise.all(rec.texs.map(b => createImageBitmap(b, { premultiplyAlpha: 'none', colorSpaceConversion: 'none' }))) : null; const fg = prep(rec, imgs); figOf.set(fg, m); cache.set(k, fg); } loading.delete(k); ping(); }).catch(e => { loading.delete(k); console.warn('[BDModels] could not load', m.name, e); });
     return null;
   }
   /* the richer copy of a model you already hold (previews): it arrives a moment later and the preview refreshes */
@@ -461,6 +532,12 @@ const BDModels = (function () {
     /* the texture colours are screen (sRGB) values but the renderer lights in linear light, like the built-in figures: convert once and keep both copies, so the models keep their painted colours instead of washing out pale */
     const gm = typeof BF_LIN !== 'undefined' && BF_LIN.on ? (BF_LIN.g || 2.2) : 1;
     for (const g of fig.parts) {
+      if (g.img) {
+        const TX = mb.tx || (mb.tx = new Map()); let b = TX.get(g.img); if (!b) { b = { P: [], N: [], UV: [], M: [], I: [], n: 0 }; TX.set(g.img, b); }
+        const nn = g.V.length / 3, bs0 = b.n;
+        for (let j = 0; j < nn; j++) { const vx = g.V[j * 3], vz = g.V[j * 3 + 2], nx = g.N[j * 3], nz = g.N[j * 3 + 2]; b.P.push(vx * cy + vz * sy + x, g.V[j * 3 + 1] + y, -vx * sy + vz * cy + z); b.N.push(nx * cy + nz * sy, g.N[j * 3 + 1], -nx * sy + nz * cy); b.UV.push(g.UV[j * 2], g.UV[j * 2 + 1]); b.M.push(.16, 0); }
+        for (let j = 0; j < g.T.length; j++) b.I.push(g.T[j] + bs0); b.n += nn; continue;
+      }
       const n = g.V.length / 3, base = mb.n;
       const C = gm !== 1 ? (g.CLg === gm ? g.CL : (g.CLg = gm, g.CL = Float32Array.from(g.C, v => Math.pow(v < 0 ? 0 : v, gm)))) : g.C;
       for (let j = 0; j < n; j++) {
@@ -497,7 +574,7 @@ const BDModels = (function () {
           const r = await MODELIMP.build(u, getMesh, getTex, opt); if (!r.parts.length) { bad++; (why[fac.name] = why[fac.name] || []).push(u.name + ': empty' + (MODELIMP.build.err ? ' (' + MODELIMP.build.err + ')' : '')); continue; }
           let hy = 0; for (const p of r.parts) for (let k = 1; k < p.V.length; k += 3) if (p.V[k] > hy) hy = p.V[k];
           const key = fac.name + '|' + i, rec = { key, faction: fac.name, name: u.name, big: r.big, tris: r.tris, parts: r.parts.map(p => ({ V: p.V, N: p.N, C: p.C, T: p.T })) };
-          const t = tx(d, ['figs', 'index'], 'readwrite'); t.objectStore('figs').put(rec); if (r.hi) t.objectStore('figs').put({ key: key + '#hi', faction: fac.name, name: u.name, big: r.big, tris: r.hi.tris, parts: r.hi.parts.map(p => ({ V: p.V, N: p.N, C: p.C, T: p.T })) }); t.objectStore('index').put({ key, faction: fac.name, name: u.name, h: hy, tris: r.tris, hi: r.hi ? r.hi.tris : 0 }); await done(t); ok++;
+          const t = tx(d, ['figs', 'index'], 'readwrite'); t.objectStore('figs').put(rec); if (r.hi) t.objectStore('figs').put(r.hi.textured ? { key: key + '#hi', faction: fac.name, name: u.name, big: r.big, tris: r.hi.tris, textured: 1, texs: r.hi.texs, parts: r.hi.parts.map(p => ({ V: p.V, N: p.N, UV: p.UV, T: p.T, ti: p.ti })) } : { key: key + '#hi', faction: fac.name, name: u.name, big: r.big, tris: r.hi.tris, parts: r.hi.parts.map(p => ({ V: p.V, N: p.N, C: p.C, T: p.T })) }); t.objectStore('index').put({ key, faction: fac.name, name: u.name, h: hy, tris: r.tris, hi: r.hi ? r.hi.tris : 0, htx: r.hi && r.hi.textured ? 1 : 0 }); await done(t); ok++;
         } catch (e) { bad++; (why[fac.name] = why[fac.name] || []).push(u.name + ': ' + (e && e.message || e)); console.warn('model skipped', u.name, e); }
         if (i % 4 === 0) await new Promise(r => setTimeout(r, 0));
       }
@@ -506,7 +583,7 @@ const BDModels = (function () {
   }
   async function clearAll() { const d = await idbOpen(); const t = tx(d, ['figs', 'index'], 'readwrite'); t.objectStore('figs').clear(); t.objectStore('index').clear(); await done(t); d.close(); index = []; cache.clear(); poolCache.clear(); ping(); }
   const factions = () => { const c = {}; for (const m of index) c[m.faction] = (c[m.faction] || 0) + 1; return c; };
-  return { debug: (ds, fac) => { const t = toks(ds).filter(w => w.length > 3)[0] || toks(ds)[0] || '', hits = index.filter(f => toks(f.name).some(w => w === t || w.includes(t))); const mine = index.filter(f => String(f.faction).toLowerCase() === String(fac).toLowerCase()); return 'faction has ' + mine.length + ' models' + (mine.length ? ' (tallest ' + Math.max(...mine.map(f => f.h)).toFixed(2) + ')' : '') + '; name hits for "' + t + '": ' + (hits.length ? hits.slice(0, 3).map(f => f.faction + ': ' + f.name + ' h=' + f.h.toFixed(2)).join(' | ') : 'none'); }, variants: (ds, fac) => pool(ds, fac) || [], fig: m => fetchFig(m) || cache.get(m.key) || null, why: (ds, fac) => { const p = pool(ds, fac); return p ? p.map(f => f.faction + ': ' + f.name) : 'no match among ' + index.length + ' models'; }, load, pick, add, scan, importFactions, clearAll, factions, on: () => index.length > 0 && get('on', '1') === '1', count: () => index.length, get, set, reprep: async () => { cache.clear(); hiOrder.length = 0; poolCache.clear(); ping(); }, upgrade, frame, hiCount: () => index.filter(m => m.hi).length, hiTris: () => index.reduce((n, m) => n + (m.hi || 0), 0) };
+  return { debug: (ds, fac) => { const t = toks(ds).filter(w => w.length > 3)[0] || toks(ds)[0] || '', hits = index.filter(f => toks(f.name).some(w => w === t || w.includes(t))); const mine = index.filter(f => String(f.faction).toLowerCase() === String(fac).toLowerCase()); return 'faction has ' + mine.length + ' models' + (mine.length ? ' (tallest ' + Math.max(...mine.map(f => f.h)).toFixed(2) + ')' : '') + '; name hits for "' + t + '": ' + (hits.length ? hits.slice(0, 3).map(f => f.faction + ': ' + f.name + ' h=' + f.h.toFixed(2)).join(' | ') : 'none'); }, variants: (ds, fac) => pool(ds, fac) || [], fig: m => fetchFig(m) || cache.get(m.key) || null, why: (ds, fac) => { const p = pool(ds, fac); return p ? p.map(f => f.faction + ': ' + f.name) : 'no match among ' + index.length + ' models'; }, load, pick, add, scan, importFactions, clearAll, factions, on: () => index.length > 0 && get('on', '1') === '1', count: () => index.length, get, set, reprep: async () => { cache.clear(); hiOrder.length = 0; poolCache.clear(); ping(); }, upgrade, frame, hiCount: () => index.filter(m => m.hi).length, texCount: () => index.filter(m => m.htx).length, hiTris: () => index.reduce((n, m) => n + (m.hi || 0), 0) };
 })();
 window.BDModels = BDModels; window.MODELIMP = MODELIMP;
 
@@ -17460,12 +17537,13 @@ function ground(mb, cx, cz, rx, rz, seg, col, m, lift, H, rng, wob) {
 
 /* ===== the renderer ===== */
 const VS = `#version 300 es
-layout(location=0) in vec3 aP; layout(location=1) in vec3 aN; layout(location=2) in vec3 aC; layout(location=3) in vec2 aM;
-uniform mat4 uVP, uLVP; out vec3 vW, vN, vC; out vec2 vM; out vec4 vL;
-void main(){ vW=aP; vN=aN; vC=aC; vM=aM; vL=uLVP*vec4(aP,1.); gl_Position=uVP*vec4(aP,1.); }`;
+layout(location=0) in vec3 aP; layout(location=1) in vec3 aN; layout(location=2) in vec3 aC; layout(location=3) in vec2 aM; layout(location=4) in vec2 aUV;
+uniform mat4 uVP, uLVP; out vec3 vW, vN, vC; out vec2 vM, vUV; out vec4 vL;
+void main(){ vW=aP; vN=aN; vC=aC; vM=aM; vUV=aUV; vL=uLVP*vec4(aP,1.); gl_Position=uVP*vec4(aP,1.); }`;
 const FS = `#version 300 es
 precision highp float; precision highp sampler2DShadow;
-in vec3 vW, vN, vC; in vec2 vM; in vec4 vL; out vec4 o;
+in vec3 vW, vN, vC; in vec2 vM, vUV; in vec4 vL; out vec4 o;
+uniform sampler2D uTx; uniform float uUseTx;
 uniform float uFadeOn; uniform int uFN; uniform vec4 uFd[40];
 uniform sampler2DShadow uSh; uniform vec3 uSun, uSunC, uAmbT, uAmbB, uFog, uCam, uSky; uniform float uFogD, uShadow, uTexel, uDust, uQ, uNeu; uniform vec2 uRes; uniform int uLN; uniform vec4 uLP[12]; uniform vec3 uLC[12];
 float h31(vec3 p){ p=fract(p*.3183099+.1); p*=17.; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }
@@ -17475,6 +17553,7 @@ void main(){
     if(fa<.999){ float fn=fract(52.9829189*fract(dot(gl_FragCoord.xy,vec2(.06711056,.00583715)))); if(fn>fa) discard; } }
   float gls=floor(vM.x*.5+.001), wx=vM.x-2.*gls;
   vec3 n=normalize(vN); vec3 c=vC;
+  vec3 tcol=pow(texture(uTx,vUV).rgb,vec3(2.2)); if(uUseTx>.5) c=tcol;
   n=normalize(n+(vec3(vn(vW*9.),vn(vW*9.+7.),vn(vW*9.+13.))-.5)*.38*wx);
   if(abs(wx-.8125)<.004 && abs(n.y)<.6){ vec3 t=normalize(cross(n,vec3(0.,1.,0.))); float ph=dot(vW,t)*24.; n=normalize(n+t*cos(ph)*.55); c*=.84+.16*sin(ph);
     float st=vn(vec3(dot(vW,t)*5.,vW.y*.35,3.)); c=mix(c,c*vec3(.7,.46,.34),smoothstep(.58,.82,st)*clamp(1.-vW.y*.25,0.,1.));
@@ -17571,7 +17650,25 @@ class Renderer {
     const gl = this.gl, vao = gl.createVertexArray(); gl.bindVertexArray(vao);
     const buf = (arr, loc, size) => { const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(arr), gl.STATIC_DRAW); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, size, gl.FLOAT, false, 0, 0); return b; };
     const bs = [buf(mb.P, 0, 3), buf(mb.N, 1, 3), buf(mb.C, 2, 3), buf(mb.M, 3, 2)], ib = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint32Array(mb.I), gl.STATIC_DRAW);
-    gl.bindVertexArray(null); const m = { vao, count: mb.I.length, kind: kind || 'solid', bs, ib, uid: (Renderer._uid = (Renderer._uid || 0) + 1) }; this.meshes.push(m); return m;
+    gl.bindVertexArray(null); const m = { vao, count: mb.I.length, kind: kind || 'solid', bs, ib, uid: (Renderer._uid = (Renderer._uid || 0) + 1) }; this.meshes.push(m);
+    if (mb.tx) for (const [img, b] of mb.tx) if (b.I.length) this.uploadTx(b, img, kind);
+    return m;
+  }
+  /* a group of triangles that wear a real texture (imported models kept with their paint) */
+  texOf(img) {
+    const gl = this.gl; this._tx = this._tx || new Map(); let t = this._tx.get(img); if (t) return t;
+    if (this._tx.size > 80) { const k = this._tx.keys().next().value; gl.deleteTexture(this._tx.get(k)); this._tx.delete(k); }
+    t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t); gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, img);
+    gl.generateMipmap(gl.TEXTURE_2D); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+    const an = gl.getExtension('EXT_texture_filter_anisotropic'); if (an) gl.texParameterf(gl.TEXTURE_2D, an.TEXTURE_MAX_ANISOTROPY_EXT, Math.min(8, gl.getParameter(an.MAX_TEXTURE_MAX_ANISOTROPY_EXT) || 1));
+    this._tx.set(img, t); return t;
+  }
+  uploadTx(b, img, kind) {
+    const gl = this.gl, vao = gl.createVertexArray(); gl.bindVertexArray(vao);
+    const buf = (arr, loc, size) => { const bb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, bb); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(arr), gl.STATIC_DRAW); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, size, gl.FLOAT, false, 0, 0); return bb; };
+    const bs = [buf(b.P, 0, 3), buf(b.N, 1, 3), buf(b.M, 3, 2), buf(b.UV, 4, 2)], ib = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint32Array(b.I), gl.STATIC_DRAW);
+    gl.bindVertexArray(null); const m = { vao, count: b.I.length, kind: kind || 'solid', bs, ib, tex: this.texOf(img), uid: (Renderer._uid = (Renderer._uid || 0) + 1) }; this.meshes.push(m); return m;
   }
   clear() { const gl = this.gl; for (const m of this.meshes) { gl.deleteVertexArray(m.vao); m.bs.forEach(b => gl.deleteBuffer(b)); gl.deleteBuffer(m.ib); } this.meshes = []; }
   postTargets(W, H) {
@@ -17632,7 +17729,13 @@ class Renderer {
     { const Ls = (env.lights || []).slice(0, 12), lp = new Float32Array(48), lc = new Float32Array(36); Ls.forEach((l, i) => { lp.set([l.x, l.y, l.z, l.r], i * 4); lc.set(l.c, i * 3); }); gl.uniform1i(U.uLN, Ls.length); if (Ls.length) { gl.uniform4fv(U['uLP[0]'], lp); gl.uniform3fv(U['uLC[0]'], lc); } }
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.shTex); gl.uniform1i(U.uSh, 0);
     { const fd = this.fades || [], n = Math.min(40, fd.length / 4 | 0), arr = new Float32Array(160); arr.set(fd.slice(0, n * 4)); gl.uniform1i(U.uFN, n); if (U['uFd[0]']) gl.uniform4fv(U['uFd[0]'], arr); }
-    for (const m of this.meshes) if (m.kind === 'solid' && !m.hidden) { gl.uniform1f(U.uFadeOn, m.fade ? 1 : 0); gl.bindVertexArray(m.vao); gl.drawElements(gl.TRIANGLES, m.count, gl.UNSIGNED_INT, 0); }
+    if (!this.dummyTex) { this.dummyTex = gl.createTexture(); gl.activeTexture(gl.TEXTURE5); gl.bindTexture(gl.TEXTURE_2D, this.dummyTex); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([128, 128, 128, 255])); gl.activeTexture(gl.TEXTURE0); }
+    gl.uniform1i(U.uTx, 5); gl.activeTexture(gl.TEXTURE5); gl.bindTexture(gl.TEXTURE_2D, this.dummyTex); gl.activeTexture(gl.TEXTURE0); let curTx = null;
+    for (const m of this.meshes) if (m.kind === 'solid' && !m.hidden) {
+      const tx = m.tex || null; if (tx !== curTx) { curTx = tx; gl.uniform1f(U.uUseTx, tx ? 1 : 0); gl.activeTexture(gl.TEXTURE5); gl.bindTexture(gl.TEXTURE_2D, tx || this.dummyTex); gl.activeTexture(gl.TEXTURE0); }
+      gl.uniform1f(U.uFadeOn, m.fade ? 1 : 0); gl.bindVertexArray(m.vao); gl.drawElements(gl.TRIANGLES, m.count, gl.UNSIGNED_INT, 0);
+    }
+    gl.uniform1f(U.uUseTx, 0);
     gl.uniform1f(U.uFadeOn, 0);
     const fp = this.flat; gl.useProgram(fp.p); gl.uniformMatrix4fv(fp.U.uVP, false, VP); gl.uniformMatrix4fv(fp.U.uLVP, false, LVP); gl.uniform1f(fp.U.uPh, this.pulse ? this.pulse.ph : 0); gl.uniform1f(fp.U.uPI, this.pulse ? this.pulse.k : 0);
     gl.enable(gl.BLEND); gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ZERO, gl.ONE); gl.depthMask(false);
