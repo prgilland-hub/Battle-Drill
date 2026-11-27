@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.27-1427';
+  const VERSION = '2026.11.27-1434';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -8264,9 +8264,9 @@ const isFF = u => u.charged || hasFx(u, 'ff') || fxGet(u, 'ff-solo').some(x => x
 function fightLeft() { const F = G.fight; return alive().filter(u => F.elig.has(u.id) && !u.fought); }
 function fightPool(side) { const left = fightLeft(); const ff = left.filter(isFF); return (ff.length ? ff : left).filter(u => u.side === side); }
 async function advanceFight() {
-  const F = G.fight, gen = G.gen;
+  const F = G.fight, gen = G.gen, seq = F.seq = (F.seq || 0) + 1;
   while (true) {
-    if (G.stage !== 'battle' || G.gen !== gen || F.done) return;
+    if (G.stage !== 'battle' || G.gen !== gen || F.done || F.seq !== seq) return;
     const p = F.turn;
     if (!fightPool(p).length) {
       if (!fightPool(other(p)).length) { finishFight(); return; }
@@ -8283,7 +8283,8 @@ async function advanceFight() {
       render(); await sleep(500);
       if (G.stage !== 'battle' || G.gen !== gen) return;
       const pk = aiPickFight(fightPool('ai'));
-      await resolveFight(pk.u, pk.t);
+      try { await resolveFight(pk.u, pk.t); } catch (e) { console.error('AI fight', e); try { pk.u.fought = true; log(`Something went wrong resolving ${pk.u.name}'s fight (${String(e && e.message || e).slice(0, 120)}). It is skipped so the game can go on.`, 'sys'); } catch (x) { } }
+      if (F.seq !== seq) return;
       F.turn = 'player'; continue;
     }
     if (G.hot && p === 'player') {
@@ -8344,7 +8345,7 @@ async function resolveFight(u, t, choice) {
 }
 async function playerFight(u, t, choice) {
   G.sel = null; G.mode = null; G.msg = ''; G.fight.awaiting = false;
-  await resolveFight(u, t, choice);
+  try { await resolveFight(u, t, choice); } catch (e) { console.error('fight', e); try { u.fought = true; log(`Something went wrong resolving ${u.name}'s fight (${String(e && e.message || e).slice(0, 120)}). It is skipped so the game can go on.`, 'sys'); } catch (x) { } }
   G.fight.turn = 'ai';
   advanceFight();
 }
@@ -9384,7 +9385,7 @@ function renderSide() {
   } else {
     const ph = G.phase;
     const fightPick = ph === 'fight' && G.fight && G.fight.awaiting;
-    if (G.active === 'ai' && !fightPick) prompt = `The AI is taking its ${PNAME[ph]} phase. Click any unit to inspect it.`;
+    if (G.active === 'ai' && !fightPick) { prompt = `The AI is taking its ${PNAME[ph]} phase. Click any unit to inspect it.`; if (ph === 'fight' && G.fight && !G.fight.awaiting && !G.fight.done && !G.prompt && !G.hot) acts.push(btn('Stuck? Resume the fight phase', () => { G.busy = false; G.fight.finishing = false; log('Resuming the fight phase by hand.', 'sys'); advanceFight(); render(); }, false, false, 'Use this only if nothing has happened for several seconds')); }
     else if (fightPick) {
       if (G.mode && G.mode.type === 'fightSetup') {
         const tg = G.units.find(x => x.id === G.mode.target), eng = engagedWith(u);
