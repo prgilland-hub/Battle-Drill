@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.27-1242';
+  const VERSION = '2026.11.27-1346';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -1210,6 +1210,26 @@ button[data-tip],label[data-tip] input,label[data-tip] select{cursor:pointer}
 .chk{font-size:.75rem;border-radius:3px;padding:0 6px}
 .chk.ok{background:color-mix(in srgb,var(--good) 22%,transparent);color:var(--good)}
 .chk.no{background:color-mix(in srgb,var(--muted) 20%,transparent);color:var(--muted)}
+.rec-wrap{display:grid;gap:12px}
+.rec-cards{display:flex;flex-wrap:wrap;gap:10px}
+.rec-card{background:var(--raised);border:1px solid var(--line);border-radius:10px;padding:10px 14px;min-width:120px}
+.rec-card b{display:block;font-size:1.4rem}
+.rec-t{width:100%;border-collapse:collapse;font-size:.85rem}
+.rec-t th,.rec-t td{padding:5px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+.rec-t th:first-child,.rec-t td:first-child{text-align:left;white-space:normal}
+.rec-t th{color:var(--muted);font-weight:600;position:sticky;top:0;background:var(--panel,var(--raised))}
+.rec-scroll{overflow:auto;max-height:60vh}
+.rec-tag{display:inline-block;font-size:.7rem;border-radius:8px;padding:1px 7px;margin-left:6px}
+.rec-good{background:rgba(120,200,90,.2);color:#9be07a}.rec-bad{background:rgba(230,110,90,.2);color:#f08a78}
+.rec-g{border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin:6px 0}
+.rec-g summary{cursor:pointer}
+.rec-bar{display:flex;align-items:center;gap:8px;font-size:.8rem;margin:2px 0}.rec-bar span{width:150px}.rec-bar i{flex:1;height:8px;background:var(--line);border-radius:4px;overflow:hidden}.rec-bar u{display:block;height:100%;background:var(--brass)}.rec-bar b{width:28px;text-align:right}
+.rec-fb{margin:6px 0;padding-left:18px}.rec-fb li{margin:3px 0}.rec-fb li.good{color:#9be07a}.rec-fb li.warn{color:#f0b070}.rec-fb li.tip{color:var(--text)}
+.rec-evs{max-height:260px;overflow:auto;font-size:.8rem}.rec-ev{padding:1px 0;color:var(--muted)}.rec-ev b{color:var(--text)}
+.bc-drawer{position:fixed;right:12px;bottom:12px;width:min(400px,94vw);max-height:78vh;display:none;flex-direction:column;background:var(--panel,var(--raised));border:1px solid var(--brass);border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.5);z-index:60;padding:10px}
+.bc-drawer.on{display:flex}.bc-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}.bc-chips{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:6px}
+.bc-chat{flex:1;overflow:auto;min-height:120px;max-height:46vh;margin-bottom:6px}.bc-form textarea{width:100%;box-sizing:border-box}.bc-note{font-size:.78rem;margin:4px 0 0}
+.bc-chat{display:flex;flex-direction:column;gap:6px}.bc-drawer .gc-msg{padding:6px 9px;border-radius:8px;font-size:.88rem;line-height:1.4}.bc-drawer .gc-msg.user{background:var(--line);align-self:flex-end;max-width:90%}.bc-drawer .gc-msg.coach{border:1px solid var(--line)}.bc-drawer .gc-msg p{margin:.2rem 0}.bc-drawer .gc-msg ul{margin:.2rem 0;padding-left:1.1rem}
 .subtabs{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}
 .subtabs button{background:var(--raised);border:1px solid var(--line);border-radius:18px;padding:7px 16px;font-size:.95rem;color:var(--muted);cursor:pointer;min-height:38px}
 .subtabs button.on{background:var(--brass);border-color:var(--brass);color:var(--on-brass);font-weight:600}
@@ -2406,7 +2426,7 @@ html[data-look="cog"] .muted{color:var(--muted)}
 <!-- ============ ARMIES ============ -->
 <section class="tab" id="tab-armies">
   <div id="lib-status" class="lib-status"></div>
-  <nav class="subtabs" id="arm-subtabs" aria-label="Armies sections"><button type="button" class="on" data-sub="armies" aria-selected="true">My armies</button><button type="button" data-sub="import" aria-selected="false">Import units and detachments</button></nav>
+  <nav class="subtabs" id="arm-subtabs" aria-label="Armies sections"><button type="button" class="on" data-sub="armies" aria-selected="true">My armies</button><button type="button" data-sub="import" aria-selected="false">Import units and detachments</button><button type="button" data-sub="records" aria-selected="false">Game records</button></nav>
   <div id="arm-sub-import" hidden>
   <div class="panel" id="imp-panel" style="margin-bottom:14px">
     <h2 style="margin:0 0 4px">Import units and detachments</h2>
@@ -2432,6 +2452,7 @@ html[data-look="cog"] .muted{color:var(--muted)}
     <div id="imp-lib"></div>
   </div>
   </div>
+  <div id="arm-sub-records" hidden></div>
   <div id="arm-sub-armies">
   <div class="army-grid">
     <div class="panel army-list">
@@ -3775,6 +3796,7 @@ function destroyed(u) {
   if (dgPreventDeath(u)) return;
   const asFR = asFinalRedemptionPre(u);
   if (G && G.phase === 'fight' && G.curAtt && G.curAtt.side !== u.side && G.curAtt.leader && (G.curAtt.leader.abilities || []).some(a => (a.fx || []).some(f => /feast/.test(f)))) G.curAtt.fnp = G.curAtt.fnp ? Math.min(G.curAtt.fnp, 5) : 5;
+  GREC.died(u);
   u.alive = false; u.diedPh = G ? G.phaseNo : 0; if (G && has(u, 'vehicle')) for (const v of G.units) if (v.alive && v.side === u.side && v !== u && v.placed && !v.reserve && hasFx(v, 'vengeance') && edge(u, v) <= 12 && (has(u, 'adeptus mechanicus') || has(u, 'astra militarum'))) v.vengeful = true; noteKill(u); if (G && G.curAtt) G.curAtt.killPh = G.phaseNo; if (G && G.curAtt && G.phase === 'fight' && has(u, 'character') && hasFx(G.curAtt, 'exemplar') && G.curAtt.side !== u.side) { G.cp[G.curAtt.side]++; G.curAtt.exemplarA = (G.curAtt.exemplarA || 0) + 1; log(`Inspiring Exemplar: ${G.curAtt.name} destroys ${u.name}: ${G.curAtt.side === 'player' ? 'you gain' : 'the AI gains'} 1 CP and its Nemesis force weapon gets +1 Attacks for the rest of the battle.`, G.curAtt.side); } tsOnDestroyed(u); execShock(u); if (G && G.curAtt && has(u, 'character') && hasFx(G.curAtt, 'feeder-cp')) { G.cp[G.curAtt.side]++; log(`Feeder Tendrils: ${G.curAtt.side === 'player' ? 'you gain' : 'the AI gains'} 1 CP for destroying ${u.name}.`, G.curAtt.side); } if (typeof campKill === 'function') campKill(u); log(`${u.name} is destroyed.`, u.side);
   asOnDestroyed(u); asQuarryLost(u); asFinalRedemptionQ(u, asFR); if (G.curAtt && asIs(u)) { const L = (G.asKilledBy[u.side] = G.asKilledBy[u.side] || []); if (!L.includes(G.curAtt.id)) L.push(G.curAtt.id); }
   boom(.45);
@@ -6102,6 +6124,146 @@ async function lethalOrDev(u, w, t, p) {
     text: `${w.name} has both Lethal Hits and Devastating Wounds. Pick one for this attack. LETHAL HITS: each Critical Hit (unmodified 6 to hit) automatically wounds, with no wound roll, and ${t.name} then makes a normal saving throw; about ${o.lethal.toFixed(2)} unsaved wounds per Critical Hit. DEVASTATING WOUNDS: you still roll to wound, and each Critical Wound (unmodified 6${antiTxt}) inflicts mortal wounds equal to the weapon's Damage with no saving throw at all; about ${o.dev.toFixed(2)} unsaved wounds per Critical Hit. The app suggests ${best === 'lethal' ? 'Lethal Hits' : 'Devastating Wounds'} against this target.` });
   return r === 'yes';
 }
+/* ===== Game record: how every unit performed, game by game ===== */
+const GREC = {
+  list: null, loading: null,
+  row(u) {
+    if (!G) return null; const R = G.rec = G.rec || { units: {} };
+    let r = R.units[u.id];
+    if (!r) { const L = typeof leadersOf === 'function' ? leadersOf(u) : []; r = R.units[u.id] = { id: u.id, side: u.side, name: u.name, ds: u.ds || u.name, pts: +u.pts || 0, start: (u.start || u.models || 1) + L.length, leader: L.length ? L.map(l => l.name).join(' + ') : '', att: 0, hit: 0, wnd: 0, uns: 0, dmg: 0, mk: 0, pk: 0, taken: 0, lost: 0, shoot: 0, melee: 0, chg: 0, chgOk: 0, ow: 0, died: 0, w: {} }; }
+    return r;
+  },
+  attack(u, w, t, shooting, st, killed, snap) {
+    try {
+      if (!G || !u || !t) return;
+      const a = this.row(u), d = this.row(t), A = +st.A || 0, hit = (+st.hits || 0) + (+st.extra || 0), wnd = +st.wounds || 0, uns = +st.unsaved || 0, dmg = +st.dmg || 0, k = Math.max(0, +killed || 0);
+      const per = (t.pts || 0) / Math.max(1, d.start), pk = Math.min(t.pts || 0, per * k);
+      a.att += A; a.hit += hit; a.wnd += wnd; a.uns += uns; a.dmg += dmg; a.mk += k; a.pk += pk; if (snap) a.ow += 1; else if (shooting) a.shoot += 1; else a.melee += 1;
+      d.taken += dmg; d.lost += k;
+      const wn = (w && w.name) || 'weapon', x = a.w[wn] || (a.w[wn] = { A: 0, hit: 0, wnd: 0, uns: 0, dmg: 0, mk: 0, use: 0, rng: shooting ? 1 : 0 });
+      x.A += A; x.hit += hit; x.wnd += wnd; x.uns += uns; x.dmg += dmg; x.mk += k; x.use += 1;
+    } catch (e) { }
+  },
+  charge(u, ok, t) { try { const r = this.row(u); if (r) { if (ok) r.chgOk += 1; else r.chg += 1; } if (ok) this.ev(u.side, 'charge', { u: u.name, t: t && t.name || '' }); } catch (e) { } },
+  /* the event log: one short entry for each thing that decides a game */
+  ev(side, type, d) { try { if (!G) return; const R = G.rec = G.rec || { units: {} }; const L = R.events = R.events || []; if (L.length < 500) L.push(Object.assign({ r: G.round || 0, s: side, k: type }, d)); } catch (e) { } },
+  objCheck(side, c, when) { try { this.ev(side, 'obj', { h: c.held.length, o: c.oppHeld.length, n: OBJ.length, w: when }); } catch (e) { } },
+  actions(side, done) { try { const R = G.rec = G.rec || { units: {} }, S = R.seenAct = R.seenAct || {}; for (const k of Object.keys(done || {})) { if (!done[k]) continue; const key = side + '|' + k + '|' + (G.round || 0); if (S[key]) continue; S[key] = 1; this.ev(side, 'action', { a: k }); } } catch (e) { } },
+  /* score a side out of 100 on the three things a game is won on */
+  score(g, i) {
+    const s = g.sides[i], o = g.sides[1 - i], sd = i === 0 ? 'player' : 'ai', E = (g.events || []).filter(e => e.s === sd);
+    const vpS = s.vp + o.vp > 0 ? s.vp / (s.vp + o.vp) : .5, ob = E.filter(e => e.k === 'obj'), hold = ob.length ? ob.filter(e => e.h >= e.o && e.h > 0).length / ob.length : .5;
+    const pk = s.units.reduce((a, r) => a + r.pk, 0), pl = o.units.reduce((a, r) => a + r.pk, 0), ratio = pk + pl > 0 ? pk / (pk + pl) : .5;
+    const kills = E.filter(e => e.k === 'kill').length, lost = (g.events || []).filter(e => e.k === 'kill' && e.s !== sd).length, kr = kills + lost > 0 ? kills / (kills + lost) : .5;
+    const acts = E.filter(e => e.k === 'action').length, strats = E.filter(e => e.k === 'strat').length;
+    const obj = Math.round(100 * (.5 * vpS + .5 * hold)), des = Math.round(100 * (.7 * ratio + .3 * kr)), act = Math.min(100, acts * 30 + strats * 12);
+    return { obj, des, act, all: Math.round(.4 * obj + .4 * des + .2 * act), vpShare: vpS, hold, holdN: ob.length, pk, pl, kills, lost, acts, strats };
+  },
+  /* plain-language feedback for one side of one game */
+  feedback(g, i) {
+    const s = g.sides[i], o = g.sides[1 - i], sd = i === 0 ? 'player' : 'ai', sc = this.score(g, i), E = (g.events || []).filter(e => e.s === sd), out = [], add = (tone, text) => out.push({ tone, text });
+    const rounds = Math.max(1, g.rounds), pri = E.filter(e => e.k === 'primary'), sec = E.filter(e => e.k === 'secondary');
+    add(s.result === 'win' ? 'good' : s.result === 'loss' ? 'warn' : 'tip', `${s.result === 'win' ? 'Won' : s.result === 'loss' ? 'Lost' : 'Drew'} ${s.vp} to ${o.vp}${g.early ? ' (the game was ended early)' : ''}. Objectives ${sc.obj}, destruction ${sc.des}, actions and tactics ${sc.act}.`);
+    if (sc.holdN) add(sc.hold >= .6 ? 'good' : sc.hold < .4 ? 'warn' : 'tip', `You held at least as many objectives as the enemy on ${Math.round(sc.hold * sc.holdN)} of ${sc.holdN} checks. ${sc.hold < .4 ? 'Getting a unit onto an objective earlier, and keeping one back to hold it, is the quickest way to more primary VP.' : sc.hold >= .6 ? 'Keep doing that.' : ''}`);
+    const byR = {}; for (const e of pri) byR[e.r] = (byR[e.r] || 0) + e.vp; const dry = []; for (let r = 2; r <= Math.min(5, g.rounds); r++) if (!byR[r]) dry.push(r);
+    if (dry.length && s.vpPri < 30) add('warn', `No primary VP in round${dry.length > 1 ? 's' : ''} ${dry.join(', ')}. Plan the turn before so a unit is already moving onto the scoring objective.`);
+    if (!sec.length && !s.vpSec) add('tip', 'No secondary VP at all. Look at your secondary cards at the start of each round and give one unit the job of scoring them.');
+    else if (sec.length) add('good', `Secondary VP came from ${[...new Set(sec.map(e => e.n))].slice(0, 4).join(', ')}.`);
+    const us = s.units.slice(), top = us.slice().sort((a, b) => b.pk - a.pk)[0];
+    if (top && top.pk > 0) add('good', `${top.name} did the most killing: ${top.mk} model${top.mk === 1 ? '' : 's'} (${Math.round(top.pk)} points) for ${Math.round(top.dmg)} damage.`);
+    const idle = us.filter(r => r.pts >= 60 && r.dmg === 0 && r.att === 0 && r.alive);
+    if (idle.length) add('warn', `${idle.map(r => r.name).slice(0, 3).join(', ')} never attacked (${idle.reduce((a, r) => a + r.pts, 0)} points sitting idle). Check whether it was out of range, hidden, or held back too long.`);
+    const poor = us.filter(r => r.pts >= 60 && r.att > 0 && r.pk / r.pts < .25);
+    if (poor.length) add('tip', `${poor.map(r => r.name).slice(0, 3).join(', ')} attacked but killed little for its cost. A better target, or a closer firing position, would help.`);
+    const early = us.filter(r => r.died && r.died <= 2 && r.pts >= 50);
+    if (early.length) add('warn', `${early.map(r => r.name + ' (round ' + r.died + ')').slice(0, 3).join(', ')} died early. Losing a big unit in rounds 1 to 2 hands the enemy tempo.`);
+    const ch = us.reduce((a, r) => [a[0] + r.chg, a[1] + r.chgOk], [0, 0]);
+    if (ch[0] >= 3) add(ch[1] / ch[0] < .5 ? 'tip' : 'good', `${ch[1]} of ${ch[0]} charges connected${ch[1] / ch[0] < .5 ? ': declare charges only from inside about 7 inches, or use a re-roll when it matters' : ''}.`);
+    if ((s.cp || 0) >= 3) add('tip', `You finished with ${s.cp} Command Points unspent. Re-rolls and defensive Stratagems pay for themselves.`);
+    else if (!sc.strats && g.rounds >= 3) add('tip', 'No Stratagems were used. Even one well timed re-roll or defensive Stratagem often swings a key fight.');
+    if (sc.pl > sc.pk * 1.5 && sc.pk >= 0) add('warn', `You lost ${Math.round(sc.pl)} points of models and killed ${Math.round(sc.pk)}. Trade less: use cover, screen your valuable units and take fights you win.`);
+    return out;
+  },
+  /* the same, for a whole list of games of one army: the recurring pattern matters more than one result */
+  trends(list, buildId) {
+    const out = [], rows = []; for (const g of list) for (let i = 0; i < 2; i++) { const s = g.sides[i]; if (buildId && s.buildId !== buildId) continue; rows.push({ g, i, s, sc: this.score(g, i) }); }
+    if (rows.length < 2) return out;
+    const avg = k => rows.reduce((a, r) => a + r.sc[k], 0) / rows.length, cats = [['obj', 'objectives'], ['des', 'destruction'], ['act', 'actions and tactics']].map(([k, n]) => [n, avg(k)]).sort((a, b) => a[1] - b[1]);
+    out.push({ tone: 'tip', text: `Across ${rows.length} games your weakest area is ${cats[0][0]} (${Math.round(cats[0][1])}), your strongest is ${cats[2][0]} (${Math.round(cats[2][1])}).` });
+    const R = this.rollup(list, buildId), weak = R.U.filter(x => x.games >= 2 && x.pts >= 100 && x.eff < .35), strong = R.U.filter(x => x.games >= 2 && x.eff >= 1.4);
+    if (weak.length) out.push({ tone: 'warn', text: `${weak.slice(0, 3).map(x => x.ds).join(', ')} keep${weak.length === 1 ? 's' : ''} killing less than ${weak.length === 1 ? 'it costs' : 'they cost'}. Consider cutting ${weak.length === 1 ? 'it' : 'one'} for something that scores or kills, or change how ${weak.length === 1 ? 'it is' : 'they are'} used.` });
+    if (strong.length) out.push({ tone: 'good', text: `${strong.slice(0, 3).map(x => x.ds).join(', ')} reliably out-earn${strong.length === 1 ? 's' : ''} ${strong.length === 1 ? 'its' : 'their'} points. Build around ${strong.length === 1 ? 'it' : 'them'}.` });
+    const lossObj = rows.filter(r => r.s.result === 'loss'), winObj = rows.filter(r => r.s.result === 'win');
+    if (lossObj.length >= 2 && winObj.length >= 1) { const d = a => a.reduce((x, r) => x + r.sc.obj, 0) / a.length; if (d(winObj) - d(lossObj) > 15) out.push({ tone: 'tip', text: `You win when you hold objectives (objectives ${Math.round(d(winObj))} in wins, ${Math.round(d(lossObj))} in losses). Games are being decided on the board, not the kill count.` }); }
+    return out;
+  },
+  digestFaction(list, faction) {
+    const sub = list.map(g => Object.assign({}, g, { sides: g.sides.map(x => Object.assign({}, x, { buildId: x.faction === faction ? '__f' : x.buildId })) })), id = '__f';
+    return this.digest(sub, id);
+  },
+  /* a compact text the coach can read */
+  digest(list, buildId) {
+    const R = this.rollup(list, buildId), A = R.A, lines = [`Games: ${A.games}, ${A.win}W ${A.loss}L ${A.draw}D, average VP ${A.games ? (A.vp / A.games).toFixed(1) : 0} for and ${A.games ? (A.vpAgainst / A.games).toFixed(1) : 0} against.`];
+    for (const x of R.U.slice(0, 25)) lines.push(`- ${x.ds}: ${x.games} games, survived ${Math.round(100 * x.surv)}%, ${x.att} attacks (${x.att ? Math.round(100 * x.hit / x.att) : 0}% hit), ${(x.dmg / x.games).toFixed(1)} dmg/game, ${(x.pk / x.games).toFixed(0)} pts killed/game, value ${x.eff.toFixed(2)}x, took ${(x.taken / x.games).toFixed(1)} dmg/game`);
+    for (const t of this.trends(list, buildId)) lines.push('Pattern: ' + t.text);
+    return lines.join('\n');
+  },
+  died(u) { try { const r = this.row(u); if (r && !r.died) { r.died = G.round || 1; const by = G.curAtt && G.curAtt.side !== u.side ? G.curAtt : null; if (by) { const k = this.row(by); if (k) k.kills = (k.kills || 0) + 1; } this.ev(by ? by.side : (u.side === 'player' ? 'ai' : 'player'), 'kill', { u: u.name, p: +u.pts || 0, by: by ? by.name : '' }); } } catch (e) { } },
+  finish(early) {
+    try {
+      if (!G || G.recSaved) return; G.recSaved = 1;
+      const R = G.rec = G.rec || { units: {} };
+      for (const u of G.units) { const r = this.row(u); if (!r) continue; r.alive = u.alive ? 1 : 0; r.left = u.alive ? (typeof totalModels === 'function' ? totalModels(u) : u.models) : 0; r.pts = +u.pts || r.pts; r.name = u.name; }
+      const side = s => {
+        const b = s === 'player' ? G.pb : G.ab, vp = G.vp[s], oth = G.vp[s === 'player' ? 'ai' : 'player'], mine = vpTotal(s), theirs = vpTotal(s === 'player' ? 'ai' : 'player');
+        const units = G.units.filter(u => u.side === s && !u.spawned).map(u => R.units[u.id]).filter(Boolean);
+        return { side: s, human: s === 'player' || !!G.hot, who: typeof hotName === 'function' ? hotName(s) : s, buildId: b && b.id || '', buildName: b && b.name || '', faction: b && b.faction || '', det: b && b.detachment && (b.detachment.name || (b.detachment.list && b.detachment.list.map(d => d.name).join(' + '))) || '', pts: units.reduce((a, r) => a + r.pts, 0), cp: (G.cp && G.cp[s]) || 0, vp: mine, vpPri: vp.pri, vpSec: vp.sec, result: mine > theirs ? 'win' : mine < theirs ? 'loss' : 'draw', units };
+      };
+      const out = { id: 'g' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), at: Date.now(), rounds: G.round || 0, early: !!early, hot: !!G.hot, cp: !!G.cpOn || (G.fd && G.fd.player === 'combat patrol'), mission: (G.pri && G.pri.player && (G.pri.player.name || (typeof G.pri.player === 'string' ? G.pri.player : ''))) || '', text: G.result || '', events: (R.events || []).slice(0, 500), sides: [side('player'), side('ai')] };
+      /* a player who left before the end of battle round 3 and never scored does not leave a record worth reading */
+      if ((G.round || 0) < 1) return;
+      this.add(out);
+    } catch (e) { console.warn('[GREC]', e); }
+  },
+  async ready() {
+    if (this.list) return this.list; if (this.loading) return this.loading;
+    this.loading = (async () => {
+      let l = [];
+      try { if (typeof Store !== 'undefined' && Store.mode === 'db' && Store.db) l = await readCollection('games'); } catch (e) { }
+      try { const loc = JSON.parse(localStorage.getItem('bd.games') || '[]'); const seen = new Set(l.map(g => g.id)); for (const g of loc) if (!seen.has(g.id)) l.push(g); } catch (e) { }
+      l.sort((a, b) => b.at - a.at); this.list = l; this.loading = null; return l;
+    })();
+    return this.loading;
+  },
+  async add(rec) {
+    const l = await this.ready(); l.unshift(rec);
+    try { localStorage.setItem('bd.games', JSON.stringify(l.slice(0, 40))); } catch (e) { try { localStorage.setItem('bd.games', JSON.stringify(l.slice(0, 10))); } catch (x) { } }
+    try { if (Store.mode === 'db' && Store.db) await Store.db.collection('games').doc(rec.id).set(JSON.parse(JSON.stringify(rec))); } catch (e) { }
+    try { if (typeof renderRecords === 'function' && !$('#arm-sub-records').hidden) renderRecords(); } catch (e) { }
+  },
+  async remove(id) {
+    const l = await this.ready(), i = l.findIndex(g => g.id === id); if (i >= 0) l.splice(i, 1);
+    try { localStorage.setItem('bd.games', JSON.stringify(l.slice(0, 40))); } catch (e) { }
+    try { if (Store.mode === 'db' && Store.db) await Store.db.collection('games').doc(id).delete(); } catch (e) { }
+  },
+  /* one army's results rolled up across games: army totals, then each datasheet */
+  rollup(list, buildId) {
+    const A = { games: 0, win: 0, loss: 0, draw: 0, vp: 0, vpAgainst: 0, rounds: 0 }, U = new Map();
+    for (const g of list) for (let i = 0; i < 2; i++) {
+      const s = g.sides[i], o = g.sides[1 - i]; if (buildId && s.buildId !== buildId) continue;
+      A.games++; A[s.result]++; A.vp += s.vp; A.vpAgainst += o.vp; A.rounds += g.rounds;
+      const seen = new Set();
+      for (const r of s.units) {
+        const k = r.ds; let x = U.get(k); if (!x) U.set(k, x = { ds: k, games: 0, copies: 0, pts: 0, att: 0, hit: 0, wnd: 0, uns: 0, dmg: 0, mk: 0, pk: 0, taken: 0, lost: 0, died: 0, alive: 0, chg: 0, chgOk: 0, w: {}, kills: 0, start: 0 });
+        if (!seen.has(k)) { x.games++; seen.add(k); } x.copies++; x.pts += r.pts; x.att += r.att; x.hit += r.hit; x.wnd += r.wnd; x.uns += r.uns; x.dmg += r.dmg; x.mk += r.mk; x.pk += r.pk; x.taken += r.taken; x.lost += r.lost; x.died += r.alive ? 0 : 1; x.alive += r.alive ? 1 : 0; x.chg += r.chg; x.chgOk += r.chgOk; x.kills += r.kills || 0; x.start += r.start;
+        for (const [n, w] of Object.entries(r.w || {})) { const y = x.w[n] || (x.w[n] = { A: 0, hit: 0, wnd: 0, uns: 0, dmg: 0, mk: 0, use: 0, rng: w.rng }); for (const f of ['A', 'hit', 'wnd', 'uns', 'dmg', 'mk', 'use']) y[f] += w[f] || 0; }
+      }
+    }
+    for (const x of U.values()) { x.eff = x.pts ? x.pk / x.pts : 0; x.surv = x.copies ? x.alive / x.copies : 0; }
+    return { A, U: [...U.values()].sort((a, b) => b.eff - a.eff) };
+  },
+};
+
 async function attack(u, w, t, shooting, cover, snap) {
   if (!t.alive) return;
   G.curAtt = u; t.hitFrom = { x: u.x, y: u.y }; schAtt(u, w, t, shooting); if (shooting) t.shotAt = { by: u.id, turn: G.turnNo || 0 }; if (shooting) u.rngTurn = G.turnNo || 0;
@@ -6155,6 +6317,7 @@ async function attack(u, w, t, shooting, cover, snap) {
   smAfterAttack(u, w, t, shooting, st);
   btAfterAttack(u, w, t, shooting, st);
   tsAfterAttack(u, w, t, shooting, st, killed, before);
+  GREC.attack(u, w, t, shooting, st, killed, snap);
   if (t.models <= 0 && !leaderUp(t)) destroyed(t); else splitLeaders(t);
   await dgFlush();
 }
@@ -6261,6 +6424,7 @@ function useStrat(side, key, cost, u) {
   if (u) smBombast(side, u);
   log(`${side === 'player' ? 'You use' : 'The AI uses'} <b>${SNAME[key]}</b> (${c} CP${ds.length ? `, ${ds.length} less thanks to ${ds.map(d => d.why).join(' and ')}` : ''})${u ? ' on ' + u.name : ''}.`, side);
   if (u) stratCpGain(side, u);
+  GREC.ev(side, 'strat', { n: SNAME[key] || key, cp: c, u: u ? u.name : '' });
   return true;
 }
 
@@ -6508,8 +6672,9 @@ function scoreSecondaries(side) {
     if (pts <= 0) continue;
     G.secRound[side][R] = (G.secRound[side][R] || 0) + pts; G.vp[side].sec += pts; total += pts;
     if (S.mode === 'fixed') S.fixedPts[card.id] = (S.fixedPts[card.id] || 0) + pts; else S.hand = S.hand.filter(x => x !== card);
-    log(`${who} <b>${def.name}</b> for ${pts} VP.`, side);
+    log(`${who} <b>${def.name}</b> for ${pts} VP.`, side); GREC.ev(side, 'secondary', { n: def.name, vp: pts });
   }
+  GREC.actions(side, done);
   if (!total && own) log(`${who} no secondary points this turn.`, side);
 }
 /* ---- primary missions: Force Dispositions pick each side's Primary Mission (11th-edition Mission Deck 2026-27) ---- */
@@ -6645,6 +6810,8 @@ function scorePrimaryAt(side, when) {
     G.vp[side].pri += vp; total += vp;
   }
   const who = side === 'player' ? 'You score' : 'The AI scores';
+  if (when === 'cmd' || when === 'eot') GREC.objCheck(side, c, when);
+  if (total) GREC.ev(side, 'primary', { n: m, vp: total, w: when });
   if (total) log(`${who} ${total} primary VP (<b>${m}</b>).`, side);
   else if (when === 'cmd' && G.round >= 2 && G.round < 5) log(`${who} no primary VP this Command phase (<b>${m}</b>).`, side);
   return total;
@@ -7682,6 +7849,7 @@ function finish() {
   if (G.stage === 'over') return;
   if (G.pri && G.stage === 'battle') { for (const sd of ['player', 'ai']) scorePrimaryAt(sd, 'end'); }
   G.stage = 'over'; G.busy = false; G.sel = null; G.mode = null; G.prompt = null;
+  GREC.finish(false);
   const p = inArmy('player').length, a = inArmy('ai').length, vp = vpTotal('player'), va = vpTotal('ai');
   let res;
   if (G.hot) { const n1 = hotName('player'), n2 = hotName('ai'); res = !p && a ? `${n2} destroyed ${n1}'s whole army.` : !a && p ? `${n1} destroyed ${n2}'s whole army.` : vp > va ? `${n1} wins on victory points.` : va > vp ? `${n2} wins on victory points.` : 'It\'s a draw on victory points.'; G.result = `${res} ${n1}: ${vp} VP (${G.vp.player.pri} primary, ${G.vp.player.sec} secondary). ${n2}: ${va} VP (${G.vp.ai.pri} primary, ${G.vp.ai.sec} secondary).`; log(`Game over. ${G.result}`, 'sys'); render(); return; }
@@ -7966,7 +8134,7 @@ async function rollCharge() {
   const u = G.sel; if (!u) return;
   let a = d6(), b = d6(); { const afV = asChargeSub(u, aliveSide(other(u.side))); if (afV !== null) a = asUse(u, afV, 'a Charge roll'); }
   const roll = Math.min(12, a + b + chargeBonus(u));
-  u.chargeTried = true;
+  u.chargeTried = true; GREC.charge(u, false);
   log(`${u.name} rolls ${a}+${b}=${roll}" to charge.`, u.side);
   const tg = aliveSide(other(u.side)).filter(e => chargeSpot(u, e, roll));
   if (!tg.length) log(`Nothing is within ${roll}".`, u.side);
@@ -7990,7 +8158,7 @@ function finishChargeTail(u, t, heroic, skies) {
   if (skies) log(`${u.name} takes to the skies to reach ${t.name}.`, u.side);
   dgAfterChargeMove(u, t);
   if (heroic) { u.heroic = true; log(`${u.name} makes a heroic intervention into ${t.name}.`, u.side); }
-  else { u.charged = true; if (t) t.wasCharged = G.turnNo; log(`${u.name} charges into ${t.name} and gains Fights First.`, u.side); brassStampede(u); }
+  else { u.charged = true; GREC.charge(u, true, t); if (t) t.wasCharged = G.turnNo; log(`${u.name} charges into ${t.name} and gains Fights First.`, u.side); brassStampede(u); }
   for (const x of fxGet(u, 'crimson-harvest')) {
     const r = d6();
     if (r === 1) { log(`${x.a.name}: rolled 1, no effect.`, u.side); continue; }
@@ -8530,7 +8698,7 @@ async function aiCharge(u) {
   if (u.role === 'hold' && nearest > 7) return false;
   let a = d6(), b = d6(); { const afV = asChargeSub(u, foes); if (afV !== null) a = asUse(u, afV, 'a Charge roll'); }
   let roll = Math.min(12, a + b + chargeBonus(u));
-  u.chargeTried = true;
+  u.chargeTried = true; GREC.charge(u, false);
   log(`${u.name} rolls ${a}+${b}=${roll}" to charge.`, 'ai');
   let tg = foes.filter(e => chargeSpot(u, e, roll));
   if (!tg.length && freeChargeReroll(u)) {
@@ -8866,6 +9034,7 @@ function endGameEarly() {
   G.confirmEnd = false; G.stage = 'over'; G.busy = false; G.sel = null; G.mode = null; G.prompt = null; G.trayOpen = false;
   const vp = vpTotal('player'), va = vpTotal('ai');
   G.result = `You ended the game early. You: ${vp} VP. AI: ${va} VP.`;
+  GREC.finish(true);
   log(`Game over. ${G.result}`, 'sys');
   setupOpen = true; render();
   const sp = $('#b-setup'); if (sp && sp.scrollIntoView) sp.scrollIntoView({ block: 'start', behavior: 'smooth' });
@@ -17671,7 +17840,7 @@ class Renderer {
     const buf = (arr, loc, size) => { const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(arr), gl.STATIC_DRAW); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, size, gl.FLOAT, false, 0, 0); return b; };
     const bs = [buf(mb.P, 0, 3), buf(mb.N, 1, 3), buf(mb.C, 2, 3), buf(mb.M, 3, 2)], ib = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint32Array(mb.I), gl.STATIC_DRAW);
     gl.bindVertexArray(null); const m = { vao, count: mb.I.length, kind: kind || 'solid', bs, ib, uid: (Renderer._uid = (Renderer._uid || 0) + 1) }; this.meshes.push(m);
-    if (mb.tx) for (const [img, b] of mb.tx) if (b.I.length) this.uploadTx(b, img, kind);
+    if (mb.tx) for (const [img, b] of mb.tx) if (b.I.length) (m.sub || (m.sub = [])).push(this.uploadTx(b, img, kind));
     return m;
   }
   /* a group of triangles that wear a real texture (imported models kept with their paint) */
@@ -18437,7 +18606,7 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
       zones: { player: zoneOf('player'), ai: zoneOf('ai') }, decor: (G.decor || []).map(d => ({ x: d.x, y: d.y, r: d.r, kind: d.kind }))
     };
   }
-  function freeMesh(m) { if (!m) return; const R = BF3D.R, gl = R.gl, i = R.meshes.indexOf(m); if (i >= 0) R.meshes.splice(i, 1); gl.deleteVertexArray(m.vao); m.bs.forEach(b => gl.deleteBuffer(b)); gl.deleteBuffer(m.ib); }
+  function freeMesh(m) { if (!m) return; const R = BF3D.R, gl = R.gl, i = R.meshes.indexOf(m); if (i >= 0) R.meshes.splice(i, 1); gl.deleteVertexArray(m.vao); m.bs.forEach(b => gl.deleteBuffer(b)); gl.deleteBuffer(m.ib); if (m.sub) for (const q of m.sub) freeMesh(q); m.sub = null; }
   function ensure() {
     if (BF3D.R || BF3D.fail) return !BF3D.fail;
     const holder = $m(); if (!holder) return false;
@@ -24673,10 +24842,136 @@ function armyBar() {
   const size = curSize(), ds = detsFor(B.faction);
   return `<div class="row us-bar" style="gap:10px;margin:6px 0;justify-content:flex-start;flex-wrap:wrap"><span class="muted" style="font-size:.85rem">Detachments: <b>${curDets().length ? escH(curDets().map(d => d.name).join(' + ')) : 'none'}</b> (${dpUsed()}/${size.dp} DP)</span><button class="btn" id="bl-detchg">Change</button><span class="muted" style="font-size:.82rem">${size.name} · up to ${size.unit} of each datasheet, ${size.unit * 2} for Battleline and Dedicated Transports (${(() => { const d = curDet(); const g = d && Array.isArray(d.effects) ? LIB.filter(u => u.faction === B.faction && u.role !== 'Battleline' && detGrantsBattleline(u, d)).map(u => u.name) : []; return g.length ? d.name + ' makes ' + g.join(', ') + ' Battleline' : 'Epic Heroes 1'; })()})${B.editId ? ' · editing a saved army' : ''}</span></div>`;
 }
+const bcEsc = s => String(s == null ? '' : s).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+function bcMd(s) {
+  const h = bcEsc(s).replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>'), out = []; let inList = false;
+  for (const ln of h.split('\n')) { const m = /^\s*[-*•]\s+(.*)$/.exec(ln); if (m) { if (!inList) { out.push('<ul>'); inList = true; } out.push('<li>' + m[1] + '</li>'); } else { if (inList) { out.push('</ul>'); inList = false; } out.push(ln.trim() ? '<p>' + ln + '</p>' : ''); } }
+  if (inList) out.push('</ul>'); return out.join('');
+}
+const BC_ERR = { not_granted: 'Claude access was not allowed for this page, so the coach cannot answer.', rate_limited: 'Too many questions in a short time (or your Claude usage limit). Wait a little, then ask again.', session_expired: 'Your session has expired. Sign in again to use the coach.', sampling_disabled: 'Claude is not available for this account.', prompt_too_large: 'That was too much for one question. Try a shorter one.', refused: 'Claude declined that question. Try rewording it.', upstream_error: 'The coach hit a temporary problem. Try again.', empty_completion: 'The coach gave no answer. Try rewording the question.' };
+/* ===== Army coach: helps fill out a list and finds synergies; reads and edits the list in the builder ===== */
+const BC = { el: null, turns: [], busy: false, ctl: null, sample: undefined, tools: false, open: false, resolved: false };
+const BC_RULES = `You are the army-building coach inside Battle Drill, a Warhammer 40,000 11th edition practice app. The player is in the army builder. You can read and edit their list with tools. Rules for you:
+- Never guess datasheet facts, points, keywords or rules. Look them up with the tools (search_units, unit_details, detachment_info) before you rely on them. If a tool returns nothing, say so.
+- Start every answer by calling get_list so you are working from the current list and points.
+- Fill and synergy requests: aim for the points limit without going over. Respect the caps the tools report (units per datasheet, Epic Heroes once, enhancements per army, detachment rules).
+- Only change the list (add_unit, remove_unit, attach_leader, set_enhancement) when the player asks you to fill, add, fix or build. For "what do you think" or "review" requests, advise and ask before changing anything. After changing, call get_list and tell them in one or two lines what you changed.
+- Think about: how the detachment rule and its Stratagems reward certain keywords, which leader attaches to which unit and why, enhancement fit, a mix of anti-infantry, anti-armour and objective holders (OC and Battleline), mobility, durability, and a plan for scoring objectives. Name the synergy plainly ("the rule re-rolls charges for X, so Y is a good pick").
+- If the player has game records (my_record), use them: favour units that earn their points, question units that keep underperforming, and say which evidence you used.
+- Be concise. Short paragraphs or a short list. No long preambles. Plain text with light markdown.`;
+function bcSize() { return curSize(); }
+function bcLibById(id) { return LIB.find(x => x.id === id) || null; }
+function bcResolve(q) {
+  const t = String(q == null ? '' : q).trim().toLowerCase(); if (!t) return null;
+  const pool = LIB.filter(x => x.faction === B.faction && (B.legends || !x.legends) && chapterOk(x));
+  return pool.find(x => x.id === q) || pool.find(x => x.name.toLowerCase() === t) || pool.find(x => x.name.toLowerCase().startsWith(t)) || pool.find(x => x.name.toLowerCase().includes(t)) || null;
+}
+const bcTrim = (v, n) => { v = String(v == null ? '' : v).replace(/\s+/g, ' ').trim(); return v.length > n ? v.slice(0, n) + '…' : v; };
+function bcWeapons(list) { return (list || []).slice(0, 8).map(w => { const o = {}; for (const [k, v] of Object.entries(w)) if (v != null && v !== '' && typeof v !== 'object') o[k] = v; else if (Array.isArray(v) && v.length && k !== 'models') o[k] = v.join(', '); return o; }); }
+function bcState() {
+  const size = bcSize(), d = curDet();
+  return {
+    faction: B.faction, chapter: curChapter() || undefined, battle_size: size.name, points_limit: B.limit, points_used: rosterPts(), points_left: B.limit - rosterPts(),
+    max_units_per_datasheet: size.unit, enhancements_allowed: size.enh, detachment_points_allowed: size.dp,
+    detachments: curDets().map(x => x.name), warlord_key: B.warlord || null, legends_allowed: !!B.legends,
+    enhancements_taken: Object.entries(B.enh).filter(([, k]) => k).map(([n, k]) => { const e = B.roster.find(x => x.key === k); return { enhancement: n, on_key: k, on: e ? libOf(e).name : '?' }; }),
+    roster: B.roster.map(e => { const u = libOf(e) || {}; return { key: e.key, id: e.id, name: u.name, role: u.role, models: e.models, pts: e.pts, leads_key: e.leadTo || undefined, can_lead: isChar(u) ? leadsOf(u).slice(0, 6) : undefined }; }),
+  };
+}
+function bcSummary(u) {
+  const size = bcSize(), have = B.roster.filter(e => e.id === u.id).length;
+  return { id: u.id, name: u.name, role: u.role, pts: u.pts, models: u.baseModels || u.models, max_models: maxModelsOf(u), in_army: have, cap: capFor(u, size, curDet()), kw: (u.kw || []).slice(0, 10), legends: !!u.legends || undefined };
+}
+function bcTools() {
+  const ok = o => JSON.stringify(o), fail = m => ({ error: m });
+  return [
+    { name: 'get_list', description: 'Returns the current army list in the builder: faction, points used and left, caps, detachments, enhancements taken and every unit with its key, points and leader attachments. Call this first.', inputSchema: { type: 'object', properties: {} }, execute: async () => bcState() },
+    { name: 'search_units', description: 'Searches this faction\'s datasheets. All filters are optional. Returns id, name, role, points, keywords and how many are already in the army. Use it to find candidates before adding.', inputSchema: { type: 'object', properties: { query: { type: 'string', description: 'words from the name, a keyword or an ability' }, role: { type: 'string', description: 'Epic Hero, Character, Battleline, Infantry, Mounted, Vehicle, Monster, Dedicated Transport, Fortification…' }, max_pts: { type: 'number' }, limit: { type: 'number', description: 'default 20, max 40' } } },
+      execute: async inp => {
+        const q = String(inp.query || '').toLowerCase().split(/\s+/).filter(Boolean), role = String(inp.role || '').toLowerCase(), mp = +inp.max_pts || 0, lim = Math.min(40, +inp.limit || 20);
+        let l = LIB.filter(u => u.faction === B.faction && (B.legends || !u.legends) && chapterOk(u));
+        if (role) l = l.filter(u => String(u.role || '').toLowerCase() === role || (u.kw || []).map(k => String(k).toLowerCase()).includes(role));
+        if (mp) l = l.filter(u => u.pts <= mp);
+        if (q.length) l = l.filter(u => { const hay = (u.name + ' ' + (u.kw || []).join(' ') + ' ' + (u.abilities || []).map(a => a.name + ' ' + (a.text || '')).join(' ')).toLowerCase(); return q.every(w => hay.includes(w)); });
+        return { count: l.length, units: l.slice(0, lim).map(bcSummary) };
+      } },
+    { name: 'unit_details', description: 'Full datasheet for one unit: characteristics, weapons with profiles, abilities with text, keywords and which units a Leader can join.', inputSchema: { type: 'object', properties: { id_or_name: { type: 'string' } }, required: ['id_or_name'] },
+      execute: async inp => { const u = bcResolve(inp.id_or_name); if (!u) return fail('no datasheet matched that in this faction'); return Object.assign(bcSummary(u), { stats: { M: u.M, T: u.T, Sv: u.Sv, W: u.W, Ld: u.Ld, OC: u.OC, inv: u.inv || undefined, fnp: u.fnp || undefined }, ranged: bcWeapons(u.ranged), melee: bcWeapons(u.melee), abilities: (u.abilities || []).slice(0, 12).map(a => ({ name: a.name, text: bcTrim(a.text, 320) })), can_lead: isChar(u) ? leadsOf(u) : undefined }); } },
+    { name: 'detachment_info', description: 'The chosen detachments\' rules, Enhancements (with points) and Stratagems. If none is chosen it lists the available detachment names instead.', inputSchema: { type: 'object', properties: {} },
+      execute: async () => { const ds = curDets(); if (!ds.length) return { chosen: [], available: detsFor(B.faction).map(d => d.name) }; return { chosen: ds.map(d => ({ name: d.name, dp: d.dp, rule: d.rule, rule_text: bcTrim(d.ruleText, 600), enhancements: (d.enh || []).map(x => ({ name: x.name, pts: x.pts, text: bcTrim(x.text, 280) })), stratagems: (d.strats || []).map(x => ({ name: x.name, cp: x.cp, when: x.when, text: bcTrim(x.text, 260) })) })) }; } },
+    { name: 'add_unit', description: 'Adds a unit to the army. Refuses if it would break a cap or push the list over the points limit. Optionally set the model count.', inputSchema: { type: 'object', properties: { id_or_name: { type: 'string' }, count: { type: 'number', description: 'how many copies, default 1' }, models: { type: 'number', description: 'models per unit, default the datasheet minimum' } }, required: ['id_or_name'] },
+      execute: async inp => {
+        const u = bcResolve(inp.id_or_name); if (!u) return fail('no datasheet matched that in this faction'); const size = bcSize(), n = Math.max(1, Math.min(6, +inp.count || 1)); const added = [];
+        for (let i = 0; i < n; i++) {
+          const cap = capFor(u, size, curDet()), have = B.roster.filter(e => e.id === u.id).length; if (have >= cap) { return { added, stopped: capMessage(u, have, cap, size) }; }
+          const models = inp.models ? clamp(+inp.models, u.models || 1, maxModelsOf(u)) : u.models, pts = models === u.models ? u.pts : estPts(u, models);
+          if (rosterPts() + pts > B.limit) return { added, stopped: `${u.name} (${pts} pts) would take the list over ${B.limit} points (${B.limit - rosterPts()} left)` };
+          const e = { key: B.seq++, id: u.id, models, pts, leadTo: null }; B.roster.push(e); if (isChar(u) && !B.warlord) B.warlord = e.key; added.push({ key: e.key, name: u.name, pts });
+        }
+        bcRefresh(); return { added, points_used: rosterPts(), points_left: B.limit - rosterPts() };
+      } },
+    { name: 'remove_unit', description: 'Removes one unit by its roster key (from get_list).', inputSchema: { type: 'object', properties: { key: { type: 'number' } }, required: ['key'] },
+      execute: async inp => { const e = B.roster.find(x => x.key === +inp.key); if (!e) return fail('no unit with that key'); const nm = libOf(e).name; B.roster = B.roster.filter(x => x.key !== e.key); B.roster.forEach(x => { if (x.leadTo === e.key) x.leadTo = null; }); if (B.warlord === e.key) { const c = B.roster.find(x => isChar(libOf(x))); B.warlord = c ? c.key : null; } for (const n in B.enh) if (B.enh[n] === e.key) delete B.enh[n]; bcRefresh(); return { removed: nm, points_used: rosterPts() }; } },
+    { name: 'attach_leader', description: 'Attaches a Leader to a bodyguard unit already in the army (both by roster key). Pass unit_key null to detach.', inputSchema: { type: 'object', properties: { leader_key: { type: 'number' }, unit_key: { type: ['number', 'null'] } }, required: ['leader_key'] },
+      execute: async inp => { const e = B.roster.find(x => x.key === +inp.leader_key); if (!e) return fail('no leader with that key'); if (inp.unit_key == null) { e.leadTo = null; bcRefresh(); return { ok: true, detached: true }; } const t = B.roster.find(x => x.key === +inp.unit_key); if (!t) return fail('no unit with that key'); const elig = eligibleBodyguards(e); if (!elig.includes(t) && e.leadTo !== t.key) return fail(`${libOf(e).name} cannot lead ${libOf(t).name} (or it already has a leader). It can lead: ${leadsOf(libOf(e)).join(', ')}`); e.leadTo = t.key; bcRefresh(); return { ok: true, leader: libOf(e).name, leads: libOf(t).name }; } },
+    { name: 'set_enhancement', description: 'Gives an Enhancement from the chosen detachment to a character by roster key. Pass unit_key null to take it off. Epic Heroes cannot carry Enhancements.', inputSchema: { type: 'object', properties: { enhancement: { type: 'string' }, unit_key: { type: ['number', 'null'] } }, required: ['enhancement'] },
+      execute: async inp => {
+        const d = curDet(); if (!d) return fail('choose a detachment first'); const x = (d.enh || []).find(z => z.name.toLowerCase() === String(inp.enhancement).toLowerCase()); if (!x) return fail('that Enhancement is not in the chosen detachments: ' + (d.enh || []).map(z => z.name).join(', '));
+        if (inp.unit_key == null) { delete B.enh[x.name]; bcRefresh(); return { ok: true }; }
+        const e = B.roster.find(z => z.key === +inp.unit_key); if (!e) return fail('no unit with that key'); const l = libOf(e);
+        if (l.role === 'Epic Hero') return fail('Epic Heroes cannot take Enhancements'); if (!isChar(l) && !enhIsUpgrade(x)) return fail('only characters can take that Enhancement'); if (!enhEligible(x.text, l)) return fail(`${l.name} does not meet that Enhancement\'s restriction`);
+        if (Object.values(B.enh).filter(Boolean).length >= bcSize().enh && !B.enh[x.name]) return fail(`${bcSize().name} allows ${bcSize().enh} Enhancements`); if (Object.entries(B.enh).some(([n, k]) => k === e.key && n !== x.name)) return fail(`${l.name} already carries an Enhancement`);
+        if (rosterPts() - (B.enh[x.name] ? (+x.pts || 0) : 0) + (+x.pts || 0) > B.limit) return fail('that would take the list over the points limit');
+        B.enh[x.name] = e.key; bcRefresh(); return { ok: true, enhancement: x.name, on: l.name, pts: x.pts };
+      } },
+    { name: 'my_record', description: 'The player\'s own game records for this faction: results, average scores and how every datasheet has performed (survival, damage, points killed, value for points). Use it to back recommendations with evidence. Empty if no games have been played.', inputSchema: { type: 'object', properties: {} },
+      execute: async () => { const l = (await GREC.ready()).filter(g => g.sides.some(s => s.faction === B.faction)); if (!l.length) return { games: 0, note: 'no recorded games for this faction yet' }; const ids = new Set(); for (const g of l) for (const s of g.sides) if (s.faction === B.faction) ids.add(s.buildId); return { games: l.length, summary: GREC.digestFaction(l, B.faction) }; } },
+  ];
+}
+function bcRefresh() { clearTimeout(bcRefresh.t); bcRefresh.t = setTimeout(() => { try { renderBuilder(); } catch (e) { } }, 60); }
+function bcBubble(who, html) { const chat = BC.el.querySelector('.bc-chat'), d = document.createElement('div'); d.className = 'gc-msg ' + who; d.innerHTML = html; chat.appendChild(d); chat.scrollTop = chat.scrollHeight; return d; }
+function bcCreate() {
+  const el = document.createElement('div'); el.className = 'bc-drawer';
+  el.innerHTML = `<div class="bc-head"><b>Army coach</b><span><button class="btn small" data-bc="clear">New chat</button> <button class="btn small" data-bc="close">Hide</button></span></div>
+    <div class="bc-chips"><button class="btn small" data-bc="chip" data-q="Fill out my list to the points limit. Pick units that work together, attach leaders and take Enhancements. Tell me why in a few lines.">Fill my list</button><button class="btn small" data-bc="chip" data-q="Review my list for synergies with my detachment, leaders and units. What works, and what is missing?">Find synergies</button><button class="btn small" data-bc="chip" data-q="What is my list weak at (objectives, anti-tank, anti-infantry, durability, mobility)? Suggest the smallest changes that fix it.">Find gaps</button><button class="btn small" data-bc="chip" data-q="Use my game records to tell me which units to keep, cut or change, and what to swap in.">Use my records</button></div>
+    <div class="bc-chat" aria-live="polite"></div>
+    <div class="bc-form"><textarea rows="2" maxlength="800" placeholder="Ask for units, swaps, synergies, or say “fill my list”"></textarea><div class="kt-btns"><button class="btn primary" data-bc="ask">Ask</button><button class="btn" data-bc="stop" hidden>Stop</button></div></div>
+    <p class="bc-note muted"></p>`;
+  BC.el = el; BC.ta = el.querySelector('textarea');
+  BC.ta.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); bcAsk(BC.ta.value); } });
+  el.addEventListener('click', e => { const b = e.target.closest('[data-bc]'); if (!b) return; const a = b.dataset.bc; if (a === 'close') bcToggle(false); else if (a === 'ask') bcAsk(BC.ta.value); else if (a === 'chip') bcAsk(b.dataset.q); else if (a === 'stop') { if (BC.ctl) BC.ctl.abort(); } else if (a === 'clear') { BC.turns = []; el.querySelector('.bc-chat').innerHTML = ''; } });
+  return el;
+}
+async function bcInit() {
+  if (BC.resolved) return; BC.resolved = true;
+  try { if (window.claude && window.claude.use) { BC.sample = (await window.claude.use('sample')) || null; if (BC.sample && BC.sample.limits) { try { const lim = await BC.sample.limits(); BC.tools = !!(lim && lim.tools); } catch (e) { BC.tools = false; } } } else BC.sample = null; } catch (e) { BC.sample = null; }
+  bcNote();
+}
+function bcNote() { if (!BC.el) return; const n = BC.el.querySelector('.bc-note'); n.textContent = BC.sample === null ? 'The coach needs Claude access, which this copy of the app does not have.' : BC.sample && !BC.tools ? 'This connection cannot let the coach edit your list, so it can only advise.' : ''; }
+function bcToggle(on) { BC.open = on == null ? !BC.open : on; if (BC.el) BC.el.classList.toggle('on', BC.open); const b = document.getElementById('bc-btn'); if (b) b.setAttribute('aria-pressed', String(BC.open)); if (BC.open) { bcInit(); try { BC.ta.focus(); } catch (e) { } } }
+async function bcAsk(q) {
+  q = String(q || '').trim(); if (!q || BC.busy) return; await bcInit();
+  if (!BC.sample) { bcNote(); bcBubble('coach', '<p class="kt-note">The coach is not available in this copy of the app.</p>'); return; }
+  BC.ta.value = ''; bcBubble('user', bcEsc(q)); const bub = bcBubble('coach', '<span class="gc-think">Thinking…</span>');
+  BC.busy = true; BC.ctl = new AbortController(); BC.el.querySelector('[data-bc="stop"]').hidden = false; BC.el.querySelector('[data-bc="ask"]').disabled = true;
+  const turns = [{ role: 'user', content: BC_RULES }]; BC.turns.slice(-8).forEach(t => turns.push(t));
+  turns.push({ role: 'user', content: 'CURRENT LIST (JSON, may be stale after your own edits; call get_list to refresh):\n' + JSON.stringify(bcState()) + '\n\nPLAYER: ' + q });
+  const opts = { cache: false, signal: BC.ctl.signal, onText: ({ text }) => { bub.innerHTML = bcMd(text); const ch = BC.el.querySelector('.bc-chat'); ch.scrollTop = ch.scrollHeight; } };
+  if (BC.tools) opts.tools = bcTools();
+  try {
+    const r = await BC.sample(turns, opts); bub.innerHTML = bcMd(r.text) + (r.truncated ? '<p class="kt-note">Cut short. Ask for less at a time.</p>' : '');
+    BC.turns.push({ role: 'user', content: q }, { role: 'assistant', content: r.text });
+  } catch (e) {
+    const code = e && e.code; if (code === 'cancelled') bub.innerHTML = (e.text ? bcMd(e.text) : '') + '<p class="kt-note">Stopped.</p>';
+    else bub.innerHTML = (e && e.text ? bcMd(e.text) : '') + `<p class="kt-note" style="color:var(--bad)">${bcEsc((BC_ERR[code] || BC_ERR.upstream_error))}</p>`;
+  }
+  BC.busy = false; BC.ctl = null; if (BC.el) { BC.el.querySelector('[data-bc="stop"]').hidden = true; BC.el.querySelector('[data-bc="ask"]').disabled = false; }
+}
+function bcMount(box) { if (!BC.el) bcCreate(); box.appendChild(BC.el); BC.el.classList.toggle('on', BC.open); bcNote(); }
 function renderBuilder() {
   const box = $('#builder');
   const oldCat = box.querySelector('.bld-cat'), scrollCat = oldCat ? oldCat.scrollTop : 0;
-  box.innerHTML = `<div class="row"><h2 style="margin:0">Build an army</h2><span style="display:flex;gap:6px"><button class="btn" id="bl-reset">Start over</button><button class="btn" id="b-close">Back to editor</button></span></div>
+  box.innerHTML = `<div class="row"><h2 style="margin:0">Build an army</h2><span style="display:flex;gap:6px"><button class="btn primary" id="bc-btn" aria-pressed="false" data-tip="Ask a coach to fill out your list, find synergies and suggest swaps.">Army coach</button><button class="btn" id="bl-reset">Start over</button><button class="btn" id="b-close">Back to editor</button></span></div>
     ${stepBar()}
     ${armyBar()}
     ${bMsg ? `<div class="msgs"><div class="w">${escH(bMsg)}</div></div>` : ''}
@@ -24686,6 +24981,7 @@ function renderBuilder() {
   const on = (sel, ev, fn) => box.querySelectorAll(sel).forEach(el => el.addEventListener(ev, fn));
   $('#b-close').addEventListener('click', closeBuilder);
   $('#bl-reset').addEventListener('click', resetBuilder);
+  $('#bc-btn').addEventListener('click', () => bcToggle()); $('#bc-btn').setAttribute('aria-pressed', String(BC.open)); bcMount(box);
   on('[data-step]', 'click', e => { B.step = +e.currentTarget.dataset.step; B.q = ''; renderBuilder(); });
   const back = $('#bl-back'); if (back) back.addEventListener('click', () => { B.step = Math.max(0, B.step - 1); B.q = ''; renderBuilder(); });
   const next = $('#bl-next'); if (next) next.addEventListener('click', () => { B.step = Math.min(STEPS.length - 1, B.step + 1); B.q = ''; renderBuilder(); });
@@ -25377,16 +25673,52 @@ function openPasteRoster(mode, after) {
     if (after) after(rep);
   });
 }
+/* ---- Game records screen ---- */
+let REC = { army: '', open: '' };
+const recPct = (a, b) => b > 0 ? Math.round(100 * a / b) + '%' : '–';
+const recN = (v, d) => (+v).toFixed(d == null ? 1 : d);
+async function renderRecords() {
+  const box = $('#arm-sub-records'); if (!box) return; box.innerHTML = '<p class="muted">Loading records…</p>';
+  const list = await GREC.ready();
+  if (!list.length) { box.innerHTML = '<div class="panel"><h2 style="margin:0 0 6px">Game records</h2><p class="muted">No finished games yet. Play a battle to the end and every unit’s performance is saved here: how much it shot and hit, what it killed, what it lost, and whether it lived. Games ended before the first battle round are not recorded.</p></div>'; return; }
+  const armies = new Map(); for (const g of list) for (const s of g.sides) if (s.buildId) armies.set(s.buildId, s.buildName || s.faction || s.buildId);
+  if (REC.army && !armies.has(REC.army)) REC.army = '';
+  const R = GREC.rollup(list, REC.army), A = R.A;
+  const rows = R.U.map(x => {
+    const eff = x.eff, tag = x.games >= 2 ? (eff >= 1.4 ? '<span class="rec-tag rec-good">pulls its weight</span>' : eff <= .35 && x.pts > 0 ? '<span class="rec-tag rec-bad">underperforming</span>' : '') : '';
+    const ws = Object.entries(x.w).sort((a, b) => b[1].dmg - a[1].dmg);
+    return `<tr><td><b>${escH(x.ds)}</b>${tag}${ws.length ? `<details><summary class="muted" style="font-size:.78rem">weapons</summary>${ws.map(([n, w]) => `<div class="muted" style="font-size:.78rem">${escH(n)}: ${w.A} attacks, ${recPct(w.hit, w.A)} hit, ${recPct(w.wnd, w.hit)} wound, ${recN(w.dmg, 0)} damage, ${w.mk} slain</div>`).join('')}</details>` : ''}</td><td>${x.games}</td><td>${recPct(x.alive, x.copies)}</td><td>${x.att}</td><td>${recPct(x.hit, x.att)}</td><td>${recPct(x.wnd, x.hit)}</td><td>${recN(x.dmg / x.games)}</td><td>${recN(x.mk / x.games)}</td><td>${recN(x.pk / x.games, 0)}</td><td>${x.pts ? recN(eff, 2) + '×' : '–'}</td><td>${recN(x.taken / x.games)}</td></tr>`;
+  }).join('');
+  const gl = list.filter(g => !REC.army || g.sides.some(s => s.buildId === REC.army)).slice(0, 60).map(g => {
+    const [p, a] = g.sides, d = new Date(g.at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    const tbl = s => `<h4 style="margin:8px 0 2px">${escH(s.who)}: ${escH(s.buildName || s.faction)} <span class="muted">(${s.vp} VP, ${s.result})</span></h4><div class="rec-scroll"><table class="rec-t"><tr><th>Unit</th><th>Pts</th><th>Attacks</th><th>Hit</th><th>Dmg</th><th>Slain</th><th>Pts killed</th><th>Dmg taken</th><th>Fate</th></tr>${s.units.map(r => `<tr><td>${escH(r.name)}${r.leader ? ' <span class="muted">+ ' + escH(r.leader) + '</span>' : ''}</td><td>${r.pts}</td><td>${r.att}</td><td>${recPct(r.hit, r.att)}</td><td>${recN(r.dmg, 0)}</td><td>${r.mk}</td><td>${recN(r.pk, 0)}</td><td>${recN(r.taken, 0)}</td><td>${r.alive ? r.left + '/' + r.start + ' left' : 'destroyed R' + (r.died || '?')}</td></tr>`).join('')}</table></div>`;
+    const bars = i => { const c = GREC.score(g, i), b = (n, v) => `<div class="rec-bar"><span>${n}</span><i><u style="width:${v}%"></u></i><b>${v}</b></div>`; return `<div class="rec-sc">${b('Objectives', c.obj)}${b('Destruction', c.des)}${b('Actions and tactics', c.act)}${b('Overall', c.all)}</div>`; };
+    const fbk = i => `<ul class="rec-fb">${GREC.feedback(g, i).map(f => `<li class="${f.tone}">${escH(f.text)}</li>`).join('')}</ul>`;
+    const humanI = g.hot ? [0, 1] : [0];
+    const evt = (g.events || []).map(e => { const who = e.s === 'player' ? p.who : a.who, t = e.k === 'primary' ? `scored ${e.vp} primary VP (${e.n})` : e.k === 'secondary' ? `scored ${e.vp} VP: ${e.n}` : e.k === 'kill' ? `destroyed ${e.u}${e.by ? ' with ' + e.by : ''} (${e.p} pts)` : e.k === 'strat' ? `used ${e.n}${e.u ? ' on ' + e.u : ''} (${e.cp} CP)` : e.k === 'charge' ? `${e.u} charged ${e.t}` : e.k === 'action' ? `completed an action (${e.a})` : e.k === 'obj' ? `held ${e.h} of ${e.n} objectives (enemy ${e.o})` : ''; return t ? `<div class="rec-ev"><b>R${e.r}</b> ${escH(who)} ${escH(t)}</div>` : ''; }).join('');
+    return `<details class="rec-g"${REC.open === g.id ? ' open' : ''}><summary><b>${d}</b> · ${escH(p.buildName || p.faction)} ${p.vp}–${a.vp} ${escH(a.buildName || a.faction)} · ${g.rounds} rounds${g.early ? ' (ended early)' : ''}${g.mission ? ' · ' + escH(g.mission) : ''}</summary>${humanI.map(i => `<h4 style="margin:8px 0 2px">Feedback: ${escH(g.sides[i].who)}</h4>${bars(i)}${fbk(i)}`).join('')}${tbl(p)}${tbl(a)}${evt ? `<details><summary class="muted">Game log (${(g.events || []).length} events)</summary><div class="rec-evs">${evt}</div></details>` : ''}<p><button class="btn small" data-recdel="${g.id}">Delete this record</button></p></details>`;
+  }).join('');
+  box.innerHTML = `<div class="panel rec-wrap"><div class="row"><h2 style="margin:0">Game records</h2><label class="muted">Army <select id="rec-army" class="btn"><option value="">All armies</option>${[...armies].map(([id, n]) => `<option value="${escH(id)}"${id === REC.army ? ' selected' : ''}>${escH(n)}</option>`).join('')}</select></label></div>
+    <div class="rec-cards"><div class="rec-card"><b>${A.games}</b>games</div><div class="rec-card"><b>${A.win}–${A.loss}–${A.draw}</b>wins, losses, draws</div><div class="rec-card"><b>${A.games ? recN(A.vp / A.games) : '–'}</b>average VP scored</div><div class="rec-card"><b>${A.games ? recN(A.vpAgainst / A.games) : '–'}</b>average VP conceded</div></div>
+    ${(() => { const rows = []; for (const g of list) for (let i = 0; i < 2; i++) { if (REC.army && g.sides[i].buildId !== REC.army) continue; rows.push(GREC.score(g, i)); } if (!rows.length) return ''; const av = k => Math.round(rows.reduce((a, r) => a + r[k], 0) / rows.length); const tr = GREC.trends(list, REC.army); return `<div class="rec-cards"><div class="rec-card"><b>${av('all')}</b>overall score</div><div class="rec-card"><b>${av('obj')}</b>objectives</div><div class="rec-card"><b>${av('des')}</b>destruction</div><div class="rec-card"><b>${av('act')}</b>actions and tactics</div></div>${tr.length ? `<h3 style="margin:4px 0">What the games say</h3><ul class="rec-fb">${tr.map(f => `<li class="${f.tone}">${escH(f.text)}</li>`).join('')}</ul>` : ''}`; })()}
+    <h3 style="margin:4px 0">Unit performance</h3><p class="muted" style="margin:0;font-size:.85rem">Per game averages across ${A.games} game${A.games === 1 ? '' : 's'}. “Value” is the points’ worth of enemy models it killed divided by its own points: above 1 means it killed more than it cost.</p>
+    <div class="rec-scroll"><table class="rec-t"><tr><th>Datasheet</th><th>Games</th><th>Survived</th><th>Attacks</th><th>Hit</th><th>Wound</th><th>Damage</th><th>Slain</th><th>Pts killed</th><th>Value</th><th>Dmg taken</th></tr>${rows}</table></div>
+    <h3 style="margin:8px 0 0">Games</h3>${gl || '<p class="muted">None for this army.</p>'}</div>`;
+  const sel = $('#rec-army'); if (sel) sel.onchange = () => { REC.army = sel.value; renderRecords(); };
+  box.querySelectorAll('details.rec-g').forEach(d => d.addEventListener('toggle', () => { if (d.open) REC.open = d.querySelector('[data-recdel]').dataset.recdel; }));
+  box.querySelectorAll('[data-recdel]').forEach(b => b.onclick = async () => { if (!confirm('Delete this game record?')) return; await GREC.remove(b.dataset.recdel); renderRecords(); });
+}
 /* ---- Armies submenu ---- */
 function armSub(name) {
   const bar = $('#arm-subtabs'); if (!bar || !bar.querySelectorAll) return;
   bar.querySelectorAll('button').forEach(b => { const on = b.dataset.sub === name; b.classList.toggle('on', on); b.setAttribute('aria-selected', on ? 'true' : 'false'); });
-  $('#arm-sub-import').hidden = name !== 'import'; $('#arm-sub-armies').hidden = name !== 'armies';
+  $('#arm-sub-import').hidden = name !== 'import'; $('#arm-sub-armies').hidden = name !== 'armies'; $('#arm-sub-records').hidden = name !== 'records';
   try { localStorage.setItem('battleDrill.armSub', name); } catch (e) { }
   if (name === 'import') renderLibOverview();
+  if (name === 'records') renderRecords();
 }
 $('#arm-subtabs').querySelectorAll('button').forEach(b => b.addEventListener('click', () => armSub(b.dataset.sub)));
-{ let sub = 'armies'; try { sub = localStorage.getItem('battleDrill.armSub') || 'armies'; } catch (e) { } armSub(sub === 'import' ? 'import' : 'armies'); }
+{ let sub = 'armies'; try { sub = localStorage.getItem('battleDrill.armSub') || 'armies'; } catch (e) { } armSub(sub === 'import' ? 'import' : 'armies'); }   /* the records tab is opened on demand, not restored */
 
 /* ============ SIM LOG ============ */
 const RULE_APPROX = { 'command protocols': 'Approximated: a unit led by a Character gets +1 to hit. Check your faction pack for the exact rule.' };
