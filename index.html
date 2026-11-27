@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.27-1509';
+  const VERSION = '2026.11.27-1802';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -18932,9 +18932,9 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
   const SIDEC = { player: [.25, .5, 1], ai: [1, .28, .22] };
   /* a model's base: with clean tokens it is a solid disc with a bright rim, like a tabletop token, instead of a thin ring */
   function ringB(mb, x, y, z, r, col, seg) {
-    if (!TOK.on) { ring(mb, x, y, z, r * .96, r + .22, col, seg); return; }
+    if (!TOK.on) { ring(mb, x, y, z, r - .05, r + .06, col, seg); return; }
     /* a textured base: a sandy-earth disc with a few stones, inside a bright rim in the side colour */
-    ring(mb, x, y - .01, z, .02, r * .8, [.17, .13, .09], seg); ring(mb, x, y, z, r * .8, r + .22, col, seg);
+    ring(mb, x, y - .01, z, .02, r - .04, [.17, .13, .09], seg); ring(mb, x, y, z, r - .04, r + .06, col, seg);
     if (r < 1.9) { let h = Math.floor(x * 131 + z * 197 + r * 53) | 0; const rnd = () => { h = (Math.imul(h, 1103515245) + 12345) & 0x7fffffff; return h / 0x7fffffff; };
       const n = r < .9 ? 3 : 5; for (let i = 0; i < n; i++) { const a = rnd() * 6.2832, d = r * (.25 + .5 * rnd()), pr = .05 + .07 * rnd(), ph = .04 + .07 * rnd(), g = .7 + .5 * rnd(); BFX.tube(mb, [x + Math.cos(a) * d, y, z + Math.sin(a) * d], [x + Math.cos(a) * d, y + ph, z + Math.sin(a) * d], pr, pr * .6, 5, [.2 * g, .17 * g, .13 * g], [.9, 0], true); } }
   }
@@ -18955,7 +18955,7 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
         const _rf = (window.BDModels && BDModels.on()) ? BDModels.pick(m.leader && u.leader ? ((leadersOf(u)[m.lid || 0] || u.leader).ds || (leadersOf(u)[m.lid || 0] || u.leader).name) : (u.ds || u.name), miniFactionOf(u), u.id + ':' + m.id, m.leader ? 0 : u.mods.indexOf(m) , m.leader ? 1 : u.mods.length, true) : null;
         if (_rf) { const hull0 = !!(sh.hw || sh.hh), gy0 = (H(p.x, p.y) + (p.e || 0)), fa0 = (m.face !== undefined ? m.face : (u.face !== undefined ? u.face : face)) + rv; BDModels.add(mb, _rf, p.x, gy0, p.y, hull0 ? 1.5708 - (sh.rot || 0) : 1.5708 - fa0); if (!hull0 && BF3D.rot && BF3D.rot.has(m)) arrow(mb, p.x, gy0, p.y, fa0, m.r);
           const rc = (S && mu === u && bad.has(m.id)) ? [1, .25, .2] : (S && mu === u && S.sel.has(m.id)) ? [1, .82, .3] : (SIDEC[side] || [1, 1, 1]);
-          if (!hull0) ringB(mb, p.x, gy0 + .13, p.y, m.r, rc, 24); else ring(mb, p.x, gy0 + .13, p.y, Math.max(sh.hw, sh.hh || 0) + sh.rho * .9, Math.max(sh.hw, sh.hh || 0) + sh.rho + .2, SIDEC[side] || [1, 1, 1], 32); drawn++; continue; }
+          if (!hull0) ringB(mb, p.x, gy0 + .13, p.y, m.r, rc, 24); else ring(mb, p.x, gy0 + .13, p.y, Math.max(sh.hw, sh.hh || 0) + sh.rho - .05, Math.max(sh.hw, sh.hh || 0) + sh.rho + .06, SIDEC[side] || [1, 1, 1], 32); drawn++; continue; }
         if (!a) { generic(p, m, sh, side, S && mu === u && S.sel.has(m.id)); drawn++; continue; }
         const lk = (!m.leader && u.looks && arch === 'plague_marine') ? pmxKey(u.looks[m.pose]) : null, k = lk || ((a === 'blightlord' || POSE_FAMILIES[a]) ? poses[m.pose % poses.length] : a);
         if (!MINI_ARCH[k]) { generic(p, m, sh, side, S && mu === u && S.sel.has(m.id)); drawn++; continue; } const hull = !!(sh.hw || sh.hh), gy = (H(p.x, p.y) + (p.e || 0));
@@ -18965,7 +18965,7 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
         let fig; try { fig = figOf(k, lo || hull && false); } catch (e) { continue; }
         addFig(mb, fig, cols, p.x, gy, p.y, sc, yaw); drawn++;
         if (!hull) ringB(mb, p.x, gy + .05, p.y, m.r, (S && mu === u && bad.has(m.id)) ? [1, .25, .2] : (S && mu === u && S.sel.has(m.id)) ? [1, .82, .3] : (SIDEC[side] || [1, 1, 1]), 24);
-        else ring(mb, p.x, gy + .05, p.y, Math.max(sh.hw, sh.hh || 0) + sh.rho * .9, Math.max(sh.hw, sh.hh || 0) + sh.rho + .2, SIDEC[side] || [1, 1, 1], 32);
+        else ring(mb, p.x, gy + .05, p.y, Math.max(sh.hw, sh.hh || 0) + sh.rho - .05, Math.max(sh.hw, sh.hh || 0) + sh.rho + .06, SIDEC[side] || [1, 1, 1], 32);
       }
       if (!drawn) occ.push({ x: u.x, y: u.y, r: u.r + .1 });
       if (!drawn) { const gy = H(u.x, u.y); BFX.tube(mb, [u.x, gy, u.y], [u.x, gy + 1.6, u.y], u.r * .8, u.r * .6, 10, shade3(SIDEC[side] || [1, 1, 1], .6), [.1, 0], true); ring(mb, u.x, gy + .05, u.y, u.r * .96, u.r + .22, SIDEC[side] || [1, 1, 1], 28); }
@@ -18994,7 +18994,7 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
           if (k && MINI_ARCH[k]) { try { addFig(mb, figOf(k, true), cols, sl.x, y0, sl.z, r / .98, 1.5708 - face); done = true; } catch (e) { } }
         }
         if (!done) { const hw = hull ? Math.min(1.7, (sh.hw || 1) + (sh.rho || 0)) : r, hh = hull ? Math.min(1.1, (sh.hh || .6) + (sh.rho || 0)) : r; BFX.box(mb, sl.x, y0 + .45, sl.z, hw * 2, .9, hh * 2, 0, shade3(sc0, .6), [.1, 0]); }
-        ring(mb, sl.x, y0 + .03, sl.z, r * .96, r + .22, sc0, 24);
+        ring(mb, sl.x, y0 + .03, sl.z, r - .05, r + .06, sc0, 24);
         const n = u.models || (u.mods ? u.mods.length : 1);
         BF3D.offLabels.push({ x: sl.x, z: sl.z + (side === 'player' ? 1 : 1) * 1.45, text: (u.name || '?').replace(/\s*\(.*?\)\s*$/, '').slice(0, 18) + (n > 1 ? ' x' + n : '') + (sl.by ? ' in ' + String(sl.by.name || '?').replace(/^.*\s(\S+)$/, '$1') : ''), unit: true, tag: sl.tag, side });
       }
