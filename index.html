@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.27-1410';
+  const VERSION = '2026.11.27-1427';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -8133,6 +8133,29 @@ async function doExplosives(u, t) {
 }
 
 /* charges */
+/* why a nearby enemy could not be charged with this roll: used to explain "nothing in reach" when something looks close */
+function chargeWhy(u, roll) {
+  try {
+    const foes = aliveSide(other(u.side)).filter(e => e.placed !== false).map(e => ({ e, d: edge(u, e) })).sort((a, b) => a.d - b.d), n = foes[0]; if (!n) return '';
+    if (n.d > roll + 1.5) return `The nearest enemy, ${n.e.name}, is ${n.d.toFixed(1)}" away (edge to edge), more than the ${roll}" rolled.`;
+    const t = n.e, lim = roll - chargePen(t) - (u.chargeMinus === (G.turnNo || 0) ? 1 : 0); const nm = `${t.name} (${n.d.toFixed(1)}" away)`;
+    if (isAircraft(t) && !canFly(u)) return `${nm} is an Aircraft, which only units that can Fly may charge.`;
+    const base = Math.atan2(u.y - t.y, u.x - t.x), R = t.r + u.r + .5, mdl = MODELS.on && isUnitObj(u) && isUnitObj(t) && unitHasMods(u) && unitHasMods(t); let seen = { far: 0, room: 0, other: 0, path: 0, long: 0 };
+    if (mdl && edge(u, t) - .5 > lim + .01) return `${nm} is just beyond the ${lim.toFixed(0)}" the charge can cover once the 0.5" needed to end up in Engagement Range is counted.`;
+    for (const off of [0, .25, -.25, .5, -.5, .8, -.8, 1.1, -1.1, 1.4, -1.4]) {
+      const a = base + off, Ra = mdl ? fitRadius(u, t, a, .5) : R, x = t.x + Math.cos(a) * Ra, y = t.y + Math.sin(a) * Ra;
+      if (Math.hypot(x - u.x, y - u.y) + .5 > lim + .01) { seen.far++; continue; }
+      if (!posOk(u, x, y, true)) { seen.room++; continue; }
+      if (aliveSide(other(u.side)).some(e => e !== t && engagesAt(u, x, y, e))) { seen.other++; continue; }
+      const p = pathTo(u, x, y, { skies: false, exclude: t }); if (!p) { seen.path++; continue; } if (p.len + .5 > lim + .01) { seen.long++; continue; }
+    }
+    if (seen.other >= seen.room && seen.other >= seen.path && seen.other >= seen.long && seen.other) return `${nm} is in range, but every place to end the charge would also be within Engagement Range of another enemy unit.`;
+    if (seen.path >= seen.room && seen.path >= seen.long && seen.path) return `${nm} is in range in a straight line, but there is no clear route to it: terrain or models are in the way.`;
+    if (seen.long) return `${nm} is close, but the route around terrain and models is longer than the ${lim.toFixed(0)}" the charge can cover.`;
+    if (seen.room) return `${nm} is in range, but there is no room to place the unit next to it (other models or terrain occupy the space).`;
+    return `${nm} could not be reached with this roll.`;
+  } catch (e) { return ''; }
+}
 async function rollCharge() {
   const u = G.sel; if (!u) return;
   let a = d6(), b = d6(); { const afV = asChargeSub(u, aliveSide(other(u.side))); if (afV !== null) a = asUse(u, afV, 'a Charge roll'); }
@@ -8140,7 +8163,7 @@ async function rollCharge() {
   u.chargeTried = true; GREC.charge(u, false);
   log(`${u.name} rolls ${a}+${b}=${roll}" to charge.`, u.side);
   const tg = aliveSide(other(u.side)).filter(e => chargeSpot(u, e, roll));
-  if (!tg.length) log(`Nothing is within ${roll}".`, u.side);
+  if (!tg.length) { const why = chargeWhy(u, roll); log(`Nothing is within ${roll}".${why ? ' ' + why : ''}`, u.side); G.chargeWhy = why; } else G.chargeWhy = '';
   await confirmRoll(`${u.name}: charge roll`, [a, b], tg.length ? `${roll}": ${plural(tg.length, 'enemy unit')} in reach` : `${roll}": nothing in reach`, u);
   G.mode = { type: 'charge', roll, targets: tg.map(t => t.id), rerolled: false };
   render();
@@ -8153,6 +8176,7 @@ async function rerollCharge(free) {
   const a = d6(), b = d6(), roll = Math.min(12, a + b + chargeBonus(u));
   const tg = aliveSide('ai').filter(e => chargeSpot(u, e, roll));
   log(`Re-rolled the charge: ${a}+${b}=${roll}".${tg.length ? '' : ' Still nothing in reach.'}`, 'player');
+  G.chargeWhy = tg.length ? '' : chargeWhy(u, roll);
   await confirmRoll(`${u.name}: charge re-roll`, [a, b], tg.length ? `${roll}": ${plural(tg.length, 'enemy unit')} in reach` : `${roll}": nothing in reach`, u);
   G.mode = { type: 'charge', roll, targets: tg.map(t => t.id), rerolled: true };
   render();
@@ -9437,7 +9461,7 @@ function renderSide() {
         if (G.lastCharge && G.lastCharge.u.alive && G.lastCharge.t.alive && canStrat('player', 'crush', 1, G.lastCharge.u)) acts.push(btn(`Crushing Impact with ${G.lastCharge.u.name} (1 CP)`, () => crushingImpact(G.lastCharge.u, G.lastCharge.t)));
       } else if (!G.mode) { prompt = `Roll 2D6 for ${u.name}. You'll pick a target within the result.`; acts.push(btn('Roll 2D6', rollCharge, true)); acts.push(btn('Cancel', () => { G.sel = null; render(); })); }
       else if (G.mode.type !== 'chargePlace') {
-        prompt = G.mode.targets.length ? `Rolled ${G.mode.roll}". Click an enemy with a dashed ring to charge it.` : `Rolled ${G.mode.roll}": nothing in reach.`;
+        prompt = G.mode.targets.length ? `Rolled ${G.mode.roll}". Click an enemy with a dashed ring to charge it.` : `Rolled ${G.mode.roll}": nothing in reach.${G.chargeWhy ? ' ' + G.chargeWhy : ''}`;
         if (!G.mode.rerolled && freeChargeReroll(u)) acts.push(btn(`Re-roll free (${(fxGet(u, 'reroll-charge')[0] ? fxGet(u, 'reroll-charge')[0].a.name : btRerollName(u))})`, () => rerollCharge(true), !G.mode.targets.length));
         if (!G.mode.rerolled && canStrat('player', 'reroll', 1, u)) acts.push(btn('Command Re-roll (1 CP)', () => rerollCharge(false)));
         acts.push(btn(G.mode.targets.length ? 'Don\'t charge' : 'Accept the failed charge', () => { log(`${u.name} doesn't charge.`, 'player'); G.sel = null; G.mode = null; render(); }));
