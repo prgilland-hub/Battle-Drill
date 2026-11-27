@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.27-1346';
+  const VERSION = '2026.11.27-1349';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -2118,7 +2118,10 @@ html[data-look="cog"] .muted{color:var(--muted)}
   html:not([data-device="tablet"]):not(.fs-on) #tab-battle.on .battle-grid:not(.formonly) .map-panel{flex:1 1 0;min-height:0;display:flex;flex-direction:column}
   html:not([data-device="tablet"]):not(.fs-on) #tab-battle.on .battle-grid:not(.formonly) #board{flex:1 1 0;min-height:0;width:100%;height:auto;max-width:none;margin:0}
   html:not([data-device="tablet"]):not(.fs-on) #tab-battle.on .battle-grid:not(.formonly) .fs-btn.bd-dk{display:flex;width:auto;padding:0 10px;font:700 .8rem system-ui;color:#f1ede0}
-  #b-sidebtn{right:292px}#b-strbtn{right:196px}
+  #b-sidebtn{right:292px}#b-strbtn{right:196px}#b-lesbtn{right:388px}
+  html:not([data-device="tablet"]):not(.fs-on) #tab-battle.on .battle-grid:not(.formonly) .fs-btn#b-lesbtn[hidden]{display:none}
+  html:not([data-device="tablet"]):not(.fs-on):has(#tab-battle.on .battle-grid:not(.formonly)) #sch-hud{bottom:62px;right:16px;z-index:70;max-height:calc(100vh - 140px)}
+  html.orders-open:not([data-device="tablet"]):not(.fs-on):has(#tab-battle.on .battle-grid.pinned:not(.formonly)) #sch-hud{right:calc(min(440px,94vw) + 28px)}
   html:not([data-device="tablet"]):not(.fs-on) #tab-battle.on .battle-grid:not(.formonly) .map-extras{display:none;position:absolute;right:16px;bottom:62px;z-index:70;width:min(620px,calc(100% - 32px));max-height:72%;overflow:auto;box-shadow:0 10px 30px rgba(0,0,0,.6)}
   html:not([data-device="tablet"]):not(.fs-on) #tab-battle.on .battle-grid.str-open:not(.formonly) .map-extras{display:block}
   html:not([data-device="tablet"]):not(.fs-on) #tab-battle.on .battle-grid:not(.formonly) .col-side{position:absolute;top:0;right:0;bottom:0;width:min(440px,94vw);z-index:75;overflow:auto;padding:10px;background:var(--bg,#0e1214);border-left:1px solid var(--line);box-shadow:-12px 0 32px rgba(0,0,0,.6);transform:translateX(108%);visibility:hidden;transition:transform .16s ease,visibility 0s .16s}
@@ -20177,7 +20180,7 @@ function schBegin(spec) {
   if (spec.hurtLeader && me.leader) me.leader.cur = spec.hurtLeader;
   if (spec.hurt) me.models = Math.max(1, me.models - spec.hurt);
   G.roles = { player: 'attacker', ai: 'defender' }; G.first = spec.first || 'player';
-  G.school = { spec, S: { saw: '', shots: 0, volleys: 0, attacks: [], numbers: false, lastVolley: -1, myStart: schTotalW(me), startFoeModels: fu.map(f => f.models) }, done: [], me: me.id, ui: { open: true, hint: false, numbers: false } };
+  G.school = { spec, S: { saw: '', shots: 0, volleys: 0, attacks: [], numbers: false, lastVolley: -1, myStart: schTotalW(me), startFoeModels: fu.map(f => f.models) }, done: [], me: me.id, ui: { open: true, shown: true, hint: false, numbers: false } };
   setupOpen = false; battleStarted = true;
   startBattle();
   if (spec.cp) G.cp.player = Math.max(G.cp.player, spec.cp);
@@ -20206,7 +20209,7 @@ function schCtx() {
 }
 function schTick() {
   const g = G && G.school; const hud = $('#sch-hud');
-  if (!g) { if (hud) hud.hidden = true; return; }
+  if (!g) { if (hud) hud.hidden = true; const lb = document.getElementById('b-lesbtn'); if (lb) lb.hidden = true; return; }
   const c = schCtx(); if (!c) return;
   const spec = g.spec, L = spec.lesson;
   if (L) { for (let i = 0; i < L.steps.length; i++) { if (g.done[i]) continue; try { if (L.steps[i].done(c)) g.done[i] = true; else break; } catch (e) { break; } } }
@@ -20229,14 +20232,20 @@ function schNumbers(c) {
   }
   return `<table class="sch-num">${rows.join('')}</table><p class="muted" style="margin:4px 0 0;font-size:.78rem">One weapon firing all its attacks, before your choices of target or modifiers like cover. Wounds, not models.</p>`;
 }
+const schDesk = () => { const de = document.documentElement; return window.innerWidth >= 921 && !de.classList.contains('fs-on') && de.dataset.device !== 'tablet' && !!document.querySelector('#tab-battle.on .battle-grid:not(.formonly)'); };
+function schBtn(g) {
+  const map = document.getElementById('b-map'); if (!map) return; let b = document.getElementById('b-lesbtn');
+  if (!b) { b = document.createElement('button'); b.type = 'button'; b.id = 'b-lesbtn'; b.className = 'fs-btn bd-dk'; b.addEventListener('click', () => { const gg = G && G.school; if (!gg) return; gg.ui.shown = gg.ui.shown === false; gg.ui.open = true; schTick(); }); map.appendChild(b); }
+  const on = !!g && g.ui.shown !== false; b.hidden = !g; b.textContent = g && g.spec && g.spec.camp ? 'Mission' : 'Lesson'; b.title = 'Show or hide the ' + b.textContent.toLowerCase() + ' panel'; b.setAttribute('aria-expanded', String(on));
+}
 function schHud(c) {
   let hud = $('#sch-hud');
   if (!hud) { hud = document.createElement('aside'); hud.id = 'sch-hud'; document.body.appendChild(hud); hud.addEventListener('click', schHudClick); }
   const g = G.school, spec = g.spec, L = spec.lesson, battleTab = $('#tab-battle').classList.contains('on');
-  hud.hidden = !battleTab; if (!battleTab) return;
+  schBtn(g); hud.hidden = !battleTab || g.ui.shown === false; if (hud.hidden) return;
   if (spec.camp) { campHud(c, hud, g); hud.insertAdjacentHTML('beforeend', schDiceRow()); return; }
   const cur = L ? L.steps.findIndex((s, i) => !g.done[i]) : -1;
-  let h = `<div class="sch-top"><b>${escH(spec.title)}</b><button type="button" data-a="min" aria-label="${g.ui.open ? 'Collapse' : 'Expand'}">${g.ui.open ? '–' : '+'}</button></div>`;
+  let h = `<div class="sch-top"><b>${escH(spec.title)}</b><button type="button" data-a="min" aria-label="${schDesk() ? 'Hide' : g.ui.open ? 'Collapse' : 'Expand'}">${schDesk() ? '✕' : g.ui.open ? '–' : '+'}</button></div>`;
   if (g.ui.open) {
     if (L) {
       h += `<p class="sch-goal">${schTx(L.goal)}</p><ol class="sch-steps">`;
@@ -20274,7 +20283,7 @@ if (typeof document !== 'undefined') document.addEventListener('change', e => {
 });
 function schHudClick(e) {
   const b = e.target.closest('button'); if (!b || !G || !G.school) return; const a = b.dataset.a, g = G.school;
-  if (a === 'min') g.ui.open = !g.ui.open;
+  if (a === 'min') { if (schDesk()) g.ui.shown = false; else g.ui.open = !g.ui.open; }
   else if (a === 'hint') g.ui.hint = !g.ui.hint;
   else if (a === 'coach') { g.coach = g.coach || {}; g.coach[b.dataset.q] = +b.dataset.k; }
   else if (a === 'num') { g.ui.numbers = !g.ui.numbers; g.S.numbers = true; }
@@ -22572,7 +22581,7 @@ document.addEventListener('click', e => {
 /* ---- the battle HUD for a chapter ---- */
 function campHud(c, hud, g) {
   const spec = g.spec, ch = spec.camp.ch, L = spec.lesson, cur = L.steps.findIndex((s, i) => !g.done[i]);
-  let h = `<div class="sch-top"><b>Chapter ${ch.n}: ${escH(ch.title)}</b><button type="button" data-a="min" aria-label="${g.ui.open ? 'Collapse' : 'Expand'}">${g.ui.open ? '–' : '+'}</button></div>`;
+  let h = `<div class="sch-top"><b>Chapter ${ch.n}: ${escH(ch.title)}</b><button type="button" data-a="min" aria-label="${schDesk() ? 'Hide' : g.ui.open ? 'Collapse' : 'Expand'}">${schDesk() ? '✕' : g.ui.open ? '–' : '+'}</button></div>`;
   if (g.ui.open) {
     h += `<p class="sch-goal"><b>Objective:</b> ${schTx(ch.objective)}</p>`;
     { const cu = CAMP_UI.cur && CAMP_UI.cur.n === ch.n ? CAMP_UI.cur : null; if (cu) { if (cu.hell) h += `<p class="sch-tiph">Hellscape: ${escH(cu.hell)}. ${escH(cu.hellTxt)}</p>`; if (cu.ag.length) h += `<p class="sch-tiph">Agendas: ${cu.ag.map(a => escH(CR_AGENDAS[a][0])).join(', ')}</p>`; if (cu.bl.length) h += `<p class="sch-tiph">Blessings: ${cu.bl.map(b => escH(CR_BLESS[b][0])).join(', ')}</p>`; } }
