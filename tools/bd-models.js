@@ -402,6 +402,16 @@ window.BDModels = BDModels; window.MODELIMP = MODELIMP;
     raf = requestAnimationFrame(frame);
   }
   /* put the current model into the datasheet's picture slot */
+  /* a one-line readout of what a figure is made of, so a pale model can be told apart from a pale texture */
+  function diagOf(fig) {
+    try {
+      const imgs = [...new Set(fig.parts.filter(q => q.img).map(q => q.img))];
+      if (!imgs.length) return 'vertex-colour copy (no texture)' + (fig.parts.length ? ', ' + Math.round(fig.parts.reduce((a, q) => a + q.T.length / 3, 0) / 1000) + 'k tris' : '');
+      const cv = document.createElement('canvas'); cv.width = cv.height = 16; const g = cv.getContext('2d', { willReadFrequently: true }); let r = 0, gg = 0, b = 0, n = 0, dims = [];
+      for (const im of imgs) { g.clearRect(0, 0, 16, 16); g.drawImage(im, 0, 0, 16, 16); const d = g.getImageData(0, 0, 16, 16).data; for (let i = 0; i < d.length; i += 4) { r += d[i]; gg += d[i + 1]; b += d[i + 2]; n++; } dims.push(im.width + 'x' + im.height); }
+      return 'textured copy, ' + imgs.length + ' texture' + (imgs.length > 1 ? 's' : '') + ' (' + dims.join(', ') + '), average colour rgb(' + Math.round(r / n) + ',' + Math.round(gg / n) + ',' + Math.round(b / n) + '), ' + Math.round(fig.parts.reduce((a, q) => a + q.T.length / 3, 0) / 1000) + 'k tris';
+    } catch (e) { return 'diagnostic failed: ' + e.message; }
+  }
   function mount() {
     let slot = document.querySelector('#modal-box .ds-img'); if (!cur) return; const head = document.querySelector('#modal-box .ds-head');
     if (!slot) { if (!head) return; slot = document.createElement('div'); slot.className = 'ds-img mini'; slot.style.cssText = 'display:none'; head.insertBefore(slot, head.firstChild); }
@@ -413,8 +423,8 @@ window.BDModels = BDModels; window.MODELIMP = MODELIMP;
     try { if (cur.fig !== fig) { upload(fig); cur.fig = fig; } } catch (e) { console.warn(e); return note('Could not draw ' + m.name + ': ' + (e && e.message || e)); }
     if (cv.parentNode !== slot) slot.appendChild(cv);
     let bar = document.getElementById('bdp-bar');
-    if (!bar) { bar = document.createElement('div'); bar.id = 'bdp-bar'; bar.style.cssText = 'display:flex;justify-content:center;align-items:center;gap:10px;font-size:12px;opacity:.85;margin-bottom:8px'; slot.after(bar); }
-    bar.innerHTML = (vars.length > 1 ? '<button class="btn" id="bdp-p" type="button">‹</button>' : '') + '<span>' + m.name.replace(/</g, '&lt;') + (vars.length > 1 ? ' · ' + (cur.vi + 1) + ' of ' + vars.length : '') + ' · drag to turn, scroll to zoom</span>' + (vars.length > 1 ? '<button class="btn" id="bdp-n" type="button">›</button>' : '');
+    if (!bar) { bar = document.createElement('div'); bar.id = 'bdp-bar'; bar.style.cssText = 'display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:10px;font-size:12px;opacity:.85;margin-bottom:8px'; slot.after(bar); }
+    bar.innerHTML = (vars.length > 1 ? '<button class="btn" id="bdp-p" type="button">‹</button>' : '') + '<span>' + m.name.replace(/</g, '&lt;') + (vars.length > 1 ? ' · ' + (cur.vi + 1) + ' of ' + vars.length : '') + ' · drag to turn, scroll to zoom</span>' + (vars.length > 1 ? '<button class="btn" id="bdp-n" type="button">›</button>' : '') + '<div style="flex-basis:100%;font-size:10px;opacity:.7">' + diagOf(fig) + '</div>';
     const go = d => () => { cur.vi += d; cur.fig = null; mount(); }; const p = bar.querySelector('#bdp-p'), n = bar.querySelector('#bdp-n'); if (p) p.onclick = go(-1); if (n) n.onclick = go(1);
     R.resize(); try { R.draw(cam, ENV); } catch (e) { } if (!raf) { last = 0; raf = requestAnimationFrame(frame); }
   }
