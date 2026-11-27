@@ -422,14 +422,14 @@ window.BDModels = BDModels; window.MODELIMP = MODELIMP;
     const vars = BDModels.variants(cur.ds, cur.faction); if (!vars.length) return note('No 3D model matched "' + cur.ds + '" (' + cur.faction + '). ' + BDModels.count() + ' models loaded; ' + BDModels.debug(cur.ds, cur.faction));
     cur.vi = ((cur.vi % vars.length) + vars.length) % vars.length; const m = vars[cur.vi], fig = BDModels.fig(m); if (!fig) return note('Loading 3D model: ' + m.name + '…'); if (!ensureGL()) return note('3D view needs WebGL 2.');
     slot.classList.add('mini'); slot.style.cssText = 'position:static;display:block;width:min(100%,340px);height:auto;aspect-ratio:1;margin:2px auto 4px;background:#16181c;border-radius:10px;overflow:hidden';
-    const shown = BDModels.upgrade(fig); try { if (cur.fig !== shown) { upload(shown); cur.fig = shown; } } catch (e) { console.warn(e); return note('Could not draw ' + m.name + ': ' + (e && e.message || e)); }
+    const shown = BDModels.upgrade(fig); try { if (cur.fig !== shown) { const keep = cur.fig ? [cam.yaw, cam.pitch, cam.dist] : null; upload(shown); cur.fig = shown; if (keep) { cam.yaw = keep[0]; cam.pitch = keep[1]; cam.dist = keep[2]; } } } catch (e) { console.warn(e); return note('Could not draw ' + m.name + ': ' + (e && e.message || e)); }
     if (cv.parentNode !== slot) slot.appendChild(cv);
     let bar = document.getElementById('bdp-bar');
     if (!bar) { bar = document.createElement('div'); bar.id = 'bdp-bar'; bar.style.cssText = 'display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:10px;font-size:12px;opacity:.85;margin-bottom:8px'; slot.after(bar); }
     bar.innerHTML = (vars.length > 1 ? '<button class="btn" id="bdp-p" type="button">‹</button>' : '') + '<span>' + m.name.replace(/</g, '&lt;') + (vars.length > 1 ? ' · ' + (cur.vi + 1) + ' of ' + vars.length : '') + ' · drag to turn, scroll to zoom</span>' + (vars.length > 1 ? '<button class="btn" id="bdp-n" type="button">›</button>' : '') + '<button class="btn" id="bdp-f" type="button" style="font-size:11px">' + (flatLight ? 'Normal light' : 'Flat light') + '</button><div style="flex-basis:100%;font-size:10px;opacity:.7">' + diagOf(shown) + (shown === fig && m.hi && BDModels.get('hiPrev', '1') === '1' ? ' · loading the richer copy…' : '') + '</div>';
     const fb = bar.querySelector('#bdp-f'); if (fb) fb.onclick = () => { flatLight = !flatLight; Object.assign(ENV, JSON.parse(JSON.stringify(flatLight ? ENVF : ENV0))); try { R.draw(cam, ENV); } catch (e) { } mount(); };
     const go = d => () => { cur.vi += d; cur.fig = null; mount(); }; const p = bar.querySelector('#bdp-p'), n = bar.querySelector('#bdp-n'); if (p) p.onclick = go(-1); if (n) n.onclick = go(1);
-    R.resize(); try { R.draw(cam, ENV); } catch (e) { } if (!raf) { last = 0; raf = requestAnimationFrame(frame); }
+    R.resize(); try { R.draw(cam, ENV); } catch (e) { } if (raf) cancelAnimationFrame(raf); last = 0; raf = requestAnimationFrame(frame);
   }
   function open(el) {
     let u = null; try { u = findLib(el.dataset.libid); } catch (e) { } if (!u || typeof openModal !== 'function' || typeof datasheetCard !== 'function') return;
