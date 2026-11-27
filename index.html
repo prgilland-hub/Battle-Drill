@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.27-0203';
+  const VERSION = '2026.11.27-0208';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -7837,6 +7837,7 @@ async function doShoot(u, t, weapons) {
   btAfterShot(u, t, used, before);
   if (u.dg && u.dg.hazAfter && u.alive) { u.dg.hazAfter = false; await hazardRolls(u, Math.max(1, totalModels(u))); }
   if (byAI && G.stage === 'battle') { await reactAfterAttack(u, t, before, 'shooting'); await flushOffers(); }
+  else if (G.hot && !ONL.on && G.stage === 'battle' && t.side === 'ai') { await hotDefend(u, t, async () => { await reactAfterAttack(u, t, before, 'shooting'); await flushOffers(); }); await flushHazards(); }
   else if (G.stage === 'battle') await flushHazards();
 }
 async function doOverwatch(u, t) {
@@ -8017,7 +8018,7 @@ async function resolveFight(u, t, choice) {
   if (!t.alive) { const rest = engagedWith(u); if (!rest.length) { checkEnd(); return; } t = rest[0]; }
   const before = totalModels(t), beforeHalf = belowHalf(t), byAI = u.side === 'ai' && t.side === 'player';
   if (byAI) await reactTargeted(u, t); else await aiReactTargeted(u, t);
-  if (byAI) await foPlayerOffer(u, t); else foAiUse(u, t);
+  if (byAI) await foPlayerOffer(u, t); else if (G.hot && !ONL.on) await hotDefend(u, t, () => foPlayerOffer(u, t)); else foAiUse(u, t);
   await dgBoonOffer(u, t);
   const g = meleeGroups(u);
   const use = g.split ? g.body.slice() : [choice && choice.body && g.body.includes(choice.body) ? choice.body : bestMelee(u, g.body, t)];
@@ -8030,7 +8031,7 @@ async function resolveFight(u, t, choice) {
   if (G.stage === 'battle') {
     asAfterAttack(u, t, before, false);
     if (!t.alive) { await fightKillHooks(u, t); btAnnihilation(u); }
-    if (byAI) await reactAfterAttack(u, t, before, 'fight');
+    if (byAI) await reactAfterAttack(u, t, before, 'fight'); else if (G.hot && !ONL.on && t.side === 'ai') await hotDefend(u, t, () => reactAfterAttack(u, t, before, 'fight'));
     if (u.side === 'player') await reactAfterPlayerFight(u, t, beforeHalf);
     await flushOffers();
   }
@@ -8071,10 +8072,12 @@ async function finishFight() {
 
 /* player reactions during the AI turn */
 function askPlayer(p) {
-  return new Promise(res => {
+  const go = () => new Promise(res => {
     G.prompt = Object.assign({}, p, { resolve: v => { G.prompt = null; G.sel = null; G.mode = null; G.msg = ''; res(v); render(); } });
     G.sel = null; G.mode = null; render();
   });
+  const lz = G && G.hot && G.hotLazy;
+  return lz ? lz().then(go) : go();
 }
 const owRange = w => Math.min(w.range, 24);
 const owUnits = () => aliveSide('player').filter(u => !isEngaged(u) && !has(u, 'titanic') && u.ranged.length && !G.strat.player.units.has(u.id) && aliveSide('ai').some(e => visible(u, e) && !isEngaged(e) && u.ranged.some(w => edge(u, e) <= owRange(w))));
@@ -10189,7 +10192,42 @@ async function dgReactTargeted(att, t) {
   }
   if (fight && has(t, 'terminator') && !t.dg.spite && await use('undying-spite', `${att.name} is attacking your ${t.name}.`)) { t.dg.spite = true; t.dg.fightOn = { thr: 4, bonus: 0, src: 'Undying Spite' }; log(`Undying Spite: ${t.name}'s fallen models that have not fought may fight on (4+).`, side); }
 }
-const aiReactTargeted = async (att, t) => { if (t.side === 'ai') { await dgReactTargeted(att, t); btAiSmoke(att, t); } };
+/* Two people at one screen: when an attack lands on the other person's unit, their detachment stratagems are offered to THEM.
+   The labels are swapped quietly (so the usual "your unit is being attacked" code runs for them), and the device is only
+   passed if something actually asks a question. */
+async function hotDefend(att, t, fn, why) {
+  if (!G || !G.hot || ONL.on || G.hotDefending || G.stage !== 'battle') return false;
+  G.hotDefending = true;
+  const atkName = hotName('player'), keep = { pend: G.pend, busy: G.busy }, decl = G.declined;
+  G.hotDecl = G.hotDecl || {}; G.hotDecl[atkName] = decl;
+  let passed = false;
+  hotSwapState();
+  const defName = hotName('player');
+  G.declined = G.hotDecl[defName] || new Set(); G.hotDecl[defName] = G.declined;
+  G.hotLazy = async () => {
+    if (passed) return; passed = true; G.hotLazy = null;
+    const colr = hotColour('player'), cc = colr === 'Blue' ? '#6f9fe6' : '#e0685b';
+    await hotOverlay(escH(defName), `<span style="display:inline-block;padding:3px 14px;border-radius:4px;background:${cc};color:#0b0f0a;font-weight:700;letter-spacing:.12em;margin-bottom:10px">YOU PLAY ${colr.toUpperCase()}</span><br>${escH(atkName)} is attacking your ${escH(t.name)} with ${escH(att.name)}. You may have a stratagem to answer with. The board is hidden until you press the button.`, `I am ${escH(defName)}: show the board`);
+  };
+  try { await fn(); } catch (e) { console.error(e); }
+  G.hotLazy = null;
+  if (G && G.stage === 'battle' || G) {
+    if (passed) {
+      const colr = hotColour('ai'), cc = colr === 'Blue' ? '#6f9fe6' : '#e0685b';
+      await hotOverlay(escH(atkName), `<span style="display:inline-block;padding:3px 14px;border-radius:4px;background:${cc};color:#0b0f0a;font-weight:700;letter-spacing:.12em;margin-bottom:10px">YOU PLAY ${colr.toUpperCase()}</span><br>Your reactions are done. ${escH(atkName)} carries on with the attack. The board is hidden until you press the button.`, `I am ${escH(atkName)}: show the board`);
+    }
+    G.hotDecl[defName] = G.declined;
+    hotSwapState(); G.declined = G.hotDecl[atkName]; G.pend = keep.pend; G.busy = keep.busy;
+  }
+  G.hotDefending = false;
+  if (passed) render();
+  return passed;
+}
+const aiReactTargeted = async (att, t) => {
+  if (t.side !== 'ai') return;
+  if (G.hot && !ONL.on) { await hotDefend(att, t, () => reactTargeted(att, t)); return; }
+  await dgReactTargeted(att, t); btAiSmoke(att, t);
+};
 /* ---- Stinking Mire, Eyestinger Storm ---- */
 function dgMirePick(side) {
   if (!dgFaction(side) || !dgDetIs(side, "Mortarion's Hammer") || G.stage !== 'battle') return null;
