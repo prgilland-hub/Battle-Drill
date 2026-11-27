@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.27-0154';
+  const VERSION = '2026.11.27-0203';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -3425,8 +3425,19 @@ function sightCover(a, t) {
   if (!a || !a.placed || !t.placed || !G) return false;
   if (aliveSide(t.side).some(s => s !== t && s.smoked && s.placed && !s.reserve && (() => { const r = distPtSeg(s.x, s.y, a.x, a.y, t.x, t.y); return r.k > 0 && r.k < 1 && r.d <= s.r; })())) return true;
   if (!TERRAIN.length) return false;
-  const pa = (MODELS.on && isUnitObj(a) && isUnitObj(t)) ? repPoints(a, t)[0] : { x: a.x, y: a.y }, qs = (MODELS.on && isUnitObj(a) && isUnitObj(t)) ? repPoints(t, a) : [{ x: t.x, y: t.y }];
-  return qs.every(q => (cvKw(t) && TERRAIN.some(r => coversT(r) && inRect(q, r))) || !ptVisible(pa, q));
+  const ma = MODELS.on && isUnitObj(a) && isUnitObj(t) ? modelsOf(a) : null, mt0 = ma && ma.length ? modelsOf(t) : null;
+  if (mt0 && mt0.length) {
+    /* hull-aware: a model is not fully visible unless some part of the attacking model can see every part of it (a long hull edging out of cover still counts as partly hidden) */
+    let va; try { va = bodyPts(a, repModels(a, t)[0]); } catch (e) { va = [{ x: a.x, y: a.y }]; }
+    return repModels(t, a).every(m => {
+      const c = { x: t.x + m.dx, y: t.y + m.dy };
+      if (cvKw(t) && TERRAIN.some(r => coversT(r) && inRect(c, r))) return true;
+      let qs; try { qs = bodyPts(t, m); } catch (e) { qs = [c]; }
+      return !va.some(p => qs.every(q => ptVisible(p, q)));
+    });
+  }
+  const pa = { x: a.x, y: a.y }, q0 = { x: t.x, y: t.y };
+  return (cvKw(t) && TERRAIN.some(r => coversT(r) && inRect(q0, r))) || !ptVisible(pa, q0);
 }
 const coverFor = (t, a) => !(t.dg && t.dg.noCover) && !(typeof G !== 'undefined' && G && t.tsNoCover === G.turnNo) && (inCover(t) || (!!a && sightCover(a, t)) || tsGlamour(t) || has(t, 'stealth') || ledFx(t, 'grant-stealth').length > 0 || (typeof G !== 'undefined' && G && t.side && t.placed && auraFor(t).some(x => x.t[3] === 'stealth')) || !!t.smoked || (hasFx(t, 'cadia-cover') && OBJ.some(o => objIn(t, o) && controller(o) === t.side)));
 const sideName = s => s === 'player' ? 'You' : 'The AI';
@@ -12294,6 +12305,11 @@ function bodyPts(u, m) {
   const wi = new Set(); for (const t of TERRAIN) if (blocksSight(t) && shapeInTerr(sh, t)) wi.add(t);
   for (const q of out) q.wi = wi;
   return out;
+}
+function repModels(u, toward) {   /* the models used to stand for a unit: the nearest, the furthest and two in between */
+  const ms = modelsOf(u); if (!ms || !ms.length) return [];
+  const ord = ms.slice().sort((a, b) => Math.hypot(u.x + a.dx - toward.x, u.y + a.dy - toward.y) - Math.hypot(u.x + b.dx - toward.x, u.y + b.dy - toward.y));
+  return [...new Set([0, ord.length - 1, Math.floor(ord.length / 3), Math.floor(ord.length * 2 / 3)])].map(i => ord[i]);
 }
 function repPoints(u, toward, full) {
   const ms = modelsOf(u); if (!ms || !ms.length) return [{ x: u.x, y: u.y }];
