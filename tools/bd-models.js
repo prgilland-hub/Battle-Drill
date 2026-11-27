@@ -394,7 +394,7 @@ window.BDModels = BDModels; window.MODELIMP = MODELIMP;
     R.clear(); const mb = new BF.MB(), e = extent(fig), cx = 30, cz = 22, rd = Math.max(e.r * 1.25, .8);
     for (let k = 0; k < 28; k++) { const a = k / 28 * 6.2832, b = (k + 1) / 28 * 6.2832, base = mb.n; mb.vtx([cx, .004, cz], [0, 1, 0], [.17, .17, .19], [0, 0]); mb.vtx([cx + Math.cos(a) * rd, .004, cz + Math.sin(a) * rd], [0, 1, 0], [.13, .13, .15], [0, 0]); mb.vtx([cx + Math.cos(b) * rd, .004, cz + Math.sin(b) * rd], [0, 1, 0], [.13, .13, .15], [0, 0]); mb.I.push(base, base + 2, base + 1); }
     BDModels.add(mb, fig, cx, 0, cz, 0); R.upload(mb, 'solid');
-    cam.target = [cx, e.h * .45, cz]; cam.dist = Math.max(2.2, Math.max(e.h, e.r * 1.5) * 2.7); cam.fov = .6; cam.yaw = 0; cam.pitch = .38;
+    cam.target = [cx, e.h * .45, cz]; cam.dist = Math.max(1.7, Math.max(e.h, e.r * 1.5) * 2.0); cam.fov = .6; cam.yaw = 0; cam.pitch = .38;
   }
   function frame(now) {
     raf = 0; const m = document.getElementById('modal'); if (!cv || !cv.isConnected || !m || m.hidden) return;
