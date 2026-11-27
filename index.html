@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.27-1018';
+  const VERSION = '2026.11.27-1027';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -2273,6 +2273,7 @@ html[data-look="cog"] .muted{color:var(--muted)}
 
 
           <label class="check-line" style="flex-direction:row;color:var(--ink)"><input type="checkbox" id="b-moveblock" checked>Enemy units block movement, and ruins block non-Infantry (Fly can bypass both)</label>
+          <div id="b-paint" style="margin:6px 0"></div>
           <label class="check-line" style="flex-direction:row;color:var(--ink)"><input type="checkbox" id="b-clean" checked>Clean tabletop tokens: solid bases with a bold icon, instead of the miniature art</label>
           <label class="check-line" style="flex-direction:row;color:var(--ink)"><input type="checkbox" id="b-minis" checked>Draw 3D miniatures on unit tokens where available (so far: every Death Guard, Space Marine, Salamander, Black Templar and Tyranid datasheet, in army colours)</label>
         </div></div>
@@ -14356,7 +14357,24 @@ function miniSchemeOf(u) {
   try { const bs = (typeof allBuilds === 'function' ? allBuilds() : []), b = bs.find(x => (x.units || []).includes(u)) || bs.find(x => (x.units || []).some(v => v.name === u.name && v.faction)); if (b && b.scheme) return b.scheme; } catch (e) { }
   return null;
 }
-const miniPalOf = u => { const f = miniFactionOf(u); if (f === 'Space Marines') { const sc = miniSchemeOf(u); if (sc && SM_SCHEMES[sc]) return SM_SCHEMES[sc]; } else if (f === 'Tyranids') { const sc = miniSchemeOf(u); if (sc && NID_SCHEMES[sc]) return NID_SCHEMES[sc]; } else if (XN_SCHEMES[f]) { const sc = miniSchemeOf(u); if (sc && XN_SCHEMES[f][sc]) return XN_SCHEMES[f][sc]; } return MINI_PAL[f] || null; };
+/* paint overrides: choose your own armour and trim colours for an army; they replace the scheme's plate and trim on the figures and the 2D tokens */
+const PAINT = { map: {}, cache: new Map() };
+try { PAINT.map = JSON.parse(localStorage.getItem('battleDrill.paint') || '{}') || {}; } catch (e) { }
+const hex2rgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+const rgb2hex = c => '#' + c.map(v => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('');
+function paintOver(u, base) {
+  try {
+    if (!base || !u || typeof G === 'undefined' || !G) return base;
+    const b = u.side === 'player' ? G.pb : G.ab, o = b && PAINT.map[b.name]; if (!o || !o.on) return base;
+    const key = `${base.name}|${o.plate}|${o.trim}`; if (PAINT.cache.has(key)) return PAINT.cache.get(key);
+    const pl = hex2rgb(o.plate), tr = hex2rgb(o.trim), dk = c => c.map(v => v * .66), lt = c => c.map(v => v + (255 - v) * .28);
+    const pal = Object.assign({}, base, { name: 'custom' + key.replace(/\W+/g, ''), plate: pl, plate2: dk(pl), trim: tr, bronze: tr, padL: pl });
+    if (base.wear) pal.wear = Object.assign({}, base.wear, { plate: lt(pl), plate2: pl, padL: lt(pl) });
+    PAINT.cache.set(key, pal); return pal;
+  } catch (e) { return base; }
+}
+const miniPalOf = u => paintOver(u, miniPalBase(u));
+const miniPalBase = u => { const f = miniFactionOf(u); if (f === 'Space Marines') { const sc = miniSchemeOf(u); if (sc && SM_SCHEMES[sc]) return SM_SCHEMES[sc]; } else if (f === 'Tyranids') { const sc = miniSchemeOf(u); if (sc && NID_SCHEMES[sc]) return NID_SCHEMES[sc]; } else if (XN_SCHEMES[f]) { const sc = miniSchemeOf(u); if (sc && XN_SCHEMES[f][sc]) return XN_SCHEMES[f][sc]; } return MINI_PAL[f] || null; };
 const schemesOf = fac => fac === 'Space Marines' ? SM_SCHEMES : fac === 'Tyranids' ? NID_SCHEMES : XN_SCHEMES[fac] || null;
 const MINI_MID = {}, MINI_TAB = { t: null, c: null, m: null, r: null, w: null, e: null };
 (() => {
@@ -16649,6 +16667,19 @@ function miniSrc(u) {
     if (!PM_PENDING) MINI.cache.set(key, src); return src;
   } catch (e) { return null; }
 }
+function paintUI() {
+  const box = $('#b-paint'); if (!box) return; box.innerHTML = '';
+  for (const sel of ['#b-army-p', '#b-army-a']) {
+    const el = $(sel), b = el && el.value && findBuild(el.value); if (!b) continue;
+    const o = PAINT.map[b.name] || { on: false, plate: '#26529f', trim: '#d8ac3e' }, row = document.createElement('div');
+    row.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:3px 0;font-size:.88rem';
+    row.innerHTML = `<label style="display:flex;gap:6px;align-items:center"><input type="checkbox" ${o.on ? 'checked' : ''}> Custom paint for <b>${escH(b.name)}</b></label><label style="display:flex;gap:4px;align-items:center">armour <input type="color" value="${o.plate}"></label><label style="display:flex;gap:4px;align-items:center">trim <input type="color" value="${o.trim}"></label>`;
+    const [cb, c1, c2] = row.querySelectorAll('input'), save = () => { PAINT.map[b.name] = { on: cb.checked, plate: c1.value, trim: c2.value }; try { localStorage.setItem('battleDrill.paint', JSON.stringify(PAINT.map)); } catch (e) { } if (G && typeof render === 'function') { try { render(); if (BF3D && BF3D.on) { BF3D.dirty = true; BF3D.tsig = ''; } } catch (e) { } } };
+    cb.addEventListener('change', save); c1.addEventListener('input', () => { cb.checked = true; save(); }); c2.addEventListener('input', () => { cb.checked = true; save(); });
+    box.appendChild(row);
+  }
+}
+['#b-army-p', '#b-army-a', '#b-gtype'].forEach(q => { const e = $(q); if (e) e.addEventListener('change', () => setTimeout(paintUI, 0)); }); setTimeout(paintUI, 300);
 if ($('#b-clean')) { $('#b-clean').checked = TOK.on; $('#b-clean').addEventListener('change', e => { TOK.on = e.target.checked; try { localStorage.setItem('battleDrill.clean', TOK.on ? 'on' : 'off'); } catch (err) { } if (G) render(); }); }
 if ($('#b-minis')) { $('#b-minis').checked = MINI.on; $('#b-minis').addEventListener('change', e => { MINI.on = e.target.checked; try { localStorage.setItem('battleDrill.minis', MINI.on ? 'on' : 'off'); } catch (err) { } if (G) render(); }); }
 
@@ -17304,6 +17335,13 @@ function pmeOpenRoster(key) {
   pmeOpenFor(u, e.models, e.looks, async looks => { if (looks) e.looks = looks; else delete e.looks; bMsg = `Models chosen for ${u.name}. Save the army to keep them.`; renderBuilder(); });
 }
 
+/* true-colour lighting: the themes tint the whole table (green marsh, orange desert); this keeps the mood but lets painted colours read as painted */
+const BF_NEU = { on: true };
+try { BF_NEU.on = localStorage.getItem('bd.truecolour') !== 'off'; } catch (e) { }
+function bfNeuEnv(env) {
+  const lum = c => .3 * c[0] + .59 * c[1] + .11 * c[2], des = (c, k, g) => { const l = lum(c); return c.map(v => Math.max(0, (l + (v - l) * (1 - k)) * g)); };
+  return Object.assign({}, env, { sunC: des(env.sunC, .62, 1.04), ambT: des(env.ambT, .72, 1.7), ambB: des(env.ambB, .72, 1.6), fog: des(env.fog, .45, 1.15), fogD: (env.fogD || .008) * .72 });
+}
 const BF = (() => {
 /* ===== tiny maths ===== */
 const lerp = (a, b, t) => a + (b - a) * t, clamp = (v, a, b) => Math.max(a, Math.min(b, v)), sstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
@@ -17412,7 +17450,7 @@ const FS = `#version 300 es
 precision highp float; precision highp sampler2DShadow;
 in vec3 vW, vN, vC; in vec2 vM; in vec4 vL; out vec4 o;
 uniform float uFadeOn; uniform int uFN; uniform vec4 uFd[40];
-uniform sampler2DShadow uSh; uniform vec3 uSun, uSunC, uAmbT, uAmbB, uFog, uCam, uSky; uniform float uFogD, uShadow, uTexel, uDust, uQ; uniform vec2 uRes; uniform int uLN; uniform vec4 uLP[12]; uniform vec3 uLC[12];
+uniform sampler2DShadow uSh; uniform vec3 uSun, uSunC, uAmbT, uAmbB, uFog, uCam, uSky; uniform float uFogD, uShadow, uTexel, uDust, uQ, uNeu; uniform vec2 uRes; uniform int uLN; uniform vec4 uLP[12]; uniform vec3 uLC[12];
 float h31(vec3 p){ p=fract(p*.3183099+.1); p*=17.; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }
 float vn(vec3 x){ vec3 i=floor(x), f=fract(x); f=f*f*(3.-2.*f); return mix(mix(mix(h31(i),h31(i+vec3(1,0,0)),f.x),mix(h31(i+vec3(0,1,0)),h31(i+vec3(1,1,0)),f.x),f.y),mix(mix(h31(i+vec3(0,0,1)),h31(i+vec3(1,0,1)),f.x),mix(h31(i+vec3(0,1,1)),h31(i+vec3(1,1,1)),f.x),f.y),f.z); }
 void main(){
@@ -17441,24 +17479,25 @@ void main(){
   vec3 vd0=normalize(uCam-vW);
   vec3 amb=mix(uAmbB,uAmbT,n.y*.5+.5);
   vec3 sunC=uSunC;
-  if(uQ>.5){ amb*=vec3(.9,.98,1.14); sunC*=vec3(1.1,1.,.86); float gr=step(.9,n.y)*(1.-smoothstep(.2,.6,vW.y))*step(.89,wx)*step(wx,.91); c*=1.+gr*((vn(vW*.22)-.5)*.26+(vn(vW*1.7)-.5)*.12+(vn(vW*7.)-.5)*.07); }
+  if(uQ>.5){ amb*=mix(vec3(.9,.98,1.14),vec3(1.),uNeu); sunC*=mix(vec3(1.1,1.,.86),vec3(1.04,1.,.95),uNeu); float gr=step(.9,n.y)*(1.-smoothstep(.2,.6,vW.y))*step(.89,wx)*step(wx,.91); c*=1.+gr*((vn(vW*.22)-.5)*.26+(vn(vW*1.7)-.5)*.12+(vn(vW*7.)-.5)*.07); }
   float ao=mix(.62,1.,smoothstep(0.,1.4,vW.y)); ao=mix(1.,ao,1.-abs(n.y)*.6);
   vec3 col=c*(amb*ao+sunC*ndl*sh);
   col+=c*vM.y*2.2;
   if(leaf>.5) col+=c*uSunC*max(dot(-n,uSun),0.)*.35*sh;
   if(gls>.5){ vec3 hh=normalize(uSun+vd0); float sp=pow(max(dot(n,hh),0.),6.+gls*34.)*ndl*sh*gls*(.22+.18*gls); col+=uSunC*sp; if(gls>1.5) col=mix(col,uFog*1.6+.05,pow(1.-max(dot(n,vd0),0.),4.)*.38); }
   for(int i=0;i<12;i++){ if(i>=uLN) break; vec3 d=uLP[i].xyz-vW; float L=length(d); float a=clamp(1.-L/uLP[i].w,0.,1.); a*=a; col+=c*uLC[i]*a*(max(dot(n,d/max(L,.001)),0.)*.9+.22); if(gls>.5) col+=uLC[i]*pow(max(dot(n,normalize(d/max(L,.001)+vd0)),0.),22.)*a*gls*.45; }
-  if(abs(wx-.16)<.01){ float lm=dot(col,vec3(.3,.59,.11)); col=mix(vec3(lm),col,1.16); float f2=pow(1.-max(dot(n,vd0),0.),3.); col+=(sunC*.1+vec3(.03,.06,.12))*f2*(.45+.55*ndl)*(.4+.6*sh); }
+  if(abs(wx-.16)<.01){ float lm=dot(col,vec3(.3,.59,.11)); col=mix(vec3(lm),col,mix(1.16,.9,uNeu)); float f2=pow(1.-max(dot(n,vd0),0.),3.); col+=(sunC*.1+vec3(.03,.06,.12))*f2*(.45+.55*ndl)*(.4+.6*sh); }
   col=mix(col,c*c*1.05,step(abs(vM.y-.58),.012));
   float d=length(vW-uCam); float f=1.-exp(-d*uFogD); f=max(f,.0); f*=mix(1.,.55,smoothstep(0.,3.,vW.y)*0.); 
   float hz=exp(-max(vW.y,0.)*.6)*clamp((d-16.)*.011,0.,.4); col=mix(col,uFog,hz);
   col=mix(col,uFog,clamp(f,0.,1.));
   float ed=max(abs(vW.x-30.)/88.,abs(vW.z-22.)/80.); col=mix(col,uFog,smoothstep(.78,1.15,ed));
   vec3 vd=normalize(uCam-vW); float rim=pow(1.-max(dot(n,vd),0.),3.)*(1.-abs(n.y))*smoothstep(.0,.7,vW.y+.3); col+=vec3(.04,.06,.1)*rim*(.35+.65*(1.-ndl)); if(uQ>1.5) col+=uAmbT*c*pow(1.-max(dot(n,vd),0.),4.)*.5*(.4+.6*n.y);
-  col=max(col-.03,0.)*1.14;
+  col=max(col-.03,0.)*mix(1.14,1.34,uNeu);
   col=clamp((col*(2.51*col+.03))/(col*(2.43*col+.59)+.14),0.,1.); col=pow(col,vec3(1./2.2));
-  col=mix(col,col*col*(3.-2.*col),.46);
-  col*=mix(vec3(.95,1.,1.06),vec3(1.06,1.,.93),smoothstep(.15,.75,dot(col,vec3(.33))));
+  col=mix(col,col*col*(3.-2.*col),.46*(1.-uNeu*.45));
+  col*=mix(mix(vec3(.95,1.,1.06),vec3(1.06,1.,.93),smoothstep(.15,.75,dot(col,vec3(.33)))),vec3(1.),uNeu*.85);
+  col=mix(vec3(dot(col,vec3(.3,.59,.11))),col,mix(1.,.8,uNeu));
   o=vec4(col,1.);
 }`;
 const VS_Q = `#version 300 es
@@ -17554,6 +17593,7 @@ class Renderer {
   }
   resize() { const d = this.q.dpr, w = Math.max(2, Math.floor(this.cv.clientWidth * d)), h = Math.max(2, Math.floor(this.cv.clientHeight * d)); if (this.cv.width !== w || this.cv.height !== h) { this.cv.width = w; this.cv.height = h; } }
   draw(cam, env) {
+    if (BF_NEU.on) env = bfNeuEnv(env);
     const gl = this.gl; this.resize(); const W = this.cv.width, H = this.cv.height;
     const eye = cam.eye(), V = m4.look(eye, cam.target, [0, 1, 0]), P = m4.persp(cam.fov, W / H, .5, 400), VP = m4.mul(P, V); this.projP5 = P[5];
     const sd = v3.norm(env.sun), c = [BW / 2, 0, BH / 2], le = v3.add(c, v3.mul(sd, 80)), LV = m4.look(le, c, [0, 1, 0]), LP = m4.ortho(-46, 46, -46, 46, 10, 170), LVP = m4.mul(LP, LV);
@@ -17571,7 +17611,7 @@ class Renderer {
     const mp = this.main; gl.useProgram(mp.p); const U = mp.U;
     gl.uniformMatrix4fv(U.uVP, false, VP); gl.uniformMatrix4fv(U.uLVP, false, LVP);
     gl.uniform3fv(U.uSun, sd); gl.uniform3fv(U.uSunC, env.sunC.map(v => v * 1.18)); gl.uniform3fv(U.uAmbT, env.ambT.map(v => v * .5)); gl.uniform3fv(U.uAmbB, env.ambB.map(v => v * .5)); gl.uniform2f(U.uRes, W, H); gl.uniform3fv(U.uFog, env.fog); gl.uniform3fv(U.uCam, eye); gl.uniform3fv(U.uSky, env.fog);
-    gl.uniform1f(U.uFogD, env.fogD); gl.uniform1f(U.uShadow, this.q.shadowOn ? 1 : 0); gl.uniform1f(U.uTexel, 1 / this.q.shadow); gl.uniform1f(U.uDust, env.dust || 0); gl.uniform1f(U.uQ, this.q.level == null ? 1 : this.q.level);
+    gl.uniform1f(U.uFogD, env.fogD); gl.uniform1f(U.uShadow, this.q.shadowOn ? 1 : 0); gl.uniform1f(U.uTexel, 1 / this.q.shadow); gl.uniform1f(U.uDust, env.dust || 0); gl.uniform1f(U.uNeu, BF_NEU.on ? 1 : 0); gl.uniform1f(U.uQ, this.q.level == null ? 1 : this.q.level);
     { const Ls = (env.lights || []).slice(0, 12), lp = new Float32Array(48), lc = new Float32Array(36); Ls.forEach((l, i) => { lp.set([l.x, l.y, l.z, l.r], i * 4); lc.set(l.c, i * 3); }); gl.uniform1i(U.uLN, Ls.length); if (Ls.length) { gl.uniform4fv(U['uLP[0]'], lp); gl.uniform3fv(U['uLC[0]'], lc); } }
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.shTex); gl.uniform1i(U.uSh, 0);
     { const fd = this.fades || [], n = Math.min(40, fd.length / 4 | 0), arr = new Float32Array(160); arr.set(fd.slice(0, n * 4)); gl.uniform1i(U.uFN, n); if (U['uFd[0]']) gl.uniform4fv(U['uFd[0]'], arr); }
@@ -18383,6 +18423,7 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
     bar.innerHTML = '<button type="button" id="b-3dmore" aria-expanded="false" title="3D view options and controls">View options \u25BE</button><div id="b-3dpanel"><select id="b-3dtheme" aria-label="Terrain theme"><option value="auto">Theme: auto</option><option value="desert">Desert ruins</option><option value="base">Hive base</option><option value="marsh">Rot marsh</option><option value="ice">Frozen hive</option><option value="forge">Forge world</option><option value="jungle">Death world</option><option value="hive">Hive city</option></select><button type="button" data-o="zones" aria-pressed="true" title="Show or hide the deployment zones">Zones</button><button type="button" data-o="objs" aria-pressed="true" title="Show or hide the objective markers">Objectives</button><button type="button" data-o="dice" aria-pressed="true" title="Show or hide the dice trays">Dice trays</button><button type="button" data-o="guides" aria-pressed="true" title="Show or hide the placement guides: 8 inch rings and the 6 inch edge band">Guides</button><button type="button" data-o="badges" aria-pressed="true" title="Health pips and status markers over each unit">Unit badges</button><button type="button" data-o="fx" aria-pressed="true" title="Tracers, muzzle flashes, impacts and damage numbers when attacks resolve">Combat effects</button><button type="button" id="b-3dsight" aria-pressed="true" title="Show or hide sight lines, with the distance to every enemy">Sight lines</button><select id="b-3dq" aria-label="Graphics quality" title="Graphics quality"><option value="low">Quality: low</option><option value="std">Quality: standard</option><option value="high">Quality: high</option><option value="auto">Quality: auto</option></select><button type="button" id="b-3dfps" title="Show frame time, resolution and draw load">Stats</button><button type="button" id="b-3dchk" title="List which 3D model each unit on the board matched">Model check</button><button type="button" id="b-3dhi" title="Use the high-detail copy of each model on the board (needs models imported with a high-detail copy)">High detail</button><button type="button" id="b-3dtop" title="Top-down view">Top</button><button type="button" id="b-3dtab" title="Tabletop view">Table</button><span id="b-3dnote">Drag = select units · Alt-drag = turn models · right-drag = orbit · WASD move · Q/E turn view · Z/X zoom · right-click or 1 = datasheet</span></div>';
     bar.querySelector('#b-3dmore').addEventListener('click', () => { const o = bar.classList.toggle('open'); bar.querySelector('#b-3dmore').setAttribute('aria-expanded', String(o)); });
     holder.appendChild(bar);
+    { const pn = bar.querySelector('#b-3dpanel'); if (pn) { const tb = document.createElement('button'); tb.type = 'button'; tb.textContent = 'True colour'; tb.title = 'Neutral lighting so painted colours read true. Turn off for the moody themed lighting.'; tb.setAttribute('aria-pressed', String(BF_NEU.on)); tb.addEventListener('click', () => { BF_NEU.on = !BF_NEU.on; try { localStorage.setItem('bd.truecolour', BF_NEU.on ? 'on' : 'off'); } catch (e) { } tb.setAttribute('aria-pressed', String(BF_NEU.on)); BF3D.dirty = true; if (BF3D.figCache) BF3D.figCache = null; sync(true); }); pn.appendChild(tb); } }
     bar.querySelectorAll('[data-o]').forEach(b => b.addEventListener('click', () => { BF3D.opt[b.dataset.o] = !BF3D.opt[b.dataset.o]; try { localStorage.setItem(OPT_KEY, JSON.stringify(BF3D.opt)); } catch (e) { } applyOpts(); if (b.dataset.o === 'guides') buildGhost(); }));
     bar.querySelector('#b-3dsight').addEventListener('click', () => { const cb = document.getElementById('b-sight'); if (cb) { cb.checked = !cb.checked; cb.dispatchEvent(new Event('change')); } });
     bar.querySelector('#b-3dtheme').addEventListener('change', e => { BF3D.theme = e.target.value; BF3D.tsig = ''; sync(true); });
@@ -18442,7 +18483,11 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
       for (let j = 0; j < n; j++) {
         const vx = g.V[j * 3], vy = g.V[j * 3 + 1], vz = g.V[j * 3 + 2], nx = g.N[j * 3], nz = g.N[j * 3 + 2];
         mb.P.push((vx * cy + vz * sy) * k + x, vy * k + y, (-vx * sy + vz * cy) * k + z);
-        mb.N.push(nx * cy + nz * sy, g.N[j * 3 + 1], -nx * sy + nz * cy); mb.C.push(c[0], c[1], c[2]); mb.M.push(mm[0], mm[1]);
+        { const ny = g.N[j * 3 + 1];
+          /* paint depth: darker in the low recesses and under overhangs, a lifted edge on upward faces, a little pigment variation from model to model */
+          const hh = Math.max(0, Math.min(1, vy / 2.1)), dep = BF_NEU.on ? (.66 + .34 * Math.sqrt(hh)) * (ny < -.25 ? .72 : 1) * (ny > .55 ? 1.1 : 1) : 1, vr = BF_NEU.on ? .94 + .12 * ((Math.sin((x + vx) * 12.9898 + (z + vz) * 78.233 + vy * 37.7) * 43758.5453) % 1 + 1) % 1 : 1, f = dep * vr;
+          mb.N.push(nx * cy + nz * sy, ny, -nx * sy + nz * cy); mb.C.push(c[0] * f, c[1] * f, c[2] * f); }
+        mb.M.push(mm[0], mm[1]);
       }
       for (let j = 0; j < g.T.length; j++) mb.I.push(g.T[j] + base);
     }
@@ -18456,7 +18501,10 @@ const BF3D = { on: false, R: null, cam: null, map: null, dyn: null, theme: 'auto
   /* a model's base: with clean tokens it is a solid disc with a bright rim, like a tabletop token, instead of a thin ring */
   function ringB(mb, x, y, z, r, col, seg) {
     if (!TOK.on) { ring(mb, x, y, z, r * .96, r + .22, col, seg); return; }
-    ring(mb, x, y - .01, z, .02, r * .8, [col[0] * .38, col[1] * .38, col[2] * .38], seg); ring(mb, x, y, z, r * .8, r + .22, col, seg);
+    /* a textured base: a sandy-earth disc with a few stones, inside a bright rim in the side colour */
+    ring(mb, x, y - .01, z, .02, r * .8, [.17, .13, .09], seg); ring(mb, x, y, z, r * .8, r + .22, col, seg);
+    if (r < 1.9) { let h = Math.floor(x * 131 + z * 197 + r * 53) | 0; const rnd = () => { h = (Math.imul(h, 1103515245) + 12345) & 0x7fffffff; return h / 0x7fffffff; };
+      const n = r < .9 ? 3 : 5; for (let i = 0; i < n; i++) { const a = rnd() * 6.2832, d = r * (.25 + .5 * rnd()), pr = .05 + .07 * rnd(), ph = .04 + .07 * rnd(), g = .7 + .5 * rnd(); BFX.tube(mb, [x + Math.cos(a) * d, y, z + Math.sin(a) * d], [x + Math.cos(a) * d, y + ph, z + Math.sin(a) * d], pr, pr * .6, 5, [.2 * g, .17 * g, .13 * g], [.9, 0], true); } }
   }
   function nearestFoe(u) { let best = null, bd = 1e9; for (const o of G.units) { if (!o.alive || !o.placed || o.side === u.side) continue; const d = Math.hypot(o.x - u.x, o.y - u.y); if (d < bd) { bd = d; best = o; } } return best; }
   const defFace = u => { const foe = nearestFoe(u); return foe ? Math.atan2(foe.y - u.y, foe.x - u.x) : (u.side === 'player' ? -1.5708 : 1.5708); };
