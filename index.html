@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.27-1354';
+  const VERSION = '2026.11.27-1356';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -24857,7 +24857,7 @@ function bcMd(s) {
   for (const ln of h.split('\n')) { const m = /^\s*[-*•]\s+(.*)$/.exec(ln); if (m) { if (!inList) { out.push('<ul>'); inList = true; } out.push('<li>' + m[1] + '</li>'); } else { if (inList) { out.push('</ul>'); inList = false; } out.push(ln.trim() ? '<p>' + ln + '</p>' : ''); } }
   if (inList) out.push('</ul>'); return out.join('');
 }
-const BC_ERR = { invalid_request: 'The coach request was malformed', tools_unavailable: 'This connection cannot run the coach tools.', not_granted: 'Claude access was not allowed for this page, so the coach cannot answer.', rate_limited: 'Too many questions in a short time (or your Claude usage limit). Wait a little, then ask again.', session_expired: 'Your session has expired. Sign in again to use the coach.', sampling_disabled: 'Claude is not available for this account.', prompt_too_large: 'That was too much for one question. Try a shorter one.', refused: 'Claude declined that question. Try rewording it.', upstream_error: 'The coach hit a temporary problem. Try again.', empty_completion: 'The coach gave no answer. Try rewording the question.' };
+const BC_ERR = { no_key: 'Add your Anthropic API key to use the coach: click Settings in the bottom-left corner.', bad_key: 'Anthropic did not accept your API key or your account cannot use that model. Check the key and model in Settings.', invalid_request: 'The coach request was malformed', tools_unavailable: 'This connection cannot run the coach tools.', not_granted: 'Claude access was not allowed for this page, so the coach cannot answer.', rate_limited: 'Too many questions in a short time (or your Claude usage limit). Wait a little, then ask again.', session_expired: 'Your session has expired. Sign in again to use the coach.', sampling_disabled: 'Claude is not available for this account.', prompt_too_large: 'That was too much for one question. Try a shorter one.', refused: 'Claude declined that question. Try rewording it.', upstream_error: 'The coach hit a temporary problem. Try again.', empty_completion: 'The coach gave no answer. Try rewording the question.' };
 /* ===== Army coach: helps fill out a list and finds synergies; reads and edits the list in the builder ===== */
 const BC = { el: null, turns: [], busy: false, ctl: null, sample: undefined, tools: false, open: false, resolved: false };
 const BC_RULES = `You are the army-building coach inside Battle Drill, a Warhammer 40,000 11th edition practice app. The player is in the army builder. You can read and edit their list with tools. Rules for you:
@@ -24972,7 +24972,7 @@ async function bcAsk(q) {
     BC.turns.push({ role: 'user', content: q }, { role: 'assistant', content: r.text });
   } catch (e) {
     const code = e && e.code; if (code === 'cancelled') bub.innerHTML = (e.text ? bcMd(e.text) : '') + '<p class="kt-note">Stopped.</p>';
-    else { try { console.error('coach', e); } catch (x) { } bub.innerHTML = (e && e.text ? bcMd(e.text) : '') + `<p class="kt-note" style="color:var(--bad)">${bcEsc((BC_ERR[code] || BC_ERR.upstream_error))}${e && e.message ? bcEsc(' (' + code + ': ' + String(e.message).slice(0, 240) + ')') : ''}</p>`; }
+    else { try { console.error('coach', e); } catch (x) { } bub.innerHTML = (e && e.text ? bcMd(e.text) : '') + `<p class="kt-note" style="color:var(--bad)">${bcEsc((BC_ERR[code] || BC_ERR.upstream_error))}${e && e.message && !BC_ERR[code] ? bcEsc(' (' + code + ': ' + String(e.message).slice(0, 240) + ')') : ''}</p>`; }
   }
   BC.busy = false; BC.ctl = null; if (BC.el) { BC.el.querySelector('[data-bc="stop"]').hidden = true; BC.el.querySelector('[data-bc="ask"]').disabled = false; }
 }
