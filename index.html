@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.27-1434';
+  const VERSION = '2026.11.27-1439';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -25772,10 +25772,36 @@ function openPasteRoster(mode, after) {
 let REC = { army: '', open: '' };
 const recPct = (a, b) => b > 0 ? Math.round(100 * a / b) + '%' : '–';
 const recN = (v, d) => (+v).toFixed(d == null ? 1 : d);
+/* export and import game records: a text file that reads well and carries the full data, so it can be uploaded to a Claude chat or restored on another device */
+const REC_MARK = ['<<<BATTLE-DRILL-RECORDS', 'BATTLE-DRILL-RECORDS>>>'];
+function recExportText(list) {
+  const out = [`Battle Drill game records, exported ${new Date().toISOString().slice(0, 10)}. ${list.length} game${list.length === 1 ? '' : 's'}.`, 'Scores run 0 to 100: objectives (VP share and objectives held), destruction (points and units killed), actions and tactics (missions actions and Stratagems), and an overall blend.', ''];
+  const armies = new Map(); for (const g of list) for (const sd of g.sides) if (sd.buildId) armies.set(sd.buildId, sd.buildName || sd.faction || sd.buildId);
+  for (const [id, nm] of armies) { try { out.push(`== ${nm} ==`, GREC.digest(list, id), ''); } catch (e) { } }
+  out.push('== Games ==');
+  for (const g of list) {
+    const [a, b] = g.sides, d = new Date(g.at).toISOString().slice(0, 10);
+    out.push(`${d}: ${a.buildName || a.faction} (${a.vp} VP, ${a.result}) vs ${b.buildName || b.faction} (${b.vp} VP, ${b.result}), ${g.rounds} rounds${g.early ? ', ended early' : ''}`);
+    for (let i = 0; i < 2; i++) { try { const c = GREC.score(g, i); out.push(`  ${g.sides[i].who || (i ? 'AI' : 'Player')}: overall ${c.all}, objectives ${c.obj}, destruction ${c.des}, actions ${c.act}`); } catch (e) { } }
+    for (const sd of g.sides) for (const u of sd.units || []) out.push(`    ${sd.who || sd.side} - ${u.name}${u.leader ? ' (+' + u.leader + ')' : ''}: ${u.pts} pts, ${u.att} attacks, ${u.hit} hits, ${u.dmg} damage, ${u.pk ? Math.round(u.pk) : 0} pts killed, ${u.died ? 'destroyed' : 'survived'}`);
+  }
+  out.push('', 'Full data for import (do not edit):', REC_MARK[0], JSON.stringify(list), REC_MARK[1]);
+  return out.join('\n');
+}
+async function recImportText(text) {
+  const a = text.indexOf(REC_MARK[0]), b = text.indexOf(REC_MARK[1]); let arr;
+  try { arr = JSON.parse(a >= 0 && b > a ? text.slice(a + REC_MARK[0].length, b) : text); } catch (e) { throw new Error('That file has no Battle Drill records in it.'); }
+  if (!Array.isArray(arr)) throw new Error('That file has no Battle Drill records in it.');
+  const have = new Set((await GREC.ready()).map(g => g.id)); let n = 0;
+  for (const g of arr) { if (!g || !g.id || !Array.isArray(g.sides) || g.sides.length !== 2 || have.has(g.id)) continue; await GREC.add(g); have.add(g.id); n++; }
+  return n;
+}
 async function renderRecords() {
   const box = $('#arm-sub-records'); if (!box) return; box.innerHTML = '<p class="muted">Loading records…</p>';
   const list = await GREC.ready();
-  if (!list.length) { box.innerHTML = '<div class="panel"><h2 style="margin:0 0 6px">Game records</h2><p class="muted">No finished games yet. Play a battle to the end and every unit’s performance is saved here: how much it shot and hit, what it killed, what it lost, and whether it lived. Games ended before the first battle round are not recorded.</p></div>'; return; }
+  const tools = `<div class="row" style="gap:8px;margin:6px 0">${list.length ? '<button class="btn" id="rec-exp">Export records</button>' : ''}<button class="btn" id="rec-imp">Import records</button><input type="file" id="rec-file" accept=".txt,.json,.md" hidden><span id="rec-msg" class="muted" style="font-size:.85rem"></span></div>`;
+  const wire = () => { const ex = $('#rec-exp'), im = $('#rec-imp'), fi = $('#rec-file'), mg = $('#rec-msg'); if (ex) ex.onclick = () => simSave(`battle-drill-records-${new Date().toISOString().slice(0, 10)}.txt`, recExportText(list)); if (im && fi) { im.onclick = () => fi.click(); fi.onchange = async () => { const f = fi.files[0]; if (!f) return; try { const n = await recImportText(await f.text()); mg.textContent = n ? `Imported ${n} game${n === 1 ? '' : 's'}.` : 'Nothing new to import.'; if (n) setTimeout(renderRecords, 600); } catch (e) { mg.textContent = e.message; } fi.value = ''; }; } };
+  if (!list.length) { box.innerHTML = '<div class="panel"><h2 style="margin:0 0 6px">Game records</h2><p class="muted">No finished games yet. Play a battle to the end and every unit’s performance is saved here: how much it shot and hit, what it killed, what it lost, and whether it lived. Games ended before the first battle round are not recorded.</p>' + tools + '</div>'; wire(); return; }
   const armies = new Map(); for (const g of list) for (const s of g.sides) if (s.buildId) armies.set(s.buildId, s.buildName || s.faction || s.buildId);
   if (REC.army && !armies.has(REC.army)) REC.army = '';
   const R = GREC.rollup(list, REC.army), A = R.A;
@@ -25798,7 +25824,8 @@ async function renderRecords() {
     ${(() => { const rows = []; for (const g of list) for (let i = 0; i < 2; i++) { if (REC.army && g.sides[i].buildId !== REC.army) continue; rows.push(GREC.score(g, i)); } if (!rows.length) return ''; const av = k => Math.round(rows.reduce((a, r) => a + r[k], 0) / rows.length); const tr = GREC.trends(list, REC.army); return `<div class="rec-cards"><div class="rec-card"><b>${av('all')}</b>overall score</div><div class="rec-card"><b>${av('obj')}</b>objectives</div><div class="rec-card"><b>${av('des')}</b>destruction</div><div class="rec-card"><b>${av('act')}</b>actions and tactics</div></div>${tr.length ? `<h3 style="margin:4px 0">What the games say</h3><ul class="rec-fb">${tr.map(f => `<li class="${f.tone}">${escH(f.text)}</li>`).join('')}</ul>` : ''}`; })()}
     <h3 style="margin:4px 0">Unit performance</h3><p class="muted" style="margin:0;font-size:.85rem">Per game averages across ${A.games} game${A.games === 1 ? '' : 's'}. “Value” is the points’ worth of enemy models it killed divided by its own points: above 1 means it killed more than it cost.</p>
     <div class="rec-scroll"><table class="rec-t"><tr><th>Datasheet</th><th>Games</th><th>Survived</th><th>Attacks</th><th>Hit</th><th>Wound</th><th>Damage</th><th>Slain</th><th>Pts killed</th><th>Value</th><th>Dmg taken</th></tr>${rows}</table></div>
-    <h3 style="margin:8px 0 0">Games</h3>${gl || '<p class="muted">None for this army.</p>'}</div>`;
+    <h3 style="margin:8px 0 0">Games</h3>${gl || '<p class="muted">None for this army.</p>'}${tools}</div>`;
+  wire();
   const sel = $('#rec-army'); if (sel) sel.onchange = () => { REC.army = sel.value; renderRecords(); };
   box.querySelectorAll('details.rec-g').forEach(d => d.addEventListener('toggle', () => { if (d.open) REC.open = d.querySelector('[data-recdel]').dataset.recdel; }));
   box.querySelectorAll('[data-recdel]').forEach(b => b.onclick = async () => { if (!confirm('Delete this game record?')) return; await GREC.remove(b.dataset.recdel); renderRecords(); });
