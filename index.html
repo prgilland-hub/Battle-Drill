@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.claude && typeof window.claude.use === 'function') return; /* running on claude.ai: leave it alone */
-  const VERSION = '2026.11.27-1439';
+  const VERSION = '2026.11.27-1442';
   const KEY_LS = 'battleDrill.local.apiKey', MODEL_LS = 'battleDrill.local.model';
   const DEFAULT_MODEL = 'claude-sonnet-5-5';
   const clone = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
@@ -6189,7 +6189,7 @@ const GREC = {
   },
   /* the same, for a whole list of games of one army: the recurring pattern matters more than one result */
   trends(list, buildId) {
-    const out = [], rows = []; for (const g of list) for (let i = 0; i < 2; i++) { const s = g.sides[i]; if (buildId && s.buildId !== buildId) continue; rows.push({ g, i, s, sc: this.score(g, i) }); }
+    const out = [], rows = []; for (const g of list) for (let i = 0; i < 2; i++) { const s = g.sides[i]; if (buildId ? s.buildId !== buildId : s.human === false) continue; rows.push({ g, i, s, sc: this.score(g, i) }); }
     if (rows.length < 2) return out;
     const avg = k => rows.reduce((a, r) => a + r.sc[k], 0) / rows.length, cats = [['obj', 'objectives'], ['des', 'destruction'], ['act', 'actions and tactics']].map(([k, n]) => [n, avg(k)]).sort((a, b) => a[1] - b[1]);
     out.push({ tone: 'tip', text: `Across ${rows.length} games your weakest area is ${cats[0][0]} (${Math.round(cats[0][1])}), your strongest is ${cats[2][0]} (${Math.round(cats[2][1])}).` });
@@ -6253,7 +6253,7 @@ const GREC = {
   rollup(list, buildId) {
     const A = { games: 0, win: 0, loss: 0, draw: 0, vp: 0, vpAgainst: 0, rounds: 0 }, U = new Map();
     for (const g of list) for (let i = 0; i < 2; i++) {
-      const s = g.sides[i], o = g.sides[1 - i]; if (buildId && s.buildId !== buildId) continue;
+      const s = g.sides[i], o = g.sides[1 - i]; if (buildId ? s.buildId !== buildId : s.human === false) continue;
       A.games++; A[s.result]++; A.vp += s.vp; A.vpAgainst += o.vp; A.rounds += g.rounds;
       const seen = new Set();
       for (const r of s.units) {
@@ -25821,7 +25821,7 @@ async function renderRecords() {
   }).join('');
   box.innerHTML = `<div class="panel rec-wrap"><div class="row"><h2 style="margin:0">Game records</h2><label class="muted">Army <select id="rec-army" class="btn"><option value="">All armies</option>${[...armies].map(([id, n]) => `<option value="${escH(id)}"${id === REC.army ? ' selected' : ''}>${escH(n)}</option>`).join('')}</select></label></div>
     <div class="rec-cards"><div class="rec-card"><b>${A.games}</b>games</div><div class="rec-card"><b>${A.win}–${A.loss}–${A.draw}</b>wins, losses, draws</div><div class="rec-card"><b>${A.games ? recN(A.vp / A.games) : '–'}</b>average VP scored</div><div class="rec-card"><b>${A.games ? recN(A.vpAgainst / A.games) : '–'}</b>average VP conceded</div></div>
-    ${(() => { const rows = []; for (const g of list) for (let i = 0; i < 2; i++) { if (REC.army && g.sides[i].buildId !== REC.army) continue; rows.push(GREC.score(g, i)); } if (!rows.length) return ''; const av = k => Math.round(rows.reduce((a, r) => a + r[k], 0) / rows.length); const tr = GREC.trends(list, REC.army); return `<div class="rec-cards"><div class="rec-card"><b>${av('all')}</b>overall score</div><div class="rec-card"><b>${av('obj')}</b>objectives</div><div class="rec-card"><b>${av('des')}</b>destruction</div><div class="rec-card"><b>${av('act')}</b>actions and tactics</div></div>${tr.length ? `<h3 style="margin:4px 0">What the games say</h3><ul class="rec-fb">${tr.map(f => `<li class="${f.tone}">${escH(f.text)}</li>`).join('')}</ul>` : ''}`; })()}
+    ${(() => { const rows = []; for (const g of list) for (let i = 0; i < 2; i++) { if (REC.army ? g.sides[i].buildId !== REC.army : g.sides[i].human === false) continue; rows.push(GREC.score(g, i)); } if (!rows.length) return ''; const av = k => Math.round(rows.reduce((a, r) => a + r[k], 0) / rows.length); const tr = GREC.trends(list, REC.army); return `<div class="rec-cards"><div class="rec-card"><b>${av('all')}</b>overall score</div><div class="rec-card"><b>${av('obj')}</b>objectives</div><div class="rec-card"><b>${av('des')}</b>destruction</div><div class="rec-card"><b>${av('act')}</b>actions and tactics</div></div>${tr.length ? `<h3 style="margin:4px 0">What the games say</h3><ul class="rec-fb">${tr.map(f => `<li class="${f.tone}">${escH(f.text)}</li>`).join('')}</ul>` : ''}`; })()}
     <h3 style="margin:4px 0">Unit performance</h3><p class="muted" style="margin:0;font-size:.85rem">Per game averages across ${A.games} game${A.games === 1 ? '' : 's'}. “Value” is the points’ worth of enemy models it killed divided by its own points: above 1 means it killed more than it cost.</p>
     <div class="rec-scroll"><table class="rec-t"><tr><th>Datasheet</th><th>Games</th><th>Survived</th><th>Attacks</th><th>Hit</th><th>Wound</th><th>Damage</th><th>Slain</th><th>Pts killed</th><th>Value</th><th>Dmg taken</th></tr>${rows}</table></div>
     <h3 style="margin:8px 0 0">Games</h3>${gl || '<p class="muted">None for this army.</p>'}${tools}</div>`;
